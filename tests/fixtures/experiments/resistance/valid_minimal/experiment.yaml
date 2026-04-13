@@ -1,0 +1,8 @@
+schema_version: "1.0"
+experiment_id: test_resistance_minimal
+experiment_type: resistance_characterization
+experiment_type_version: 1
+date: 2025-01-15
+type_fields:
+  measurement_instrument: "DMM"
+  measurement_method: two_wire

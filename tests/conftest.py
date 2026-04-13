@@ -28,3 +28,13 @@ def valid_experiment_path(fixtures_dir: Path) -> Path:
 @pytest.fixture
 def valid_cable_path(fixtures_dir: Path) -> Path:
     return fixtures_dir / "models" / "valid_cable.yaml"
+
+
+@pytest.fixture
+def resistance_fixtures_dir(fixtures_dir: Path) -> Path:
+    return fixtures_dir / "experiments" / "resistance"
+
+
+@pytest.fixture
+def fixture_models_dir(fixtures_dir: Path) -> Path:
+    return fixtures_dir / "models"

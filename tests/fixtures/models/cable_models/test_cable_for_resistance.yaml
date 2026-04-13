@@ -1,0 +1,12 @@
+schema_version: "1.0"
+model_id: test_cable_for_resistance
+manufacturer: Test Corp
+part_number: TC-RES-001
+description: Test cable model for resistance fixture tests
+tags:
+  - test
+conductor_count: 4
+wire_gauge_awg: 30
+length_mm: 500
+shield_type: braided
+cable_type: coaxial

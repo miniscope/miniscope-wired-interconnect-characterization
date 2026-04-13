@@ -1,0 +1,11 @@
+resistance_ohm,cable_length_mm,notes
+2.34,1000,conductor 1
+2.41,1000,conductor 2
+2.38,1000,conductor 3
+2.45,1000,conductor 4
+2.39,1000,conductor 5
+2.36,1000,conductor 1 repeat
+2.43,1000,conductor 2 repeat
+2.37,1000,conductor 3 repeat
+2.44,1000,conductor 4 repeat
+2.40,1000,conductor 5 repeat

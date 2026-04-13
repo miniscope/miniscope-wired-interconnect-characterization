@@ -1,16 +1,20 @@
 name: resistance_characterization
 version: 1
 description: >
-  DC resistance measurement of cable conductors. Measures contact resistance
-  and conductor resistance across wire pairs, typically at multiple mating
-  cycles or temperatures.
+  Round-trip DC resistance measurement of coaxial cable conductors.
+  Each measurement is taken by looping the signal wire back through the
+  ground shielding, so the measured value is the round-trip resistance
+  of one coaxial conductor. Typically repeated across multiple conductors
+  and mating cycles.
 
 fields:
   - name: cable_model
     field_type: model_ref
     model_ref_type: cable_models
-    required: true
-    description: Reference to the cable model being tested
+    required: false
+    description: >
+      Reference to the cable type being tested (e.g. coax_spi_sci_40awg).
+      This identifies the cable type, not an individual cable instance.
 
   - name: connector_model
     field_type: model_ref
@@ -22,11 +26,6 @@ fields:
     field_type: string
     required: true
     description: Instrument used for resistance measurement (e.g. "Keithley 2400")
-
-  - name: num_conductors_measured
-    field_type: integer
-    required: true
-    description: Number of conductor pairs measured
 
   - name: temperature_c
     field_type: float
@@ -51,13 +50,16 @@ files:
     file_format: csv
     required: true
     description: >
-      CSV with columns: conductor_pair, resistance_ohm, [mating_cycle], [notes]
+      CSV with columns: resistance_ohm (required), cable_length_mm (required),
+      [notes]. resistance_ohm is the round-trip resistance in ohms (signal wire
+      looped back through ground shielding). cable_length_mm is the physical
+      length of the cable instance under test.
 
 processing_steps:
   - name: normalize_resistance
     processor: src.processing.resistance.NormalizeResistance
-    description: Normalize raw CSV to standard column format
-    outputs: ["normalized_resistance_csv"]
+    description: Normalize raw CSV, compute resistance per meter
+    outputs: ["normalized_resistance_csv", "resistance_summary_json"]
 
 aggregation:
   - name: resistance_summary

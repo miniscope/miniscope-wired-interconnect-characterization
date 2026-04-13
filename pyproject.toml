@@ -10,6 +10,8 @@ packages = [{include = "src"}]
 python = "^3.10"
 pydantic = "^2.6"
 pyyaml = "^6.0"
+pandas = "^2.1"
+matplotlib = "^3.8"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.0"

@@ -1,0 +1,19 @@
+schema_version: "1.0"
+experiment_id: EXP_2025_01_15_resistance_coax_40awg
+experiment_type: resistance_characterization
+experiment_type_version: 1
+date: 2025-01-15
+operator: Lab Tech
+description: >
+  Round-trip DC resistance measurement of 40 AWG coaxial SPI/SCI cable assembly.
+  5 conductors measured with 4-wire method using Keithley 2400, each measured
+  twice for repeatability.
+tags:
+  - coaxial
+  - 40awg
+  - baseline
+type_fields:
+  cable_model: coax_spi_sci_40awg
+  measurement_instrument: "Keithley 2400"
+  temperature_c: 23.5
+  measurement_method: four_wire

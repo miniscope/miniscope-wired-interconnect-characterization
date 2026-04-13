@@ -1,0 +1,5 @@
+resistance_ohm,cable_length_mm,notes
+1.20,500,ok
+-0.5,500,negative resistance
+abc,500,non-numeric
+1.10,-100,negative length
