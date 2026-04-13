@@ -1,0 +1,15 @@
+schema_version: "1.0"
+model_id: test_cable_001
+manufacturer: Test Corp
+part_number: TC-001
+description: Test cable for unit tests
+tags:
+  - test
+conductor_count: 4
+wire_gauge_awg: 30
+length_mm: 500
+shield_type: none
+impedance_ohm: 50.0
+connector_type_a: test_a
+connector_type_b: test_b
+cable_type: twisted_pair

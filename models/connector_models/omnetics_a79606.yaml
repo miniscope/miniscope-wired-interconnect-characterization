@@ -1,0 +1,13 @@
+schema_version: "1.0"
+model_id: omnetics_a79606
+manufacturer: Omnetics
+part_number: A79606-001
+description: Omnetics nano-strip connector used on Miniscope headstage
+tags:
+  - miniscope_v4
+  - nano_strip
+
+connector_family: Omnetics_nano_strip
+pin_count: 10
+mating_cycles_rated: 500
+contact_resistance_mohm: 50.0

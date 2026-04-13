@@ -1,0 +1,8 @@
+name: bad_enum
+version: 1
+description: Enum field without enum_values
+fields:
+  - name: method
+    field_type: enum
+    required: true
+    description: Missing enum_values

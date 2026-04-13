@@ -1,0 +1,20 @@
+schema_version: "1.0"
+model_id: coax_spi_sci_40awg
+manufacturer: Custom / Lab-built
+part_number: ""
+description: >
+  40 AWG coaxial SPI/SCI cable assembly used in standard Miniscope v4
+  wired interconnects. Typically 1-2 meters in length.
+tags:
+  - miniscope_v4
+  - coaxial
+  - standard
+
+conductor_count: 5
+wire_gauge_awg: 40
+length_mm: 1000
+shield_type: braided
+impedance_ohm: 50.0
+connector_type_a: SPI_SCI_coaxial
+connector_type_b: SPI_SCI_coaxial
+cable_type: coaxial

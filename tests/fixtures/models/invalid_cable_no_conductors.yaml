@@ -1,0 +1,4 @@
+schema_version: "1.0"
+model_id: bad_cable
+description: Missing required conductor_count (has ge=1 constraint)
+conductor_count: 0

@@ -1,0 +1,11 @@
+name: test_type
+version: 1
+description: A minimal valid experiment type for testing
+fields:
+  - name: sample_id
+    field_type: string
+    required: true
+    description: Sample identifier
+files: []
+processing_steps: []
+aggregation: []

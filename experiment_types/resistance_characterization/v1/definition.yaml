@@ -1,0 +1,66 @@
+name: resistance_characterization
+version: 1
+description: >
+  DC resistance measurement of cable conductors. Measures contact resistance
+  and conductor resistance across wire pairs, typically at multiple mating
+  cycles or temperatures.
+
+fields:
+  - name: cable_model
+    field_type: model_ref
+    model_ref_type: cable_models
+    required: true
+    description: Reference to the cable model being tested
+
+  - name: connector_model
+    field_type: model_ref
+    model_ref_type: connector_models
+    required: false
+    description: Reference to the connector model (if separate from cable)
+
+  - name: measurement_instrument
+    field_type: string
+    required: true
+    description: Instrument used for resistance measurement (e.g. "Keithley 2400")
+
+  - name: num_conductors_measured
+    field_type: integer
+    required: true
+    description: Number of conductor pairs measured
+
+  - name: temperature_c
+    field_type: float
+    required: false
+    default: 25.0
+    description: Ambient temperature during measurement in Celsius
+
+  - name: mating_cycle
+    field_type: integer
+    required: false
+    description: Mating cycle count at time of measurement
+
+  - name: measurement_method
+    field_type: enum
+    required: true
+    enum_values: ["four_wire", "two_wire"]
+    description: Resistance measurement method
+
+files:
+  - name: measurements_csv
+    filename_pattern: "measurements.csv"
+    file_format: csv
+    required: true
+    description: >
+      CSV with columns: conductor_pair, resistance_ohm, [mating_cycle], [notes]
+
+processing_steps:
+  - name: normalize_resistance
+    processor: src.processing.resistance.NormalizeResistance
+    description: Normalize raw CSV to standard column format
+    outputs: ["normalized_resistance_csv"]
+
+aggregation:
+  - name: resistance_summary
+    aggregator: src.aggregation.resistance.ResistanceSummary
+    description: Aggregate resistance measurements across experiments
+    outputs: ["resistance_summary_table", "resistance_boxplot"]

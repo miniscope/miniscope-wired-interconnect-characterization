@@ -1,0 +1,9 @@
+schema_version: "1.0"
+experiment_id: test_exp_bad
+experiment_type: full_test_type
+experiment_type_version: 1
+date: 2025-01-15
+type_fields:
+  cable_model: some_cable
+  method: invalid_method
+  unknown_field: should_not_exist

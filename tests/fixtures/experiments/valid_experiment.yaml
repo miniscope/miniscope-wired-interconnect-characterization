@@ -1,0 +1,12 @@
+schema_version: "1.0"
+experiment_id: test_exp_001
+experiment_type: test_type
+experiment_type_version: 1
+date: 2025-01-15
+operator: Test Operator
+description: A valid test experiment
+tags:
+  - test
+  - fixture
+type_fields:
+  sample_id: SAMPLE_001

@@ -1,0 +1,67 @@
+name: eye_diagram_characterization
+version: 1
+description: >
+  Eye diagram / signal integrity characterization of digital signal
+  lines through the interconnect. Captures eye openings, jitter, and
+  rise/fall times via .npz array files.
+
+fields:
+  - name: cable_model
+    field_type: model_ref
+    model_ref_type: cable_models
+    required: true
+    description: Reference to the cable model being tested
+
+  - name: oscilloscope
+    field_type: string
+    required: true
+    description: Oscilloscope or BERT instrument model
+
+  - name: signal_type
+    field_type: enum
+    required: true
+    enum_values: ["SPI_CLK", "SPI_MOSI", "SPI_MISO", "LVDS", "custom"]
+    description: Type of digital signal being tested
+
+  - name: data_rate_mbps
+    field_type: float
+    required: true
+    description: Data rate in Mbps
+
+  - name: signal_amplitude_mv
+    field_type: float
+    required: false
+    description: Signal amplitude in millivolts
+
+  - name: cable_length_mm
+    field_type: float
+    required: false
+    description: Length of cable under test in mm (overrides model default)
+
+files:
+  - name: manifest_csv
+    filename_pattern: "manifest.csv"
+    file_format: csv
+    required: true
+    description: >
+      CSV manifest with columns: filename, signal_type, data_rate_mbps, [notes]
+
+  - name: eye_data_files
+    filename_pattern: "raw/*.npz"
+    file_format: npz
+    required: true
+    description: >
+      NumPy .npz files containing at minimum an 'eye' array of shape (64, 64, 2)
+      with axes [time_bins, voltage_bins, channels]
+
+processing_steps:
+  - name: extract_eye_metrics
+    processor: src.processing.eye_diagram.ExtractEyeMetrics
+    description: Extract eye height, width, jitter from eye data arrays
+    outputs: ["eye_metrics_csv"]
+
+aggregation:
+  - name: eye_diagram_summary
+    aggregator: src.aggregation.eye_diagram.EyeDiagramSummary
+    description: Compare eye diagram results across experiments
+    outputs: ["eye_diagram_comparison_table"]

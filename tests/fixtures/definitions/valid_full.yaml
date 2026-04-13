@@ -1,0 +1,35 @@
+name: full_test_type
+version: 1
+description: A fully-specified experiment type for testing
+fields:
+  - name: cable_model
+    field_type: model_ref
+    model_ref_type: cable_models
+    required: true
+    description: Cable reference
+  - name: method
+    field_type: enum
+    required: true
+    enum_values: ["method_a", "method_b"]
+    description: Test method
+  - name: temperature_c
+    field_type: float
+    required: false
+    default: 25.0
+    description: Temperature
+files:
+  - name: data_file
+    filename_pattern: "data_*.csv"
+    file_format: csv
+    required: true
+    description: Test data file
+processing_steps:
+  - name: normalize
+    processor: src.processing.test.Normalize
+    description: Test normalization step
+    outputs: ["normalized_csv"]
+aggregation:
+  - name: summary
+    aggregator: src.aggregation.test.Summary
+    description: Test summary
+    outputs: ["summary_table"]
