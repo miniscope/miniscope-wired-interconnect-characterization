@@ -209,20 +209,49 @@ poetry run ruff check src/ tests/
 poetry run ruff format src/ tests/
 ```
 
-## Pipeline Usage
+## CLI
+
+```bash
+# Validate a single experiment
+poetry run miniscope-char validate experiments/EXP_2025_01_15_resistance_coax_40awg
+
+# Process a single experiment
+poetry run miniscope-char process experiments/EXP_2025_01_15_resistance_coax_40awg
+
+# Process all experiments
+poetry run miniscope-char process-all
+
+# Process only one experiment type
+poetry run miniscope-char process-all --type resistance_characterization
+
+# Aggregate results for a type
+poetry run miniscope-char aggregate resistance_characterization
+
+# Generate wiki payloads
+poetry run miniscope-char generate-payloads
+
+# Run the full pipeline (process all + aggregate all + generate payloads)
+poetry run miniscope-char run-all
+poetry run miniscope-char run-all --json  # print summary as JSON
+```
+
+## Pipeline API
 
 ```python
 from pathlib import Path
-from src.pipeline import process_experiment, process_all, aggregate_type
+from src.pipeline import process_experiment, process_all, aggregate_type, run_full_pipeline
 
 # Process a single experiment
 result = process_experiment(Path("experiments/EXP_2025_01_15_resistance_coax_40awg"))
 print(result.validation.is_valid)  # True
-print(result.outputs)              # {'normalized_resistance_csv': ..., 'resistance_summary_json': ...}
+print(result.outputs)              # {'normalized_resistance_csv': ..., ...}
 
 # Process all experiments of a type
 results = process_all(Path("experiments"), experiment_type="resistance_characterization")
 
 # Aggregate across experiments
 outputs = aggregate_type("resistance_characterization")
+
+# Run the complete pipeline
+summary = run_full_pipeline()
 ```

@@ -16,6 +16,7 @@ from src.core.experiment_validator import (
 from src.core.loading import load_experiment
 from src.experiment_types.registry import ExperimentTypeRegistry
 from src.processing.base import BaseProcessor
+from src.wiki.payloads import generate_wiki_payloads
 from src.wiki.resolver import ModelResolver
 
 logger = logging.getLogger(__name__)
@@ -212,3 +213,55 @@ def aggregate_type(
         all_outputs.update(outputs)
 
     return all_outputs
+
+
+def run_full_pipeline(repo_root: Path | None = None) -> dict:
+    """
+    Run the complete pipeline: process all experiments, aggregate all types,
+    generate wiki payloads.
+
+    Returns a summary dict with processing results, aggregation outputs,
+    and wiki payload paths.
+    """
+    if repo_root is None:
+        repo_root = Path(".")
+
+    summary: dict = {
+        "processed": [],
+        "aggregated": {},
+        "wiki_payloads": {},
+    }
+
+    # Process all experiments
+    experiments_dir = repo_root / "experiments"
+    if experiments_dir.exists():
+        results = process_all(experiments_dir, repo_root)
+        for r in results:
+            summary["processed"].append(
+                {
+                    "experiment_id": r.experiment_id,
+                    "valid": r.validation.is_valid,
+                    "error": r.error,
+                    "outputs": {k: str(v) for k, v in r.outputs.items()},
+                }
+            )
+
+    # Aggregate all experiment types
+    registry = ExperimentTypeRegistry(repo_root / "experiment_types")
+    for type_name, _version in registry.discover():
+        try:
+            outputs = aggregate_type(type_name, repo_root)
+            summary["aggregated"][type_name] = {k: str(v) for k, v in outputs.items()}
+        except Exception as e:
+            logger.error("Aggregation failed for %s: %s", type_name, e)
+            summary["aggregated"][type_name] = {"error": str(e)}
+
+    # Generate wiki payloads
+    try:
+        payloads = generate_wiki_payloads(repo_root)
+        summary["wiki_payloads"] = {k: str(v) for k, v in payloads.items()}
+    except Exception as e:
+        logger.error("Wiki payload generation failed: %s", e)
+        summary["wiki_payloads"] = {"error": str(e)}
+
+    return summary
