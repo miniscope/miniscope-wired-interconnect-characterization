@@ -176,6 +176,20 @@ cable_type: coaxial
 
 Individual cable properties (like length) are recorded per-measurement in the CSV data.
 
+## Model Resolution and Provenance
+
+When an experiment references a cable or connector model, the pipeline resolves the reference using a priority protocol:
+
+1. **Wiki** (when available) -- fetches from the miniscope.org wiki API
+2. **Repository fallback** -- loads from `models/<model_type>/<model_id>.yaml`
+
+The resolution result is recorded in a **resolution manifest** at `derived/manifests/<experiment_id>/resolution_manifest.json`, capturing:
+- Which models were resolved and from where (wiki vs repo)
+- Which optional model references were not provided
+- Timestamp for reproducibility
+
+This ensures all derived outputs are traceable to the exact metadata used during processing, even as wiki content evolves.
+
 ## Development
 
 ```bash

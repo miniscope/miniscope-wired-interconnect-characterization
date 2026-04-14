@@ -16,6 +16,7 @@ from src.core.experiment_validator import (
 from src.core.loading import load_experiment
 from src.experiment_types.registry import ExperimentTypeRegistry
 from src.processing.base import BaseProcessor
+from src.wiki.resolver import ModelResolver
 
 logger = logging.getLogger(__name__)
 
@@ -113,6 +114,12 @@ def process_experiment(
             experiment_id=experiment.experiment_id,
             validation=validation,
         )
+
+    # Resolve model references and write provenance manifest
+    resolver = ModelResolver(models_dir=repo_root / "models")
+    manifest = resolver.resolve_experiment(experiment, definition)
+    manifest_dir = repo_root / "derived" / "manifests" / experiment.experiment_id
+    manifest.write(manifest_dir / "resolution_manifest.json")
 
     output_dir = repo_root / "derived" / "normalized" / experiment.experiment_id
     all_outputs: dict[str, Path] = {}
