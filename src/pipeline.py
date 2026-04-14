@@ -9,6 +9,7 @@ from src.aggregation.base import BaseAggregator
 from src.core.experiment_validator import (
     ValidationResult,
     validate_experiment,
+    validate_eye_manifest_csv,
     validate_resistance_csv,
 )
 from src.core.loading import load_experiment
@@ -28,9 +29,11 @@ class PipelineResult:
     error: str | None = None
 
 
-# CSV validators keyed by experiment type name
-_CSV_VALIDATORS: dict[str, list[tuple[str, callable]]] = {
-    "resistance_characterization": [("measurements.csv", validate_resistance_csv)],
+# CSV validators keyed by experiment type name.
+# Each entry is (filename, validator_fn, needs_experiment_dir).
+_CSV_VALIDATORS: dict[str, list[tuple[str, callable, bool]]] = {
+    "resistance_characterization": [("measurements.csv", validate_resistance_csv, False)],
+    "eye_diagram_characterization": [("manifest.csv", validate_eye_manifest_csv, True)],
 }
 
 
@@ -95,10 +98,13 @@ def process_experiment(
     )
 
     csv_validators = _CSV_VALIDATORS.get(experiment.experiment_type, [])
-    for filename, validator_fn in csv_validators:
+    for filename, validator_fn, needs_exp_dir in csv_validators:
         csv_path = experiment_dir / filename
         if csv_path.exists():
-            validator_fn(csv_path, validation)
+            if needs_exp_dir:
+                validator_fn(csv_path, validation, experiment_dir=experiment_dir)
+            else:
+                validator_fn(csv_path, validation)
 
     if not validation.is_valid:
         return PipelineResult(

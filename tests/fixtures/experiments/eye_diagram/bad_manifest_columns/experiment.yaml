@@ -1,0 +1,9 @@
+schema_version: "1.0"
+experiment_id: test_eye_bad_manifest
+experiment_type: eye_diagram_characterization
+experiment_type_version: 1
+date: 2025-02-01
+type_fields:
+  oscilloscope: "Test Scope"
+  signal_type: SPI_CLK
+  data_rate_mbps: 10.0

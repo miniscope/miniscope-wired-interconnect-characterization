@@ -38,3 +38,8 @@ def resistance_fixtures_dir(fixtures_dir: Path) -> Path:
 @pytest.fixture
 def fixture_models_dir(fixtures_dir: Path) -> Path:
     return fixtures_dir / "models"
+
+
+@pytest.fixture
+def eye_fixtures_dir(fixtures_dir: Path) -> Path:
+    return fixtures_dir / "experiments" / "eye_diagram"

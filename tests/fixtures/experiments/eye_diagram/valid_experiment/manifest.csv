@@ -1,0 +1,3 @@
+filename,cable_length_mm,data_rate_mbps,signal_type,notes
+eye_1000mm_10mbps.npz,1000,10.0,SPI_CLK,test file 1
+eye_500mm_10mbps.npz,500,10.0,SPI_CLK,test file 2

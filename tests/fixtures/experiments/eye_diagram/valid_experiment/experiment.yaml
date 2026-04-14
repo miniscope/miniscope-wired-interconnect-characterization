@@ -1,0 +1,12 @@
+schema_version: "1.0"
+experiment_id: test_eye_valid
+experiment_type: eye_diagram_characterization
+experiment_type_version: 1
+date: 2025-02-01
+operator: Test Operator
+description: Valid eye diagram experiment for testing
+type_fields:
+  cable_model: test_cable_for_resistance
+  oscilloscope: "Test Scope"
+  signal_type: SPI_CLK
+  data_rate_mbps: 10.0

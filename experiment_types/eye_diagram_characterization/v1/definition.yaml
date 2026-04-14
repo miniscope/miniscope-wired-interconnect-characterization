@@ -2,15 +2,19 @@ name: eye_diagram_characterization
 version: 1
 description: >
   Eye diagram / signal integrity characterization of digital signal
-  lines through the interconnect. Captures eye openings, jitter, and
-  rise/fall times via .npz array files.
+  lines through the interconnect. Each measurement captures a 2D histogram
+  of overlaid waveform transitions stored as a .npz file with axes
+  [voltage_bins, time_bins, phase] where phase 0 = rising edge and
+  phase 1 = falling edge.
 
 fields:
   - name: cable_model
     field_type: model_ref
     model_ref_type: cable_models
-    required: true
-    description: Reference to the cable model being tested
+    required: false
+    description: >
+      Reference to the cable type being tested (e.g. coax_spi_sci_40awg).
+      This identifies the cable type, not an individual cable instance.
 
   - name: oscilloscope
     field_type: string
@@ -21,22 +25,17 @@ fields:
     field_type: enum
     required: true
     enum_values: ["SPI_CLK", "SPI_MOSI", "SPI_MISO", "LVDS", "custom"]
-    description: Type of digital signal being tested
+    description: Default signal type for the experiment (can be overridden per-row in manifest)
 
   - name: data_rate_mbps
     field_type: float
     required: true
-    description: Data rate in Mbps
+    description: Default data rate in Mbps (can be overridden per-row in manifest)
 
   - name: signal_amplitude_mv
     field_type: float
     required: false
     description: Signal amplitude in millivolts
-
-  - name: cable_length_mm
-    field_type: float
-    required: false
-    description: Length of cable under test in mm (overrides model default)
 
 files:
   - name: manifest_csv
@@ -44,24 +43,29 @@ files:
     file_format: csv
     required: true
     description: >
-      CSV manifest with columns: filename, signal_type, data_rate_mbps, [notes]
+      CSV manifest with columns: filename (required, path relative to raw/),
+      cable_length_mm (required), data_rate_mbps (required),
+      [signal_type], [notes].
 
   - name: eye_data_files
     filename_pattern: "raw/*.npz"
     file_format: npz
     required: true
     description: >
-      NumPy .npz files containing at minimum an 'eye' array of shape (64, 64, 2)
-      with axes [time_bins, voltage_bins, channels]
+      NumPy .npz files containing at minimum an 'eye' array with shape
+      (voltage_bins, time_bins, 2) where the last dimension is phase
+      (0=rising, 1=falling). Optional arrays: 'voltage_range' shape (2,)
+      giving [v_min, v_max] in mV, 'time_range' shape (2,) giving
+      [t_min, t_max] in ps.
 
 processing_steps:
   - name: extract_eye_metrics
     processor: src.processing.eye_diagram.ExtractEyeMetrics
-    description: Extract eye height, width, jitter from eye data arrays
-    outputs: ["eye_metrics_csv"]
+    description: Extract eye height, width, and area from eye data arrays
+    outputs: ["eye_metrics_csv", "eye_summary_json"]
 
 aggregation:
   - name: eye_diagram_summary
     aggregator: src.aggregation.eye_diagram.EyeDiagramSummary
     description: Compare eye diagram results across experiments
-    outputs: ["eye_diagram_comparison_table"]
+    outputs: ["eye_diagram_comparison_table", "eye_diagram_comparison_plot"]

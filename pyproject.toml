@@ -10,6 +10,7 @@ packages = [{include = "src"}]
 python = "^3.10"
 pydantic = "^2.6"
 pyyaml = "^6.0"
+numpy = ">=1.26"
 pandas = "^2.1"
 matplotlib = "^3.8"
 

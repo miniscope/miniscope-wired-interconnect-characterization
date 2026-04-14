@@ -1,0 +1,20 @@
+schema_version: "1.0"
+experiment_id: EXP_2025_02_01_eye_diagram_coax_40awg
+experiment_type: eye_diagram_characterization
+experiment_type_version: 1
+date: 2025-02-01
+operator: Lab Tech
+description: >
+  Eye diagram characterization of 40 AWG coaxial SPI/SCI cable at
+  different cable lengths (500mm to 2000mm). SPI_CLK signal at 10 Mbps.
+tags:
+  - coaxial
+  - 40awg
+  - eye_diagram
+  - length_sweep
+type_fields:
+  cable_model: coax_spi_sci_40awg
+  oscilloscope: "Keysight MSOX4154A"
+  signal_type: SPI_CLK
+  data_rate_mbps: 10.0
+  signal_amplitude_mv: 800.0

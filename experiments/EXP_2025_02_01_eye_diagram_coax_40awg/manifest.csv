@@ -1,0 +1,5 @@
+filename,cable_length_mm,data_rate_mbps,signal_type,notes
+eye_500mm_10mbps.npz,500,10.0,SPI_CLK,shortest cable
+eye_1000mm_10mbps.npz,1000,10.0,SPI_CLK,standard length
+eye_1500mm_10mbps.npz,1500,10.0,SPI_CLK,
+eye_2000mm_10mbps.npz,2000,10.0,SPI_CLK,longest cable
