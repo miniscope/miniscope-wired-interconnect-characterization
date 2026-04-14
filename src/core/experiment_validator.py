@@ -283,3 +283,100 @@ def validate_npz_file(
 
     if not np.issubdtype(eye.dtype, np.number):
         result.add_error(f"{npz_path.name}: 'eye' array must be numeric, got dtype {eye.dtype}")
+
+
+def validate_vna_manifest_csv(
+    csv_path: Path,
+    result: ValidationResult,
+    experiment_dir: Path | None = None,
+) -> None:
+    """
+    VNA manifest CSV validation.
+
+    Required columns: filename, cable_length_mm
+    Optional columns: description, notes
+    Each filename must reference an existing .s2p file in raw/.
+    """
+    try:
+        with open(csv_path, newline="") as f:
+            reader = csv.DictReader(f)
+            if reader.fieldnames is None:
+                result.add_error(f"CSV file is empty: {csv_path.name}")
+                return
+
+            headers = [h.strip() for h in reader.fieldnames]
+
+            for required_col in ["filename", "cable_length_mm"]:
+                if required_col not in headers:
+                    result.add_error(f"CSV missing required column: '{required_col}'")
+
+            if not result.is_valid:
+                return
+
+            row_count = 0
+            error_count = 0
+            max_errors = 10
+
+            for i, row in enumerate(reader, start=2):
+                row_count += 1
+                if error_count >= max_errors:
+                    result.add_error(f"... and more errors (stopped after {max_errors})")
+                    break
+
+                filename = row.get("filename", "").strip()
+                if not filename:
+                    result.add_error(f"Row {i}: filename is empty")
+                    error_count += 1
+                elif experiment_dir is not None:
+                    s2p_path = experiment_dir / "raw" / filename
+                    if not s2p_path.exists():
+                        result.add_error(f"Row {i}: referenced file not found: raw/{filename}")
+                        error_count += 1
+
+                l_val = row.get("cable_length_mm", "").strip()
+                try:
+                    length = float(l_val)
+                    if length <= 0:
+                        result.add_error(f"Row {i}: cable_length_mm must be positive, got {length}")
+                        error_count += 1
+                except ValueError:
+                    result.add_error(f"Row {i}: cable_length_mm is not numeric: '{l_val}'")
+                    error_count += 1
+
+            if row_count == 0:
+                result.add_warning("CSV has no data rows (header only)")
+
+    except FileNotFoundError:
+        result.add_error(f"CSV file not found: {csv_path}")
+
+
+def validate_s2p_file(
+    s2p_path: Path,
+    result: ValidationResult,
+) -> None:
+    """
+    Basic validation of a Touchstone .s2p file.
+
+    Checks that the file exists, has an option line (#), and has data rows.
+    """
+    try:
+        with open(s2p_path) as f:
+            has_option_line = False
+            has_data = False
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith("!"):
+                    continue
+                if line.startswith("#"):
+                    has_option_line = True
+                    continue
+                has_data = True
+                break
+
+            if not has_option_line:
+                result.add_warning(f"{s2p_path.name}: no option line (#) found")
+            if not has_data:
+                result.add_error(f"{s2p_path.name}: no data rows found")
+
+    except FileNotFoundError:
+        result.add_error(f"S2P file not found: {s2p_path}")

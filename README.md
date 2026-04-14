@@ -114,7 +114,31 @@ EXP_YYYY_MM_DD_description/
 
 ### VNA Characterization
 
-Vector Network Analyzer S-parameter characterization (planned for Milestone 4).
+Vector Network Analyzer S-parameter characterization of cable/interconnect RF performance using Touchstone .s2p files.
+
+**Submission structure:**
+```
+EXP_YYYY_MM_DD_description/
+  experiment.yaml
+  manifest.csv              # Columns: filename, cable_length_mm, [description], [notes]
+  raw/
+    cable_500mm.s2p
+    cable_1000mm.s2p
+```
+
+**Required `type_fields` in experiment.yaml:**
+| Field | Type | Description |
+|-------|------|-------------|
+| `vna_instrument` | string | e.g. "Keysight E5063A" |
+| `calibration_type` | enum | `SOLT`, `TRL`, `electronic_cal`, or `other` |
+
+**Optional `type_fields`:**
+| Field | Type | Description |
+|-------|------|-------------|
+| `cable_model` | model_ref | Reference to cable type |
+| `port_impedance_ohm` | float | Reference impedance (default: 50.0) |
+
+**Derived outputs:** per-file insertion loss (S21) and return loss (S11) metrics at key frequencies (1 MHz, 10 MHz, 100 MHz, 1 GHz), full frequency traces CSV, summary JSON, cross-experiment overlay plot.
 
 ## Contributing an Experiment
 

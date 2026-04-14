@@ -3,34 +3,21 @@ version: 1
 description: >
   Vector Network Analyzer (VNA) characterization of cable/interconnect
   RF performance. Captures S-parameters (S11, S21, etc.) across a frequency
-  range.
+  range using Touchstone .s2p files.
 
 fields:
   - name: cable_model
     field_type: model_ref
     model_ref_type: cable_models
-    required: true
-    description: Reference to the cable model being tested
+    required: false
+    description: >
+      Reference to the cable type being tested (e.g. coax_spi_sci_40awg).
+      This identifies the cable type, not an individual cable instance.
 
   - name: vna_instrument
     field_type: string
     required: true
     description: VNA instrument model (e.g. "Keysight E5063A")
-
-  - name: frequency_start_hz
-    field_type: float
-    required: true
-    description: Start frequency in Hz
-
-  - name: frequency_stop_hz
-    field_type: float
-    required: true
-    description: Stop frequency in Hz
-
-  - name: num_points
-    field_type: integer
-    required: true
-    description: Number of frequency points in the sweep
 
   - name: calibration_type
     field_type: enum
@@ -50,25 +37,22 @@ files:
     file_format: csv
     required: true
     description: >
-      CSV manifest with columns: filename, cable_length_mm, description, [notes]
+      CSV manifest with columns: filename (required, path relative to raw/),
+      cable_length_mm (required), [description], [notes].
 
   - name: s_parameter_files
     filename_pattern: "raw/*.s2p"
     file_format: s2p
     required: true
-    description: Touchstone S2P files with S-parameter data
+    description: >
+      Touchstone .s2p files with 2-port S-parameter data. Frequency range
+      and number of points are extracted from the file automatically.
 
 processing_steps:
-  - name: parse_s2p
-    processor: src.processing.vna.ParseS2P
-    description: Parse Touchstone files and extract S-parameter matrices
-    outputs: ["parsed_s_params_csv"]
-
-  - name: compute_insertion_loss
-    processor: src.processing.vna.ComputeInsertionLoss
-    description: Compute insertion loss from S21
-    depends_on: ["parse_s2p"]
-    outputs: ["insertion_loss_csv", "insertion_loss_plot"]
+  - name: process_vna
+    processor: src.processing.vna.ProcessVNA
+    description: Parse Touchstone files, extract S-parameters, compute insertion loss
+    outputs: ["vna_metrics_csv", "vna_traces_csv", "vna_summary_json"]
 
 aggregation:
   - name: vna_summary

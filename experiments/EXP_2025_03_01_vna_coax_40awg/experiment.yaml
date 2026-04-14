@@ -1,0 +1,20 @@
+schema_version: "1.0"
+experiment_id: EXP_2025_03_01_vna_coax_40awg
+experiment_type: vna_characterization
+experiment_type_version: 1
+date: 2025-03-01
+operator: Lab Tech
+description: >
+  VNA S-parameter characterization of 40 AWG coaxial SPI/SCI cable at
+  three cable lengths (500mm, 1000mm, 1500mm). SOLT calibration with
+  Keysight E5063A, 1 MHz to 1 GHz sweep.
+tags:
+  - coaxial
+  - 40awg
+  - vna
+  - length_sweep
+type_fields:
+  cable_model: coax_spi_sci_40awg
+  vna_instrument: "Keysight E5063A"
+  calibration_type: SOLT
+  port_impedance_ohm: 50.0

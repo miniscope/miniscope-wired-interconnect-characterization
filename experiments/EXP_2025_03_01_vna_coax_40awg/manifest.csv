@@ -1,0 +1,4 @@
+filename,cable_length_mm,description,notes
+vna_500mm.s2p,500,500mm cable sample,shortest
+vna_1000mm.s2p,1000,1000mm cable sample,standard length
+vna_1500mm.s2p,1500,1500mm cable sample,longest

@@ -11,6 +11,7 @@ from src.core.experiment_validator import (
     validate_experiment,
     validate_eye_manifest_csv,
     validate_resistance_csv,
+    validate_vna_manifest_csv,
 )
 from src.core.loading import load_experiment
 from src.experiment_types.registry import ExperimentTypeRegistry
@@ -34,6 +35,7 @@ class PipelineResult:
 _CSV_VALIDATORS: dict[str, list[tuple[str, callable, bool]]] = {
     "resistance_characterization": [("measurements.csv", validate_resistance_csv, False)],
     "eye_diagram_characterization": [("manifest.csv", validate_eye_manifest_csv, True)],
+    "vna_characterization": [("manifest.csv", validate_vna_manifest_csv, True)],
 }
 
 

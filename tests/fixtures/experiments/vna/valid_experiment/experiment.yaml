@@ -1,0 +1,11 @@
+schema_version: "1.0"
+experiment_id: test_vna_valid
+experiment_type: vna_characterization
+experiment_type_version: 1
+date: 2025-03-01
+operator: Test Operator
+description: Valid VNA experiment for testing
+type_fields:
+  cable_model: test_cable_for_resistance
+  vna_instrument: "Test VNA"
+  calibration_type: SOLT

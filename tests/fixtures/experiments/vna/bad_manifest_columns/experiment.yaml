@@ -1,0 +1,8 @@
+schema_version: "1.0"
+experiment_id: test_vna_bad_manifest
+experiment_type: vna_characterization
+experiment_type_version: 1
+date: 2025-03-01
+type_fields:
+  vna_instrument: "Test VNA"
+  calibration_type: SOLT
