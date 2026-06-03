@@ -1,3 +1,13 @@
+"""
+Schemas for hardware model metadata (models/<type>/<id>.yaml).
+
+These describe equipment the measurements reference -- miniscopes,
+connectors, commutators -- as opposed to the cables under test, which
+have their own stricter schema (src/core/profile_schemas.py). Hardware
+models use extra="allow" so vendors' extra fields don't break loading;
+cable profiles use extra="forbid" because they are OUR contract.
+"""
+
 from __future__ import annotations
 
 from pydantic import BaseModel, ConfigDict, Field

@@ -1,4 +1,11 @@
-"""CLI entry point for miniscope characterization pipeline."""
+"""
+CLI entry point (`miniscope-char`).
+
+Thin argparse wrapper over the pipeline, analysis, wiki, and acquisition
+modules. Imports happen inside each command so that `--help` and the
+lean (no-extras) install stay fast and functional -- e.g. `acquire` only
+imports NiceGUI when actually launched.
+"""
 
 from __future__ import annotations
 

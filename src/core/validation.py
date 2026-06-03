@@ -1,3 +1,14 @@
+"""
+Dynamic validation of type_fields against a measurement definition.
+
+SessionRecord's fixed fields (operator, date, ...) are validated by
+Pydantic, but the type-specific fields can't be -- they're defined in
+YAML, per measurement type and version. TypeFieldValidator bridges that:
+it reads the FieldSpec list out of the definition and checks the session's
+type_fields dict against it (required fields, Python types, enum values,
+unknown keys).
+"""
+
 from __future__ import annotations
 
 from datetime import date, datetime

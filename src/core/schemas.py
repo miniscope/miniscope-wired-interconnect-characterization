@@ -1,3 +1,18 @@
+"""
+Schemas for measurement type DEFINITIONS.
+
+A definition (measurement_types/<type>/v<N>/definition.yaml) describes a
+kind of measurement as data: which metadata fields a session must carry
+(FieldSpec), which data files it must contain (FileSpec), and which Python
+classes process and aggregate it (ProcessingStep / AggregationSpec, as
+dotted import paths resolved at runtime).
+
+Describing measurements as data instead of code is what makes the
+platform extensible and version-safe: adding a measurement type is mostly
+writing a new definition, and changing a protocol means a new vN folder
+while old data keeps validating against the version it was taken under.
+"""
+
 from __future__ import annotations
 
 from enum import Enum

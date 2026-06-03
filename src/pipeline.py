@@ -1,3 +1,17 @@
+"""
+Pipeline orchestration: raw sessions in, derived results out.
+
+run_full_pipeline chains the five deterministic stages
+(process -> aggregate -> consolidate -> cross -> render wiki); each stage
+is also runnable on its own via the CLI. Processors and aggregators are
+resolved from the dotted paths declared in each measurement type's
+definition.yaml, so this module never hard-codes what a type does -- it
+only walks the measurements/ tree, validates, and dispatches.
+
+Everything written under derived/ is regenerable: deleting derived/ and
+re-running this pipeline reproduces it exactly from the raw sessions.
+"""
+
 from __future__ import annotations
 
 import importlib

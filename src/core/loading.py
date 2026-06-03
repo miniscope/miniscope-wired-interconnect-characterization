@@ -1,3 +1,12 @@
+"""
+YAML -> validated Pydantic object loaders.
+
+All disk reads of sessions, profiles, and hardware models funnel through
+here so that nothing in the codebase ever works with an unvalidated dict:
+if a function received a SessionRecord, the data behind it passed schema
+validation.
+"""
+
 from __future__ import annotations
 
 from pathlib import Path
