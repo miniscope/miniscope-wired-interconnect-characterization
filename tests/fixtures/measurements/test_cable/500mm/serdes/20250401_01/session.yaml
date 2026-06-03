@@ -1,0 +1,12 @@
+schema_version: "1.0"
+session_id: "20250401_01"
+profile_id: test_cable
+cable_length_mm: 500
+measurement_type: serdes
+measurement_type_version: 1
+date: 2025-04-01
+operator: Test Operator
+notes: "fixture SerDes session at 500mm"
+type_fields:
+  serdes_device: "Test GMSL2 eval kit"
+  temperature_c: 23.0

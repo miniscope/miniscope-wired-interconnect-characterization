@@ -10,6 +10,7 @@ from src.core.loading import load_session
 from src.core.session_validator import (
     ValidationResult,
     validate_resistance_csv,
+    validate_serdes_session,
     validate_session,
     validate_vna_manifest_csv,
 )
@@ -36,6 +37,11 @@ class PipelineResult:
 _CSV_VALIDATORS: dict[str, list[tuple[str, callable, bool]]] = {
     "resistance": [("resistance.csv", validate_resistance_csv, False)],
     "vna": [("manifest.csv", validate_vna_manifest_csv, True)],
+}
+
+# Whole-session validators (beyond simple per-CSV checks) keyed by type name.
+_SESSION_VALIDATORS: dict[str, callable] = {
+    "serdes": validate_serdes_session,
 }
 
 
@@ -140,6 +146,10 @@ def process_session(
                 validator_fn(csv_path, validation, session_dir=session_dir)
             else:
                 validator_fn(csv_path, validation)
+
+    session_validator = _SESSION_VALIDATORS.get(session.measurement_type)
+    if session_validator is not None:
+        session_validator(session_dir, validation)
 
     if not validation.is_valid:
         return PipelineResult(session_ref=ref, validation=validation)

@@ -1,0 +1,11 @@
+schema_version: "1.0"
+session_id: "20250404_01"
+profile_id: test_cable
+cable_length_mm: 500
+measurement_type: serdes
+measurement_type_version: 1
+date: 2025-04-04
+operator: Test Operator
+notes: "eye npz files are missing required keys"
+type_fields:
+  serdes_device: "Test GMSL2 eval kit"

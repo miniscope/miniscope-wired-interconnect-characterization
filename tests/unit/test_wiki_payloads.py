@@ -39,6 +39,7 @@ class TestGenerateWikiPayloads:
             payload = json.load(f)
 
         assert len(payload["characterization"]["resistance"]) == 2
+        assert len(payload["characterization"]["serdes"]) == 2
         assert len(payload["characterization"]["vna"]) == 2
 
         entry = payload["characterization"]["resistance"][0]

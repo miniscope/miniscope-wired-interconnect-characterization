@@ -31,7 +31,7 @@ class TestResolveClass:
 class TestDiscoverSessions:
     def test_discovers_all(self, test_repo: Path):
         sessions = discover_sessions(test_repo / "measurements")
-        assert len(sessions) == 4  # 2 resistance + 2 vna
+        assert len(sessions) == 6  # 2 resistance + 2 serdes + 2 vna
 
     def test_filter_by_type(self, test_repo: Path):
         sessions = discover_sessions(test_repo / "measurements", "resistance")

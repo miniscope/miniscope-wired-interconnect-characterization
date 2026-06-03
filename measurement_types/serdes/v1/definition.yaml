@@ -1,0 +1,68 @@
+name: serdes
+version: 1
+description: >
+  GMSL2 serializer/deserializer (SerDes) signal-integrity characterization.
+  For each of the forward channel (high-bandwidth video/data) and back
+  channel (slower bidirectional control), at both 3 Gbps and 6 Gbps, the
+  acquisition captures an eye diagram (2D error-count histogram over
+  time x voltage) and a link-margin sweep (bit error count vs TX amplitude,
+  coarse 10 mV steps with fine 1 mV steps near the error onset). The cable
+  profile and length come from the session's location in the
+  measurements/ tree.
+
+fields:
+  - name: serdes_device
+    field_type: string
+    required: true
+    description: SerDes pair used (e.g. "MAX9295A/MAX9296A GMSL2 eval kit")
+
+  - name: temperature_c
+    field_type: float
+    required: false
+    default: 25.0
+    description: Ambient temperature during measurement in Celsius
+
+files:
+  - name: session_manifest_csv
+    filename_pattern: "session_manifest.csv"
+    file_format: csv
+    required: true
+    description: >
+      CSV with columns: channel (forward|back), rate_gbps (3|6),
+      eye_npz, margin_csv. Must contain exactly one row per
+      channel x rate combo (4 rows total).
+
+  - name: eye_diagram_files
+    filename_pattern: "eye_*.npz"
+    file_format: npz
+    required: true
+    description: >
+      One NPZ per channel/rate combo with keys: error_counts (2D int array,
+      axis 0 = voltage bins, axis 1 = time bins), voltage_range_mv (2,),
+      time_range_ps (2,).
+
+  - name: link_margin_files
+    filename_pattern: "margin_*.csv"
+    file_format: csv
+    required: true
+    description: >
+      One CSV per channel/rate combo with columns: tx_amplitude_mv,
+      error_count. Final per-point values only (the acquisition script may
+      average internal repeats); variability comes from repeated sessions.
+
+processing_steps:
+  - name: process_serdes
+    processor: src.processing.serdes.ProcessSerdes
+    description: Compute eye-opening and link-margin metrics per channel/rate combo
+    outputs: ["serdes_metrics_csv", "serdes_summary_json"]
+
+aggregation:
+  - name: serdes_summary
+    aggregator: src.aggregation.serdes.SerdesSummary
+    description: Aggregate SerDes metrics across sessions vs cable length
+    outputs:
+      [
+        "serdes_metrics_table",
+        "serdes_eye_vs_length_plot",
+        "serdes_margin_vs_length_plot",
+      ]

@@ -47,4 +47,4 @@ class TestCLI:
         repo = build_test_repo(tmp_path)
         result = run_cli("process-all", repo_root=repo)
         assert result.returncode == 0, result.stdout + result.stderr
-        assert "Processed 4 sessions" in result.stdout
+        assert "Processed 6 sessions" in result.stdout

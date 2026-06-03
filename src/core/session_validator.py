@@ -230,6 +230,196 @@ def validate_resistance_csv(
         result.add_error(f"CSV file not found: {csv_path}")
 
 
+def validate_serdes_session(
+    session_dir: Path,
+    result: ValidationResult,
+) -> None:
+    """
+    SerDes-specific session validation.
+
+    Checks that session_manifest.csv covers exactly the
+    {forward, back} x {3, 6 Gbps} combos, that every referenced eye NPZ and
+    margin CSV exists, and that those files have the expected structure:
+    - eye NPZ: error_counts (2D numeric), voltage_range_mv (2,), time_range_ps (2,)
+    - margin CSV: tx_amplitude_mv, error_count columns with valid values
+    """
+    import csv as _csv
+
+    from src.processing.serdes import EXPECTED_COMBOS
+
+    manifest_path = session_dir / "session_manifest.csv"
+    try:
+        with open(manifest_path, newline="") as f:
+            reader = _csv.DictReader(f)
+            if reader.fieldnames is None:
+                result.add_error(f"CSV file is empty: {manifest_path.name}")
+                return
+
+            headers = [h.strip() for h in reader.fieldnames]
+            for required_col in ["channel", "rate_gbps", "eye_npz", "margin_csv"]:
+                if required_col not in headers:
+                    result.add_error(f"Manifest missing required column: '{required_col}'")
+            if not result.is_valid:
+                return
+
+            seen_combos: list[tuple[str, int]] = []
+            for i, row in enumerate(reader, start=2):
+                channel = row.get("channel", "").strip()
+                rate_raw = row.get("rate_gbps", "").strip()
+                try:
+                    rate = int(float(rate_raw))
+                except ValueError:
+                    result.add_error(f"Row {i}: rate_gbps is not numeric: '{rate_raw}'")
+                    continue
+
+                if (channel, rate) not in EXPECTED_COMBOS:
+                    result.add_error(
+                        f"Row {i}: unexpected combo ({channel}, {rate} Gbps); "
+                        f"expected channels forward/back at 3 or 6 Gbps"
+                    )
+                    continue
+                seen_combos.append((channel, rate))
+
+                for col in ["eye_npz", "margin_csv"]:
+                    filename = row.get(col, "").strip()
+                    if not filename:
+                        result.add_error(f"Row {i}: {col} is empty")
+                    elif not (session_dir / filename).exists():
+                        result.add_error(f"Row {i}: referenced file not found: {filename}")
+
+            missing = EXPECTED_COMBOS - set(seen_combos)
+            for channel, rate in sorted(missing):
+                result.add_error(f"Manifest missing combo: ({channel}, {rate} Gbps)")
+            if len(seen_combos) != len(set(seen_combos)):
+                result.add_error("Manifest contains duplicate channel/rate combos")
+
+    except FileNotFoundError:
+        result.add_error(f"CSV file not found: {manifest_path}")
+        return
+
+    if not result.is_valid:
+        return
+
+    # Structural checks on the referenced data files
+    for npz_path in sorted(session_dir.glob("*.npz")):
+        validate_serdes_npz(npz_path, result)
+    for margin_path in sorted(session_dir.glob("margin_*.csv")):
+        validate_margin_csv(margin_path, result)
+
+
+def validate_serdes_npz(
+    npz_path: Path,
+    result: ValidationResult,
+) -> None:
+    """
+    Validate a single SerDes eye-diagram .npz file.
+
+    Required keys:
+    - error_counts: 2D numeric array (voltage bins x time bins)
+    - voltage_range_mv: shape (2,)
+    - time_range_ps: shape (2,)
+    """
+    import numpy as np
+
+    try:
+        data = np.load(npz_path)
+    except Exception as e:
+        result.add_error(f"{npz_path.name}: failed to load .npz: {e}")
+        return
+
+    for key in ["error_counts", "voltage_range_mv", "time_range_ps"]:
+        if key not in data:
+            result.add_error(f"{npz_path.name}: missing required '{key}' array")
+    if not result.is_valid:
+        return
+
+    counts = data["error_counts"]
+    if counts.ndim != 2:
+        result.add_error(
+            f"{npz_path.name}: 'error_counts' must be 2D (voltage, time), "
+            f"got {counts.ndim}D with shape {counts.shape}"
+        )
+    if not np.issubdtype(counts.dtype, np.number):
+        result.add_error(
+            f"{npz_path.name}: 'error_counts' must be numeric, got dtype {counts.dtype}"
+        )
+
+    for key in ["voltage_range_mv", "time_range_ps"]:
+        if data[key].shape != (2,):
+            result.add_error(
+                f"{npz_path.name}: '{key}' must have shape (2,), got {data[key].shape}"
+            )
+
+
+def validate_margin_csv(
+    csv_path: Path,
+    result: ValidationResult,
+) -> None:
+    """
+    Validate a link-margin sweep CSV.
+
+    Required columns: tx_amplitude_mv, error_count.
+    Amplitudes must be positive; error counts must be non-negative integers.
+    """
+    try:
+        with open(csv_path, newline="") as f:
+            reader = csv.DictReader(f)
+            if reader.fieldnames is None:
+                result.add_error(f"CSV file is empty: {csv_path.name}")
+                return
+
+            headers = [h.strip() for h in reader.fieldnames]
+            for required_col in ["tx_amplitude_mv", "error_count"]:
+                if required_col not in headers:
+                    result.add_error(f"{csv_path.name}: missing required column: '{required_col}'")
+            if not result.is_valid:
+                return
+
+            row_count = 0
+            error_count = 0
+            max_errors = 10
+
+            for i, row in enumerate(reader, start=2):
+                row_count += 1
+                if error_count >= max_errors:
+                    result.add_error(f"... and more errors (stopped after {max_errors})")
+                    break
+
+                amp_val = row.get("tx_amplitude_mv", "").strip()
+                try:
+                    amp = float(amp_val)
+                    if amp <= 0:
+                        result.add_error(
+                            f"{csv_path.name} row {i}: tx_amplitude_mv must be positive, got {amp}"
+                        )
+                        error_count += 1
+                except ValueError:
+                    result.add_error(
+                        f"{csv_path.name} row {i}: tx_amplitude_mv is not numeric: '{amp_val}'"
+                    )
+                    error_count += 1
+
+                err_val = row.get("error_count", "").strip()
+                try:
+                    err = float(err_val)
+                    if err < 0:
+                        result.add_error(
+                            f"{csv_path.name} row {i}: error_count must be >= 0, got {err}"
+                        )
+                        error_count += 1
+                except ValueError:
+                    result.add_error(
+                        f"{csv_path.name} row {i}: error_count is not numeric: '{err_val}'"
+                    )
+                    error_count += 1
+
+            if row_count == 0:
+                result.add_warning(f"{csv_path.name} has no data rows (header only)")
+
+    except FileNotFoundError:
+        result.add_error(f"CSV file not found: {csv_path}")
+
+
 def validate_vna_manifest_csv(
     csv_path: Path,
     result: ValidationResult,
