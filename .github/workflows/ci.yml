@@ -1,3 +1,24 @@
+# CI/CD for the cable characterization platform.
+#
+# Flow:
+#   PRs:   lint + tests (incl. the GUI extra) + validate-all + a full
+#          analysis dry-run; derived outputs are attached as a preview
+#          artifact, NOT committed.
+#   main:  after merge, the publish job re-runs the full analysis,
+#          commits derived/ back to main (bot commit, [skip ci]), and
+#          publishes the rendered pages to the Miniscope wiki.
+#
+# Required repository secrets (configured by the maintainer):
+#   DERIVED_BOT_TOKEN        fine-grained PAT with contents:write; the
+#                            token owner must be allowed to bypass branch
+#                            protection so CI can push derived/ to main
+#   MEDIAWIKI_BOT_USER       wiki bot account name
+#   MEDIAWIKI_BOT_PASSWORD   wiki bot password
+#
+# If pushing directly to main is undesirable, swap the "Commit derived
+# outputs" step for peter-evans/create-pull-request to open an auto-PR
+# instead.
+
 name: CI
 
 on:
@@ -14,11 +35,11 @@ jobs:
       - name: Install Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.10"
+          python-version: "3.12"
       - name: Install Poetry
         run: pip install poetry
       - name: Install dependencies
-        run: poetry install
+        run: poetry install --with acquire
       - name: Run ruff check
         run: poetry run ruff check src/ tests/
       - name: Run ruff format check
@@ -37,15 +58,18 @@ jobs:
           python-version: ${{ matrix.python-version }}
       - name: Install Poetry
         run: pip install poetry
-      - name: Install dependencies
-        run: poetry install
+      - name: Install dependencies (incl. GUI + publish extras)
+        run: poetry install --with acquire,publish
       - name: Run tests
-        run: poetry run pytest --tb=short -v
+        run: poetry run pytest --tb=short
       - name: Run tests with coverage
-        if: matrix.python-version == '3.10'
+        if: matrix.python-version == '3.12'
         run: poetry run pytest --cov=src --cov-report=term-missing
 
-  pipeline:
+  # Validates every profile + session and runs the complete analysis.
+  # Fast by design, so it runs on every PR -- a data PR that breaks
+  # validation or analysis cannot merge.
+  analysis:
     runs-on: ubuntu-latest
     needs: [lint, test]
     steps:
@@ -58,15 +82,56 @@ jobs:
         run: pip install poetry
       - name: Install dependencies
         run: poetry install
-      - name: Validate and process all experiments
-        run: poetry run miniscope-char process-all
-      - name: Run full pipeline
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        run: poetry run miniscope-char run-all --json
-      - name: Upload derived outputs
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+      - name: Validate all profiles and sessions
+        run: poetry run miniscope-char validate-all
+      - name: Run full analysis (dry run)
+        run: poetry run miniscope-char run-all
+      - name: Upload derived outputs preview
+        if: github.event_name == 'pull_request'
         uses: actions/upload-artifact@v4
         with:
-          name: derived-outputs
+          name: derived-preview
           path: derived/
-          retention-days: 30
+          retention-days: 14
+
+  # After a merge to main: regenerate derived/, commit it back, publish
+  # the wiki. Uses the bot PAT so the push can bypass branch protection.
+  publish:
+    runs-on: ubuntu-latest
+    needs: [analysis]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.DERIVED_BOT_TOKEN }}
+      - name: Install Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install Poetry
+        run: pip install poetry
+      - name: Install dependencies (incl. publish extra)
+        run: poetry install --with publish
+      - name: Run full analysis
+        run: poetry run miniscope-char run-all
+      - name: Commit derived outputs back to main
+        run: |
+          git config user.name "miniscope-char-bot"
+          git config user.email "miniscope-char-bot@users.noreply.github.com"
+          git add derived/
+          if git diff --staged --quiet; then
+            echo "No derived changes to commit."
+          else
+            git commit -m "ci: update derived analysis outputs [skip ci]"
+            git push
+          fi
+      - name: Publish to Miniscope wiki
+        env:
+          MEDIAWIKI_BOT_USER: ${{ secrets.MEDIAWIKI_BOT_USER }}
+          MEDIAWIKI_BOT_PASSWORD: ${{ secrets.MEDIAWIKI_BOT_PASSWORD }}
+        run: |
+          if [ -z "$MEDIAWIKI_BOT_USER" ]; then
+            echo "Wiki credentials not configured yet -- skipping publish."
+          else
+            poetry run miniscope-char publish-wiki
+          fi
