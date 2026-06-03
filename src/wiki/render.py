@@ -133,14 +133,16 @@ class WikiRenderer:
         # Supply voltage guidance
         parts.append("\n== What supply voltage do I need? ==\n")
         parts.append(
-            "Thin coax drops voltage. Power your Miniscope with at least the "
-            "max-load voltage below for your cable and length.\n"
+            "Thin coax drops voltage, so each cable and length has an allowable "
+            "supply window: the minimum keeps the Miniscope above its regulator "
+            "dropout at full load; the maximum stays under the regulator's input "
+            "limit. The dotted line is the default supply (typically 5 V USB).\n"
         )
         for plot in sorted(cross_dir.glob("supply_voltage_*.png")):
             scope = plot.stem.replace("supply_voltage_", "")
             wiki_name = self._register_image(plot)
             if wiki_name:
-                parts.append(_image_ref(wiki_name, f"Required supply voltage ({scope})"))
+                parts.append(_image_ref(wiki_name, f"Allowable supply voltage ({scope})"))
 
         supply_df = self._cross_csv("supply_voltage.csv")
         if supply_df is not None:
@@ -151,8 +153,24 @@ class WikiRenderer:
                         "miniscope_model": "Miniscope",
                         "profile_id": "Cable",
                         "cable_length_mm": "Length (mm)",
-                        "min_supply_v_baseline": "Min supply (baseline)",
-                        "min_supply_v_max_load": "Min supply (max load)",
+                        "v_supply_min": "Min supply (V)",
+                        "v_supply_max": "Max supply (V)",
+                        "default_supply_ok": "OK at default supply?",
+                    },
+                )
+            )
+
+        max_length_df = self._cross_csv("max_length_summary.csv")
+        if max_length_df is not None:
+            parts.append("\n=== Longest usable cable at the default supply ===\n")
+            parts.append(
+                _wiki_table(
+                    max_length_df,
+                    {
+                        "miniscope_model": "Miniscope",
+                        "profile_id": "Cable",
+                        "default_supply_v": "Default supply (V)",
+                        "voltage_limited_max_length_mm": "Max length (mm)",
                     },
                 )
             )

@@ -24,6 +24,7 @@ class TestCrossAnalysis:
         assert "resistivity_summary" in outputs
         assert "supply_voltage_table" in outputs
         assert "supply_voltage_plot_test_miniscope" in outputs
+        assert "max_length_summary" in outputs
         assert "quality_scores" in outputs
         assert "quality_vs_length_plot_3g" in outputs
         assert "quality_vs_length_plot_6g" in outputs
@@ -49,10 +50,23 @@ class TestCrossAnalysis:
         # 1 miniscope x 1 profile x 2 lengths (500, 1000)
         assert len(df) == 2
         assert set(df["cable_length_mm"]) == {500.0, 1000.0}
-        assert (df["min_supply_v_max_load"] > df["min_supply_v_baseline"]).all()
-        # Voltage requirement grows with length
-        by_length = df.set_index("cable_length_mm")["min_supply_v_max_load"]
+        # Floor below ceiling -> feasible window; fixture sits in the 5 V window
+        assert (df["v_supply_min"] < df["v_supply_max"]).all()
+        assert df["feasible"].all()
+        # Worst-case droop floor grows with length
+        by_length = df.set_index("cable_length_mm")["v_supply_min"]
         assert by_length[1000.0] > by_length[500.0]
+
+    def test_max_length_summary(self, analyzed_repo: Path):
+        outputs = run_cross_analysis(analyzed_repo)
+        df = pd.read_csv(outputs["max_length_summary"])
+
+        # 1 miniscope x 1 profile
+        assert len(df) == 1
+        row = df.iloc[0]
+        assert row["miniscope_model"] == "test_miniscope"
+        assert row["profile_id"] == "test_cable"
+        assert row["voltage_limited_max_length_mm"] > 0
 
     def test_quality_scores(self, analyzed_repo: Path):
         outputs = run_cross_analysis(analyzed_repo)

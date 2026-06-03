@@ -1,19 +1,42 @@
-# Miniscope hardware model with power requirements.
-# Power fields feed the supply-voltage analysis:
-#   V_required = min_operating_voltage_v + I * R_roundtrip(cable, length)
-# NOTE: the power values below are PLACEHOLDERS -- replace with measured
-# specs before publishing supply-voltage guidance.
+# Miniscope hardware model, with the DAQ folded in (see ADR 0001).
+# Power fields feed the supply-voltage-window analysis:
+#   R_chain      = poc_dcr_supply_ohm + R_cable_roundtrip + poc_dcr_receive_ohm
+#   V_supply_min = min_operating_voltage_v + max_current_ma * R_chain
+#   V_supply_max = max_operating_voltage_v + min_current_ma * R_chain
+# NOTE: every electrical value below is a PLACEHOLDER -- replace with the
+# measured regulator limits, current draw, and choke datasheet DCRs before
+# publishing supply-voltage guidance.
 schema_version: "1.0"
 model_id: miniscope_v4
 manufacturer: "Aharoni Lab / Open Ephys"
 part_number: ""
-description: "Miniscope V4 head-mounted microscope (placeholder power values)"
+description: "Miniscope V4 head-mounted microscope (placeholder electrical values)"
 tags:
   - miniscope_v4
 miniscope_version: "4.4"
 sensor_type: "CMOS"
 led_type: "excitation LED"
 weight_g: 2.6
+
+# Onboard regulator limits (placeholders)
 min_operating_voltage_v: 3.3
+max_operating_voltage_v: 5.5
+
+# Current draw: idle -> typical -> worst-case (placeholders)
+min_current_ma: 20.0
 baseline_current_ma: 150.0
 max_current_ma: 300.0
+
+# Power-over-Coax choke series resistance, both ends (placeholders; use the
+# choke datasheet's max DCR, summed if the side has more than one inductor)
+poc_dcr_supply_ohm: 0.0
+poc_dcr_receive_ohm: 0.0
+
+# Supply (DAQ folded in): the V4 DAQ is USB-powered, 5 V default
+supply_mode: fixed_5v
+default_supply_v: 5.0
+
+# Link: the V4 uses FPD-Link III (slower than GMSL2). Signal-quality guidance
+# for this rate is PROJECTED from the VNA attenuation curve (see ADR 0001).
+serdes_family: "FPD-Link III"
+serdes_rate_gbps: 1.5

@@ -6,7 +6,8 @@ miniscope power models, and produces the repo's headline outputs in
 derived/cross/:
 
 - resistivity_summary.csv          one row per profile (fit across lengths)
-- supply_voltage.csv (+ PNG/scope) required supply V per miniscope x profile x length
+- supply_voltage.csv (+ PNG/scope) allowable supply-V window per miniscope x profile x length
+- max_length_summary.csv           voltage-limited max length at the default supply
 - quality_scores.csv (+ PNG/rate)  consolidated 0-1 score with works/marginal zones
 
 These are exactly the tables/plots the wiki pages are rendered from.
@@ -27,7 +28,7 @@ import matplotlib.pyplot as plt
 from src.analysis.config import AnalysisConfig, load_analysis_config
 from src.analysis.quality_score import QualityInputs, score, zone
 from src.analysis.resistivity import fit_resistivity
-from src.analysis.supply_voltage import supply_voltage_rows
+from src.analysis.supply_voltage import max_length_row, supply_voltage_rows
 from src.core.loading import load_model
 from src.core.model_schemas import MiniscopeModel
 
@@ -106,6 +107,32 @@ def _supply_voltage_table(
 
         for miniscope in miniscopes:
             rows.extend(supply_voltage_rows(miniscope, profile_id, rho, sorted(lengths)))
+
+    return pd.DataFrame(rows)
+
+
+def _max_length_table(
+    consolidated: dict[str, dict],
+    resistivity_df: pd.DataFrame,
+    miniscopes: list[MiniscopeModel],
+) -> pd.DataFrame:
+    """Voltage-limited max usable length at the default supply, per miniscope x profile."""
+    rows: list[dict] = []
+    if resistivity_df.empty:
+        return pd.DataFrame(rows)
+
+    resistivity_by_profile = resistivity_df.set_index("profile_id")[
+        "roundtrip_resistivity_ohm_per_m"
+    ].to_dict()
+
+    for profile_id in consolidated:
+        rho = resistivity_by_profile.get(profile_id)
+        if rho is None:
+            continue
+        for miniscope in miniscopes:
+            row = max_length_row(miniscope, profile_id, rho)
+            if row is not None:
+                rows.append(row)
 
     return pd.DataFrame(rows)
 
@@ -210,32 +237,58 @@ def _plot_supply_voltage(
     miniscope_id: str,
     output_path: Path,
 ) -> bool:
+    """
+    Allowable supply-voltage window vs cable length for one miniscope.
+
+    Per cable: the floor (V_supply_min, solid) is the brownout limit and the
+    ceiling (V_supply_max, dashed) the regulator's over-voltage limit; the
+    band between them is the usable window. The default-supply line (e.g.
+    5 V USB) is marked so the voltage-limited max length is read directly off
+    where the floor crosses it.
+    """
     scope_df = supply_df[supply_df["miniscope_model"] == miniscope_id]
     if scope_df.empty:
         return False
 
     fig, ax = plt.subplots(figsize=(8, 5))
+    has_ceiling = False
     for profile_id, group in scope_df.groupby("profile_id"):
         group = group.sort_values("cable_length_mm")
         line = ax.plot(
             group["cable_length_mm"],
-            group["min_supply_v_max_load"],
+            group["v_supply_min"],
             marker="o",
-            label=f"{profile_id} (max load)",
+            label=f"{profile_id} (min supply)",
         )[0]
-        ax.plot(
-            group["cable_length_mm"],
-            group["min_supply_v_baseline"],
-            marker="o",
-            ls="--",
-            color=line.get_color(),
-            alpha=0.6,
-            label=f"{profile_id} (baseline)",
-        )
+        ceiling = group["v_supply_max"]
+        if ceiling.notna().any():
+            has_ceiling = True
+            ax.plot(
+                group["cable_length_mm"],
+                ceiling,
+                marker="o",
+                ls="--",
+                color=line.get_color(),
+                alpha=0.6,
+                label=f"{profile_id} (max supply)",
+            )
+            ax.fill_between(
+                group["cable_length_mm"],
+                group["v_supply_min"],
+                ceiling,
+                color=line.get_color(),
+                alpha=0.10,
+            )
+
+    default_v = float(scope_df["default_supply_v"].iloc[0])
+    ax.axhline(
+        default_v, color="#455a64", lw=1.0, ls=":", label=f"default supply ({default_v:g} V)"
+    )
 
     ax.set_xlabel("Cable length (mm)")
-    ax.set_ylabel("Minimum supply voltage (V)")
-    ax.set_title(f"Required supply voltage vs cable length ({miniscope_id})")
+    ax.set_ylabel("Supply voltage (V)")
+    band = " window" if has_ceiling else " floor"
+    ax.set_title(f"Allowable supply-voltage{band} vs cable length ({miniscope_id})")
     ax.grid(True, alpha=0.3)
     ax.legend(fontsize=8)
     fig.tight_layout()
@@ -277,6 +330,13 @@ def run_cross_analysis(repo_root: Path) -> dict[str, Path]:
             plot_path = output_dir / f"supply_voltage_{miniscope_id}.png"
             if _plot_supply_voltage(supply_df, miniscope_id, plot_path):
                 outputs[f"supply_voltage_plot_{miniscope_id}"] = plot_path
+
+    # Voltage-limited max usable length at the default supply
+    max_length_df = _max_length_table(consolidated, resistivity_df, miniscopes)
+    if not max_length_df.empty:
+        path = output_dir / "max_length_summary.csv"
+        max_length_df.to_csv(path, index=False)
+        outputs["max_length_summary"] = path
 
     # Quality scores per profile x length x rate
     quality_df = _quality_table(consolidated, config)
