@@ -1,9 +1,6 @@
 # MediaWiki publishing configuration (no secrets here -- bot credentials
 # come from the MEDIAWIKI_BOT_USER / MEDIAWIKI_BOT_PASSWORD environment
 # variables, set as GitHub Actions secrets).
-#
-# TODO (Daniel): confirm the api_url and page locations before the first
-# live publish.
 
 api_url: "https://miniscope.org/api.php"
 

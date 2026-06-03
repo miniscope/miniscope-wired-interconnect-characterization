@@ -100,6 +100,11 @@ jobs:
     runs-on: ubuntu-latest
     needs: [analysis]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    # Serialize publish runs: two PRs merged back-to-back would otherwise
+    # race each other pushing bot commits to main.
+    concurrency:
+      group: publish-derived
+      cancel-in-progress: false
     steps:
       - uses: actions/checkout@v4
         with:
@@ -123,6 +128,13 @@ jobs:
             echo "No derived changes to commit."
           else
             git commit -m "ci: update derived analysis outputs [skip ci]"
+            # main may have moved while the analysis ran (another merge).
+            # Rebase our bot commit on top; on conflicts inside derived/
+            # keep our freshly regenerated outputs ("theirs" = the commit
+            # being replayed during a rebase). If newer measurements
+            # landed meanwhile, that merge's own publish run supersedes
+            # this one anyway.
+            git pull --rebase -X theirs origin main
             git push
           fi
       - name: Publish to Miniscope wiki
