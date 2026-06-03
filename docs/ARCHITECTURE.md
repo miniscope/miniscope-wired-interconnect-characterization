@@ -149,7 +149,9 @@ config edit, not a refactor.
 - **Every merge to main**: regenerate `derived/`, bot-commit it back
   (`[skip ci]` prevents loops), publish the wiki. Results in the repo are
   therefore always in sync with the data, and the wiki is always in sync
-  with the repo.
+  with the repo. Publish runs are serialized (a GitHub concurrency
+  group) and rebase before pushing, so back-to-back merges don't race
+  each other's bot commits.
 
 ## Testing strategy (`tests/`)
 
