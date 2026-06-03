@@ -64,6 +64,12 @@ class TestVNASummary:
         assert plot_path.suffix == ".png"
         assert plot_path.stat().st_size > 0
 
+    def test_impedance_plot_generated(self, processed_session, definition, tmp_path: Path):
+        aggregator = VNASummary()
+        outputs = aggregator.aggregate([processed_session], definition, tmp_path / "aggregated")
+        assert "vna_impedance_plot" in outputs
+        assert outputs["vna_impedance_plot"].exists()
+
     def test_skips_unprocessed(self, definition, vna_session_dir: Path, tmp_path: Path):
         session = load_session(vna_session_dir / "session.yaml")
         ctx = SessionContext(

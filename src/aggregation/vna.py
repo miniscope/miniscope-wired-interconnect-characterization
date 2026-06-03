@@ -46,9 +46,29 @@ class VNASummary(BaseAggregator):
             table_df.to_csv(table_path, index=False)
             outputs["vna_comparison_table"] = table_path
 
-            plot_path = output_dir / "vna_comparison.png"
-            self._generate_overlay_plot(sessions, plot_path)
-            outputs["vna_overlay_plot"] = plot_path
+            # Attenuation vs frequency (the user-facing loss curve). Kept at
+            # the historical filename/key so the wiki renderer and the type
+            # definition continue to find it.
+            atten_path = output_dir / "vna_comparison.png"
+            if self._generate_overlay_plot(
+                sessions,
+                atten_path,
+                column="attenuation_db",
+                ylabel="Attenuation (dB)",
+                title="Cable attenuation vs frequency",
+            ):
+                outputs["vna_overlay_plot"] = atten_path
+
+            # Characteristic impedance vs frequency.
+            imp_path = output_dir / "vna_impedance.png"
+            if self._generate_overlay_plot(
+                sessions,
+                imp_path,
+                column="impedance_ohm",
+                ylabel="Characteristic impedance (ohm)",
+                title="Characteristic impedance vs frequency",
+            ):
+                outputs["vna_impedance_plot"] = imp_path
 
         return outputs
 
@@ -87,8 +107,20 @@ class VNASummary(BaseAggregator):
 
         return pd.DataFrame(rows, columns=columns)
 
-    def _generate_overlay_plot(self, sessions: list[SessionContext], output_path: Path) -> None:
-        """Overlay plot of insertion loss (S21) vs frequency across sessions."""
+    def _generate_overlay_plot(
+        self,
+        sessions: list[SessionContext],
+        output_path: Path,
+        column: str,
+        ylabel: str,
+        title: str,
+    ) -> bool:
+        """
+        Overlay one trace column vs frequency across sessions.
+
+        Returns True if a plot was written, False if no session had usable
+        data for the requested column (so callers can skip the output).
+        """
         fig, ax = plt.subplots(figsize=(10, 6))
         has_data = False
 
@@ -99,15 +131,17 @@ class VNASummary(BaseAggregator):
                 continue
 
             df = pd.read_csv(traces_path)
-            if "frequency_hz" not in df.columns or "s21_db" not in df.columns:
+            if "frequency_hz" not in df.columns or column not in df.columns:
                 continue
 
             for filename, group in df.groupby("filename"):
-                group = group.sort_values("frequency_hz")
+                group = group.sort_values("frequency_hz").dropna(subset=[column])
+                if group.empty:
+                    continue
                 label = f"{ctx.label}/{filename}"
                 ax.plot(
                     group["frequency_hz"] / 1e6,
-                    group["s21_db"],
+                    group[column],
                     label=label,
                     alpha=0.8,
                 )
@@ -115,13 +149,14 @@ class VNASummary(BaseAggregator):
 
         if not has_data:
             plt.close(fig)
-            return
+            return False
 
         ax.set_xlabel("Frequency (MHz)")
-        ax.set_ylabel("S21 (dB)")
-        ax.set_title("Insertion Loss Comparison")
-        ax.legend(fontsize=7, loc="lower left")
+        ax.set_ylabel(ylabel)
+        ax.set_title(title)
+        ax.legend(fontsize=7, loc="best")
         ax.grid(True, alpha=0.3)
         fig.tight_layout()
         fig.savefig(output_path, dpi=150)
         plt.close(fig)
+        return True

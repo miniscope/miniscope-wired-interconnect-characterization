@@ -187,7 +187,20 @@ pick the new type up from the definition.
 
 - Quality-score formula, weights, zone thresholds (`config/analysis.yaml`)
 - Additional eye metrics (jitter, Q-factor) -- `src/processing/eye.py`
-- Characteristic-impedance extraction method -- `src/processing/vna.py`
-- Real instrument drivers -- `src/instruments/serdes/real.py`,
-  `src/instruments/vna/real.py` (awaiting the lab's scripts)
+- Real SerDes driver -- `src/instruments/serdes/real.py` (awaiting the
+  lab's GMSL2 scripts)
 - Miniscope power values are placeholders -- `models/miniscope_models/`
+
+Resolved since the original design:
+
+- **Characteristic-impedance extraction** (`src/processing/vna.py`) now uses
+  the ABCD-matrix transmission-line identity `Z0 = sqrt(B/C)` from the
+  complex S-parameters, reported as a mid-band median (band edges are
+  distorted by connector/fixture effects). The Touchstone parser retains
+  complex S-parameters for this.
+- **Real VNA driver** (`src/instruments/vna/real.py`) is implemented against
+  the cross-platform PicoVNA 5 Python API (`vna` package). It is demo-first:
+  `RealPicoVnaDriver(demo=True)` opens the SDK's simulated device, so the
+  whole acquire -> .s2p -> pipeline path runs with no hardware and no licence.
+  The bench bring-up steps that need the real 106 (calibration application,
+  confirming the complex accessor) are listed in the module docstring.

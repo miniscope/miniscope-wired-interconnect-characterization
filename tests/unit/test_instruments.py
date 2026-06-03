@@ -121,6 +121,37 @@ class TestSimulatedVnaDriver:
         assert np.abs(long.s21).mean() < np.abs(short.s21).mean()
 
 
+class TestRealPicoVnaDriverDemo:
+    """
+    Exercises the real PicoVNA 5 driver against the SDK's demo device.
+
+    Skips when the `vna` package isn't installed (e.g. CI), so it runs only
+    on a machine with the PicoVNA 5 SDK present -- no hardware required.
+    """
+
+    def test_demo_sweep(self):
+        pytest.importorskip("vna")
+        from src.instruments.vna.real import RealPicoVnaDriver
+
+        driver = RealPicoVnaDriver(demo=True)
+        driver.connect()
+        try:
+            assert driver.is_calibrated() is True
+            result = driver.sweep(VnaConfig(num_points=51))
+            assert len(result.frequencies_hz) == 51
+            assert np.iscomplexobj(result.s21)
+            assert result.instrument_info["demo"] == "true"
+        finally:
+            driver.close()
+
+    def test_module_imports_without_sdk(self):
+        """Importing/constructing the driver must not require the SDK."""
+        from src.instruments.vna.real import RealPicoVnaDriver
+
+        driver = RealPicoVnaDriver(demo=True)  # no connect() -> no vendor import
+        assert driver.is_calibrated() is False  # not connected yet
+
+
 class TestWriteS2p:
     def test_roundtrip_through_parser(self, tmp_path: Path):
         driver = SimulatedVnaDriver(cable_length_mm=1000.0)

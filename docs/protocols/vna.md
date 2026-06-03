@@ -2,8 +2,15 @@
 
 **What this measures:** the cable's RF behavior as 2-port S-parameters,
 captured to a standard Touchstone `.s2p` file. The pipeline derives
-attenuation vs frequency (from S21) and characteristic impedance, which
-feed the per-cable wiki pages and the consolidated quality score.
+attenuation vs frequency (from S21) and characteristic impedance (an
+ABCD-matrix extraction from the complex S-parameters, reported as a
+mid-band value), which feed the per-cable wiki pages and the consolidated
+quality score.
+
+The acquisition app drives the PicoVNA via the cross-platform PicoVNA 5
+API. With no instrument attached it can run against the SDK's demonstration
+device for practice/dev; real captures require the instrument and a valid
+calibration (below).
 
 ## Equipment
 
