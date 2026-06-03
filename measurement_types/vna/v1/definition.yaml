@@ -54,4 +54,4 @@ aggregation:
   - name: vna_summary
     aggregator: src.aggregation.vna.VNASummary
     description: Aggregate VNA results across sessions
-    outputs: ["vna_comparison_table", "vna_overlay_plot"]
+    outputs: ["vna_comparison_table", "vna_overlay_plot", "vna_impedance_plot"]

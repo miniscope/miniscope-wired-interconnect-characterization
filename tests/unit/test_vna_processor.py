@@ -3,12 +3,14 @@
 import json
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 import pytest
 
 from src.core.loading import load_session
 from src.measurement_types.loader import load_definition
-from src.processing.vna import ProcessVNA
+from src.processing.touchstone import TouchstoneData
+from src.processing.vna import ProcessVNA, estimate_characteristic_impedance
 
 
 class TestProcessVNA:
@@ -107,3 +109,68 @@ class TestProcessVNA:
 
         df = pd.read_csv(outputs["vna_metrics_csv"])
         assert len(df) == 1
+
+    def test_impedance_populated(
+        self, processor, definition, vna_session_dir: Path, tmp_path: Path
+    ):
+        """Characteristic impedance is now computed (no longer a None stub)."""
+        session = load_session(vna_session_dir / "session.yaml")
+        outputs = processor.process(vna_session_dir, session, definition, tmp_path / "output")
+
+        metrics = pd.read_csv(outputs["vna_metrics_csv"])
+        z = metrics["characteristic_impedance_ohm"].dropna()
+        assert len(z) > 0
+        assert (z > 0).all()  # physical impedance is positive
+
+        traces = pd.read_csv(outputs["vna_traces_csv"])
+        assert "impedance_ohm" in traces.columns
+
+        with open(outputs["vna_summary_json"]) as f:
+            summary = json.load(f)
+        assert "mean_characteristic_impedance_ohm" in summary
+
+
+class TestCharacteristicImpedance:
+    def _matched_line(self, z0: float, ref: float, n: int = 101) -> TouchstoneData:
+        """Ideal lossless line of impedance z0 referenced to `ref` ohms.
+
+        For a matched line (z0 == ref) S11 = 0 and S21 = e^{-j theta}; we
+        synthesize a small reflection when z0 != ref so the ABCD extraction
+        has something to recover.
+        """
+        freqs = np.linspace(1e6, 1e9, n)
+        theta = 2 * np.pi * freqs / freqs[-1]  # arbitrary electrical length sweep
+        # Reflection coefficient of a z0 line in a `ref` system (real z0).
+        gamma = (z0 - ref) / (z0 + ref)
+        s11 = gamma * (1 - np.exp(-2j * theta)) / (1 - gamma**2 * np.exp(-2j * theta))
+        s21 = (1 - gamma**2) * np.exp(-1j * theta) / (1 - gamma**2 * np.exp(-2j * theta))
+        return TouchstoneData(
+            frequencies_hz=freqs,
+            s11_db=20 * np.log10(np.abs(s11) + 1e-15),
+            s21_db=20 * np.log10(np.abs(s21)),
+            s12_db=20 * np.log10(np.abs(s21)),
+            s22_db=20 * np.log10(np.abs(s11) + 1e-15),
+            ref_impedance=ref,
+            s11=s11,
+            s21=s21,
+            s12=s21,
+            s22=s11,
+        )
+
+    def test_matched_line_recovers_reference(self):
+        ts = self._matched_line(z0=50.0, ref=50.0)
+        assert estimate_characteristic_impedance(ts) == pytest.approx(50.0, abs=1.0)
+
+    def test_75_ohm_line(self):
+        ts = self._matched_line(z0=75.0, ref=50.0)
+        assert estimate_characteristic_impedance(ts) == pytest.approx(75.0, rel=0.05)
+
+    def test_none_when_no_complex_data(self):
+        ts = TouchstoneData(
+            frequencies_hz=np.array([1e6]),
+            s11_db=np.array([-10.0]),
+            s21_db=np.array([-3.0]),
+            s12_db=np.array([-3.0]),
+            s22_db=np.array([-10.0]),
+        )
+        assert estimate_characteristic_impedance(ts) is None

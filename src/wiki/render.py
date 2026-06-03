@@ -268,7 +268,13 @@ class WikiRenderer:
                 self.repo_root / "derived" / "aggregated" / "vna" / "vna_comparison.png"
             )
             if wiki_name:
-                parts.append(_image_ref(wiki_name, "Insertion loss vs frequency"))
+                parts.append(_image_ref(wiki_name, "Attenuation vs frequency"))
+
+            imp_name = self._register_image(
+                self.repo_root / "derived" / "aggregated" / "vna" / "vna_impedance.png"
+            )
+            if imp_name:
+                parts.append(_image_ref(imp_name, "Characteristic impedance vs frequency"))
 
         # Resistance results
         resistance_csv = profile_derived / "resistance_by_length.csv"

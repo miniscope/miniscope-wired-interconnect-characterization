@@ -35,10 +35,17 @@ optional = true
 [tool.poetry.group.publish.dependencies]
 mwclient = "^0.11"
 
-# Real-instrument dependencies (bench PC only). Exact libraries are
-# DEFERRED until the lab's instrument scripts land in
-# src/instruments/*/real.py -- add the I2C adapter lib and the PicoVNA
-# binding here as optional groups (acquire-serdes / acquire-vna).
+# Real-instrument dependencies (bench PC only).
+#
+# VNA: the PicoVNA 5 Python API uses the `vna` PyPI package PLUS platform
+# native libraries that ship with the SDK download (not on PyPI), so it is
+# installed manually rather than via a poetry group:
+#   pip install vna   # then copy _vna_python.*, libvna.*, libftd2xx.* onto
+#                     # the library path -- see src/instruments/vna/real.py
+# Develop with no hardware via RealPicoVnaDriver(demo=True).
+#
+# SerDes: the I2C adapter library is DEFERRED until Federico's GMSL2 scripts
+# land in src/instruments/serdes/real.py.
 
 [tool.poetry.scripts]
 miniscope-char = "src.cli.main:app"

@@ -82,3 +82,18 @@ class TestParseS2p:
         ts = parse_s2p(s2p_path)
         assert "comments" in ts.metadata
         assert len(ts.metadata["comments"]) > 0
+
+    def test_complex_sparams_populated(self, vna_session_dir: Path):
+        """Complex S-parameters are retained alongside the dB magnitudes."""
+        ts = parse_s2p(vna_session_dir / "raw" / "sweep_01.s2p")
+        assert np.iscomplexobj(ts.s21)
+        assert ts.s21.shape == ts.s21_db.shape
+        # Magnitude of the complex value matches the dB-magnitude field.
+        np.testing.assert_allclose(20 * np.log10(np.abs(ts.s21)), ts.s21_db, atol=1e-6)
+
+    def test_complex_ri_matches_input(self, tmp_path: Path):
+        s2p = tmp_path / "test_ri.s2p"
+        s2p.write_text("# HZ S RI R 50\n" "1000000  0.0 0.1  0.5 0.0  0.5 0.0  0.0 0.1\n")
+        ts = parse_s2p(s2p)
+        assert ts.s11[0] == pytest.approx(0.1j)
+        assert ts.s21[0] == pytest.approx(0.5 + 0j)

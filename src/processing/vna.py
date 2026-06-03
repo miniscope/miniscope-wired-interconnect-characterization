@@ -21,15 +21,64 @@ def _interpolate_at_freq(
     return float(np.interp(target_hz, frequencies_hz, values_db))
 
 
+def characteristic_impedance_profile(ts: TouchstoneData) -> np.ndarray | None:
+    """
+    Per-frequency characteristic impedance Z0(f) of the cable, in ohms.
+
+    Method: treat the cable as a 2-port and convert its complex
+    S-parameters (normalized to the measurement reference impedance) to the
+    ABCD matrix, then use the transmission-line identity Z0 = sqrt(B/C).
+    This is exact for a uniform reciprocal line and a robust estimate for a
+    real cable; it needs phase, which is why the Touchstone parser retains
+    complex S-parameters. Returns the complex Z0(f); callers typically take
+    the real part. Returns None if complex data is unavailable.
+
+    NOTE: connector/fixture discontinuities dominate Z0 at the band edges, so
+    the scalar in `estimate_characteristic_impedance` reports a mid-band
+    value rather than a single point.
+    """
+    if ts.s21.size == 0:
+        return None
+
+    z_ref = ts.ref_impedance
+    s11, s21, s12, s22 = ts.s11, ts.s21, ts.s12, ts.s22
+
+    # S -> ABCD (B and C are all we need for Z0 = sqrt(B/C)).
+    with np.errstate(divide="ignore", invalid="ignore"):
+        denom = 2.0 * s21
+        b = z_ref * ((1 + s11) * (1 + s22) - s12 * s21) / denom
+        c = ((1 - s11) * (1 - s22) - s12 * s21) / (denom * z_ref)
+        z0 = np.sqrt(b / c)
+
+    return z0
+
+
 def estimate_characteristic_impedance(ts: TouchstoneData) -> float | None:
     """
-    Estimate the cable's characteristic impedance from S-parameters.
+    Single characteristic-impedance value for the cable, in ohms.
 
-    TODO (deferred decision): choose the extraction method (e.g. TDR-style
-    transform of S11 vs analytic fit against the reference impedance).
-    Until then this returns None and downstream consumers must handle it.
+    Takes the median of Re(Z0(f)) over the middle 80% of the swept band
+    (dropping the lowest/highest 10% of points, where connector and fixture
+    effects distort the estimate). Returns None if no usable points exist.
     """
-    return None
+    z0 = characteristic_impedance_profile(ts)
+    if z0 is None:
+        return None
+
+    real = np.real(z0)
+    finite = np.isfinite(real) & (real > 0)
+    if not finite.any():
+        return None
+
+    n = real.size
+    lo, hi = int(0.1 * n), max(int(0.1 * n) + 1, int(0.9 * n))
+    band = np.zeros(n, dtype=bool)
+    band[lo:hi] = True
+    usable = real[finite & band]
+    if usable.size == 0:
+        usable = real[finite]
+
+    return float(np.median(usable))
 
 
 class ProcessVNA(BaseProcessor):
@@ -73,7 +122,11 @@ class ProcessVNA(BaseProcessor):
 
             ts = parse_s2p(s2p_path)
 
-            for freq, s21, s11 in zip(ts.frequencies_hz, ts.s21_db, ts.s11_db, strict=False):
+            z0_profile = characteristic_impedance_profile(ts)
+            for i, (freq, s21, s11) in enumerate(
+                zip(ts.frequencies_hz, ts.s21_db, ts.s11_db, strict=False)
+            ):
+                z0 = float(np.real(z0_profile[i])) if z0_profile is not None else None
                 trace_rows.append(
                     {
                         "filename": filename,
@@ -81,6 +134,9 @@ class ProcessVNA(BaseProcessor):
                         "s21_db": round(float(s21), 4),
                         "s11_db": round(float(s11), 4),
                         "attenuation_db": round(-float(s21), 4),
+                        "impedance_ohm": round(z0, 4)
+                        if z0 is not None and np.isfinite(z0)
+                        else None,
                     }
                 )
 
@@ -152,6 +208,13 @@ class ProcessVNA(BaseProcessor):
                 series = df[col].dropna()
                 summary[f"mean_{col}"] = round(float(series.mean()), 4)
                 summary[f"worst_{col}"] = round(float(series.min()), 4)
+
+        if (
+            "characteristic_impedance_ohm" in df.columns
+            and not df["characteristic_impedance_ohm"].isna().all()
+        ):
+            series = df["characteristic_impedance_ohm"].dropna()
+            summary["mean_characteristic_impedance_ohm"] = round(float(series.mean()), 2)
 
         type_fields = session.type_fields
         for key in ["vna_instrument", "calibration_type", "port_impedance_ohm"]:

@@ -17,7 +17,12 @@ FREQ_MULTIPLIERS = {
 
 @dataclass
 class TouchstoneData:
-    """Parsed 2-port Touchstone data."""
+    """Parsed 2-port Touchstone data.
+
+    S-parameters are kept both as dB magnitude (the historical fields, used
+    for attenuation/return-loss curves) and as complex linear values (used by
+    analyses that need phase, e.g. characteristic-impedance extraction).
+    """
 
     frequencies_hz: np.ndarray
     s11_db: np.ndarray
@@ -31,6 +36,11 @@ class TouchstoneData:
     frequency_start_hz: float = 0.0
     frequency_stop_hz: float = 0.0
     metadata: dict = field(default_factory=dict)
+    # Complex linear S-parameters (magnitude AND phase preserved).
+    s11: np.ndarray = field(default_factory=lambda: np.array([], dtype=complex))
+    s21: np.ndarray = field(default_factory=lambda: np.array([], dtype=complex))
+    s12: np.ndarray = field(default_factory=lambda: np.array([], dtype=complex))
+    s22: np.ndarray = field(default_factory=lambda: np.array([], dtype=complex))
 
 
 def _ma_to_db(magnitude: np.ndarray) -> np.ndarray:
@@ -43,6 +53,16 @@ def _ri_to_db(real: np.ndarray, imag: np.ndarray) -> np.ndarray:
     """Convert real/imaginary to dB magnitude."""
     magnitude = np.sqrt(real**2 + imag**2)
     return _ma_to_db(magnitude)
+
+
+def _to_complex(col_a: np.ndarray, col_b: np.ndarray, format_type: str) -> np.ndarray:
+    """Convert a Touchstone S-parameter column pair to complex linear values."""
+    if format_type == "RI":
+        return col_a + 1j * col_b
+    if format_type == "MA":
+        return col_a * np.exp(1j * np.deg2rad(col_b))
+    # DB: col_a is dB magnitude, col_b is phase in degrees.
+    return 10.0 ** (col_a / 20.0) * np.exp(1j * np.deg2rad(col_b))
 
 
 def parse_s2p(path: Path) -> TouchstoneData:
@@ -121,6 +141,11 @@ def parse_s2p(path: Path) -> TouchstoneData:
     else:
         raise ValueError(f"Unsupported format type: {format_type}")
 
+    s11 = _to_complex(data[:, 1], data[:, 2], format_type)
+    s21 = _to_complex(data[:, 3], data[:, 4], format_type)
+    s12 = _to_complex(data[:, 5], data[:, 6], format_type)
+    s22 = _to_complex(data[:, 7], data[:, 8], format_type)
+
     return TouchstoneData(
         frequencies_hz=freqs,
         s11_db=s11_db,
@@ -134,4 +159,8 @@ def parse_s2p(path: Path) -> TouchstoneData:
         frequency_start_hz=float(freqs[0]) if len(freqs) > 0 else 0.0,
         frequency_stop_hz=float(freqs[-1]) if len(freqs) > 0 else 0.0,
         metadata={"comments": comments},
+        s11=s11,
+        s21=s21,
+        s12=s12,
+        s22=s22,
     )
