@@ -45,6 +45,32 @@ class TestFullPipeline:
             for entry in entries:
                 assert entry["summary"] is not None
 
+    def test_stale_derived_outputs_pruned(self, test_repo: Path):
+        """Outputs for sessions/profiles that no longer exist are removed."""
+        ghost = test_repo / "derived" / "sessions" / "ghost_cable" / "500mm" / "resistance" / "x"
+        ghost.mkdir(parents=True)
+        (ghost / "resistance_summary.json").write_text("{}")
+        ghost_profile = test_repo / "derived" / "profiles" / "ghost_cable"
+        ghost_profile.mkdir(parents=True)
+        (ghost_profile / "consolidated.json").write_text("{}")
+
+        run_full_pipeline(test_repo)
+
+        assert not (test_repo / "derived" / "sessions" / "ghost_cable").exists()
+        assert not ghost_profile.exists()
+        # Real outputs regenerated as usual
+        assert (test_repo / "derived" / "profiles" / "test_cable" / "consolidated.json").exists()
+
+    def test_clean_false_preserves_existing(self, test_repo: Path):
+        """clean=False keeps unrelated derived files (incremental mode)."""
+        keeper = test_repo / "derived" / "sessions" / "keep.txt"
+        keeper.parent.mkdir(parents=True, exist_ok=True)
+        keeper.write_text("keep me")
+
+        run_full_pipeline(test_repo, clean=False)
+
+        assert keeper.exists()
+
     def test_derived_tree_layout(self, test_repo: Path):
         """Derived outputs mirror the measurements/ tree under derived/sessions/."""
         run_full_pipeline(test_repo)
