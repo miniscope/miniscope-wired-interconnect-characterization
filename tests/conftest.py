@@ -76,6 +76,7 @@ def build_test_repo(
     repo.mkdir()
 
     shutil.copytree(REPO_ROOT / "measurement_types", repo / "measurement_types")
+    shutil.copytree(REPO_ROOT / "config", repo / "config")
     shutil.copytree(FIXTURES_DIR / "profiles", repo / "profiles")
     shutil.copytree(FIXTURES_DIR / "models", repo / "models")
 

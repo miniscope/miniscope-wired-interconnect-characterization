@@ -7,6 +7,7 @@ from pathlib import Path
 
 from src.aggregation.base import BaseAggregator, SessionContext
 from src.analysis.consolidate import consolidate_profiles
+from src.analysis.cross import run_cross_analysis
 from src.core.loading import load_session
 from src.core.session_validator import (
     ValidationResult,
@@ -259,6 +260,7 @@ def run_full_pipeline(repo_root: Path | None = None) -> dict:
         "processed": [],
         "aggregated": {},
         "consolidated": {},
+        "cross": {},
         "wiki_payloads": {},
     }
 
@@ -293,6 +295,14 @@ def run_full_pipeline(repo_root: Path | None = None) -> dict:
     except Exception as e:
         logger.error("Profile consolidation failed: %s", e)
         summary["consolidated"] = {"error": str(e)}
+
+    # Cross-cutting analysis (resistivity, supply voltage, quality scores)
+    try:
+        cross_outputs = run_cross_analysis(repo_root)
+        summary["cross"] = {k: str(v) for k, v in cross_outputs.items()}
+    except Exception as e:
+        logger.error("Cross-cutting analysis failed: %s", e)
+        summary["cross"] = {"error": str(e)}
 
     # Generate wiki payloads
     try:

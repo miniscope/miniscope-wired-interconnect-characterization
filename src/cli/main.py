@@ -172,6 +172,19 @@ def cmd_consolidate(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_cross(args: argparse.Namespace) -> int:
+    """Run cross-cutting analysis (resistivity, supply voltage, quality scores)."""
+    from src.analysis.cross import run_cross_analysis
+
+    repo_root = Path(args.repo_root)
+    outputs = run_cross_analysis(repo_root)
+
+    print(f"Cross-cutting analysis produced {len(outputs)} outputs:")
+    for name, path in outputs.items():
+        print(f"  {name}: {path}")
+    return 0
+
+
 def cmd_generate_payloads(args: argparse.Namespace) -> int:
     """Generate wiki payloads."""
     from src.wiki.payloads import generate_wiki_payloads
@@ -238,6 +251,11 @@ def app() -> None:
     )
     p_consolidate.add_argument("--profile", default=None, help="Limit to one profile id")
 
+    # cross
+    subparsers.add_parser(
+        "cross", help="Run cross-cutting analysis (resistivity, supply voltage, quality)"
+    )
+
     # generate-payloads
     subparsers.add_parser("generate-payloads", help="Generate wiki payloads")
 
@@ -258,6 +276,7 @@ def app() -> None:
         "process-all": cmd_process_all,
         "aggregate": cmd_aggregate,
         "consolidate": cmd_consolidate,
+        "cross": cmd_cross,
         "generate-payloads": cmd_generate_payloads,
         "run-all": cmd_run_all,
     }

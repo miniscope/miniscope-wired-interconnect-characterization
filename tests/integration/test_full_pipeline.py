@@ -25,6 +25,11 @@ class TestFullPipeline:
         # Should have consolidated per-profile metrics
         assert "test_cable_consolidated_json" in summary["consolidated"]
 
+        # Should have run cross-cutting analysis
+        assert "quality_scores" in summary["cross"]
+        assert "resistivity_summary" in summary["cross"]
+        assert "supply_voltage_table" in summary["cross"]
+
         # Should have generated a wiki payload per profile
         assert "test_cable" in summary["wiki_payloads"]
 
