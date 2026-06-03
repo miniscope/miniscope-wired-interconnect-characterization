@@ -198,6 +198,22 @@ def cmd_generate_payloads(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_acquire(args: argparse.Namespace) -> int:
+    """Launch the acquisition app (requires the `acquire` extra)."""
+    try:
+        from src.acquire.app import run_acquire
+    except ImportError:
+        print(
+            "The acquisition app requires the 'acquire' dependency group.\n"
+            "Install it with: poetry install --with acquire"
+        )
+        return 1
+
+    simulate = True if args.simulate else None
+    run_acquire(repo_root=Path(args.repo_root), host=args.host, port=args.port, simulate=simulate)
+    return 0
+
+
 def cmd_run_all(args: argparse.Namespace) -> int:
     """Run the full pipeline."""
     from src.pipeline import run_full_pipeline
@@ -263,6 +279,16 @@ def app() -> None:
     p_run_all = subparsers.add_parser("run-all", help="Run the full pipeline")
     p_run_all.add_argument("--json", action="store_true", help="Print summary as JSON")
 
+    # acquire
+    p_acquire = subparsers.add_parser("acquire", help="Launch the acquisition app")
+    p_acquire.add_argument("--host", default="127.0.0.1", help="Bind address")
+    p_acquire.add_argument("--port", type=int, default=8080, help="Port")
+    p_acquire.add_argument(
+        "--simulate",
+        action="store_true",
+        help="Force simulated instruments (no hardware needed)",
+    )
+
     args = parser.parse_args()
 
     if not args.command:
@@ -279,6 +305,7 @@ def app() -> None:
         "cross": cmd_cross,
         "generate-payloads": cmd_generate_payloads,
         "run-all": cmd_run_all,
+        "acquire": cmd_acquire,
     }
 
     sys.exit(commands[args.command](args))
