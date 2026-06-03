@@ -262,6 +262,7 @@ def run_full_pipeline(repo_root: Path | None = None) -> dict:
         "consolidated": {},
         "cross": {},
         "wiki_payloads": {},
+        "wiki_rendered": {},
     }
 
     # Process all sessions
@@ -311,5 +312,15 @@ def run_full_pipeline(repo_root: Path | None = None) -> dict:
     except Exception as e:
         logger.error("Wiki payload generation failed: %s", e)
         summary["wiki_payloads"] = {"error": str(e)}
+
+    # Render wiki pages (publishing happens separately, on main merges)
+    try:
+        from src.wiki.render import render_wiki
+
+        rendered = render_wiki(repo_root)
+        summary["wiki_rendered"] = {k: str(v) for k, v in rendered.items()}
+    except Exception as e:
+        logger.error("Wiki rendering failed: %s", e)
+        summary["wiki_rendered"] = {"error": str(e)}
 
     return summary

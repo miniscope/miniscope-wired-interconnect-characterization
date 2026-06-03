@@ -198,6 +198,34 @@ def cmd_generate_payloads(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_render_wiki(args: argparse.Namespace) -> int:
+    """Render wiki pages + image manifest into derived/wiki/."""
+    from src.wiki.render import render_wiki
+
+    repo_root = Path(args.repo_root)
+    outputs = render_wiki(repo_root)
+
+    print(f"Rendered {len(outputs)} wiki outputs:")
+    for name, path in outputs.items():
+        print(f"  {name}: {path}")
+    return 0
+
+
+def cmd_publish_wiki(args: argparse.Namespace) -> int:
+    """Render and publish the wiki bundle (requires bot credentials in env)."""
+    from src.wiki.publish import publish_wiki
+
+    repo_root = Path(args.repo_root)
+    try:
+        bundle_dir = publish_wiki(repo_root)
+    except Exception as e:
+        print(f"PUBLISH FAILED: {e}")
+        return 1
+
+    print(f"Published wiki bundle from {bundle_dir}")
+    return 0
+
+
 def cmd_acquire(args: argparse.Namespace) -> int:
     """Launch the acquisition app (requires the `acquire` extra)."""
     try:
@@ -275,6 +303,14 @@ def app() -> None:
     # generate-payloads
     subparsers.add_parser("generate-payloads", help="Generate wiki payloads")
 
+    # render-wiki
+    subparsers.add_parser("render-wiki", help="Render wiki pages into derived/wiki/")
+
+    # publish-wiki
+    subparsers.add_parser(
+        "publish-wiki", help="Render and publish the wiki (needs bot credentials)"
+    )
+
     # run-all
     p_run_all = subparsers.add_parser("run-all", help="Run the full pipeline")
     p_run_all.add_argument("--json", action="store_true", help="Print summary as JSON")
@@ -304,6 +340,8 @@ def app() -> None:
         "consolidate": cmd_consolidate,
         "cross": cmd_cross,
         "generate-payloads": cmd_generate_payloads,
+        "render-wiki": cmd_render_wiki,
+        "publish-wiki": cmd_publish_wiki,
         "run-all": cmd_run_all,
         "acquire": cmd_acquire,
     }

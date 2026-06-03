@@ -27,6 +27,14 @@ optional = true
 [tool.poetry.group.acquire.dependencies]
 nicegui = "^2"
 
+# Wiki publishing (CI publish job only):
+#   poetry install --with publish
+[tool.poetry.group.publish]
+optional = true
+
+[tool.poetry.group.publish.dependencies]
+mwclient = "^0.11"
+
 # Real-instrument dependencies (bench PC only). Exact libraries are
 # DEFERRED until the lab's instrument scripts land in
 # src/instruments/*/real.py -- add the I2C adapter lib and the PicoVNA

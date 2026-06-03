@@ -3,8 +3,12 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import matplotlib
 import numpy as np
 import pandas as pd
+
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
 
 from src.core.schemas import MeasurementDefinition
 from src.core.session_schemas import SessionRecord
@@ -62,6 +66,11 @@ class ProcessSerdes(BaseProcessor):
             metrics["eye_npz"] = eye_npz
             metrics.update(self._eye_metrics(session_dir / eye_npz))
 
+            # Render a PNG of the eye for the wiki / quick inspection
+            eye_png = output_dir / f"{Path(eye_npz).stem}.png"
+            self._render_eye_png(session_dir / eye_npz, channel, rate_gbps, eye_png)
+            metrics["eye_png"] = eye_png.name
+
             margin_csv = str(mrow["margin_csv"]).strip()
             metrics["margin_csv"] = margin_csv
             metrics.update(self._margin_metrics(session_dir / margin_csv))
@@ -92,6 +101,31 @@ class ProcessSerdes(BaseProcessor):
             eye_opening_physical(metrics, data["voltage_range_mv"], data["time_range_ps"])
         )
         return metrics
+
+    def _render_eye_png(
+        self, npz_path: Path, channel: str, rate_gbps: int, output_path: Path
+    ) -> None:
+        """Render the eye-diagram histogram as a PNG (log color scale)."""
+        data = np.load(npz_path)
+        counts = data["error_counts"].astype(float)
+        v_range = data["voltage_range_mv"]
+        t_range = data["time_range_ps"]
+
+        fig, ax = plt.subplots(figsize=(4.5, 3.5))
+        im = ax.imshow(
+            np.log1p(counts),
+            origin="lower",
+            aspect="auto",
+            extent=(t_range[0], t_range[1], v_range[0], v_range[1]),
+            cmap="inferno",
+        )
+        ax.set_xlabel("Time (ps)")
+        ax.set_ylabel("Voltage (mV)")
+        ax.set_title(f"Eye: {channel} @ {rate_gbps} Gbps")
+        fig.colorbar(im, ax=ax, label="log(1 + errors)")
+        fig.tight_layout()
+        fig.savefig(output_path, dpi=150)
+        plt.close(fig)
 
     def _margin_metrics(self, csv_path: Path) -> dict:
         """Link-margin metrics for one combo's TX-amplitude sweep."""

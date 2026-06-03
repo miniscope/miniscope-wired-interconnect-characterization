@@ -1,0 +1,13 @@
+{
+  "pages": [
+    {
+      "title": "Cable_Characterization",
+      "file": "pages/Cable_Characterization.wiki"
+    },
+    {
+      "title": "Cable_Characterization/coax_spi_sci_40awg",
+      "file": "pages/Cable_Characterization__coax_spi_sci_40awg.wiki"
+    }
+  ],
+  "images": []
+}
