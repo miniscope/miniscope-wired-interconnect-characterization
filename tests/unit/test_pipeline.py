@@ -4,8 +4,14 @@ from pathlib import Path
 
 import pytest
 
-from src.pipeline import PipelineResult, _resolve_class, process_experiment
+from src.pipeline import (
+    PipelineResult,
+    _resolve_class,
+    discover_sessions,
+    process_session,
+)
 from src.processing.resistance import NormalizeResistance
+from tests.conftest import build_test_repo
 
 
 class TestResolveClass:
@@ -22,65 +28,68 @@ class TestResolveClass:
             _resolve_class("src.processing.resistance.NonexistentClass")
 
 
-class TestProcessExperiment:
-    def test_valid_experiment(self, tmp_path: Path, resistance_fixtures_dir: Path):
-        """Set up a minimal repo structure and process a fixture experiment."""
-        repo_root = tmp_path / "repo"
-        repo_root.mkdir()
+class TestDiscoverSessions:
+    def test_discovers_all(self, test_repo: Path):
+        sessions = discover_sessions(test_repo / "measurements")
+        assert len(sessions) == 4  # 2 resistance + 2 vna
 
-        (repo_root / "experiment_types").symlink_to(
-            Path("experiment_types").resolve(), target_is_directory=True
+    def test_filter_by_type(self, test_repo: Path):
+        sessions = discover_sessions(test_repo / "measurements", "resistance")
+        assert len(sessions) == 2
+        assert all(s.parent.name == "resistance" for s in sessions)
+
+    def test_missing_dir(self, tmp_path: Path):
+        assert discover_sessions(tmp_path / "nope") == []
+
+
+class TestProcessSession:
+    def test_valid_session(self, test_repo: Path):
+        session_dir = (
+            test_repo / "measurements" / "test_cable" / "500mm" / "resistance" / "20250115_01"
         )
-
-        models_dir = repo_root / "models" / "cable_models"
-        models_dir.mkdir(parents=True)
-        fixture_cable = (
-            resistance_fixtures_dir.parent.parent
-            / "models"
-            / "cable_models"
-            / "test_cable_for_resistance.yaml"
-        )
-        (models_dir / "test_cable_for_resistance.yaml").write_bytes(fixture_cable.read_bytes())
-
-        exp_dir = repo_root / "experiments" / "test_resistance_valid"
-        exp_dir.mkdir(parents=True)
-        src_exp = resistance_fixtures_dir / "valid_experiment"
-        (exp_dir / "experiment.yaml").write_bytes((src_exp / "experiment.yaml").read_bytes())
-        (exp_dir / "measurements.csv").write_bytes((src_exp / "measurements.csv").read_bytes())
-
-        result = process_experiment(exp_dir, repo_root)
+        result = process_session(session_dir, test_repo)
 
         assert isinstance(result, PipelineResult)
-        assert result.validation.is_valid
+        assert result.validation.is_valid, result.validation.errors
         assert result.error is None
         assert "normalized_resistance_csv" in result.outputs
         assert "resistance_summary_json" in result.outputs
 
-    def test_invalid_experiment_no_yaml(self, tmp_path: Path):
-        repo_root = tmp_path / "repo"
-        exp_dir = repo_root / "experiments" / "bad_exp"
-        exp_dir.mkdir(parents=True)
-        (repo_root / "experiment_types").mkdir()
+    def test_outputs_in_derived_sessions_tree(self, test_repo: Path):
+        session_dir = (
+            test_repo / "measurements" / "test_cable" / "500mm" / "resistance" / "20250115_01"
+        )
+        result = process_session(session_dir, test_repo)
 
-        result = process_experiment(exp_dir, repo_root)
+        expected_dir = (
+            test_repo
+            / "derived"
+            / "sessions"
+            / "test_cable"
+            / "500mm"
+            / "resistance"
+            / "20250115_01"
+        )
+        assert result.outputs["resistance_summary_json"].parent == expected_dir
+
+    def test_session_without_yaml(self, test_repo: Path):
+        session_dir = (
+            test_repo / "measurements" / "test_cable" / "500mm" / "resistance" / "20250199_01"
+        )
+        session_dir.mkdir(parents=True)
+        result = process_session(session_dir, test_repo)
         assert not result.validation.is_valid
 
-    def test_invalid_csv_stops_processing(self, tmp_path: Path, resistance_fixtures_dir: Path):
-        """An experiment with bad CSV should fail validation and not produce outputs."""
-        repo_root = tmp_path / "repo"
-        repo_root.mkdir()
-
-        (repo_root / "experiment_types").symlink_to(
-            Path("experiment_types").resolve(), target_is_directory=True
-        )
-        (repo_root / "models").mkdir()
-
-        exp_dir = repo_root / "experiments" / "test_resistance_bad_columns"
-        exp_dir.mkdir(parents=True)
-        src_exp = resistance_fixtures_dir / "bad_csv_columns"
-        (exp_dir / "experiment.yaml").write_bytes((src_exp / "experiment.yaml").read_bytes())
-        (exp_dir / "measurements.csv").write_bytes((src_exp / "measurements.csv").read_bytes())
-
-        result = process_experiment(exp_dir, repo_root)
+    def test_invalid_csv_stops_processing(self, tmp_path: Path):
+        repo = build_test_repo(tmp_path, bad_measurements=True)
+        session_dir = repo / "measurements" / "test_cable" / "500mm" / "resistance" / "20250117_01"
+        result = process_session(session_dir, repo)
         assert not result.validation.is_valid
         assert result.outputs == {}
+
+    def test_path_mismatch_fails_validation(self, tmp_path: Path):
+        repo = build_test_repo(tmp_path, bad_measurements=True)
+        session_dir = repo / "measurements" / "test_cable" / "500mm" / "resistance" / "20250120_01"
+        result = process_session(session_dir, repo)
+        assert not result.validation.is_valid
+        assert any("mismatch" in e for e in result.validation.errors)

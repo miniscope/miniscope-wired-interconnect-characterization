@@ -1,0 +1,19 @@
+# Miniscope hardware model with power requirements.
+# Power fields feed the supply-voltage analysis:
+#   V_required = min_operating_voltage_v + I * R_roundtrip(cable, length)
+# NOTE: the power values below are PLACEHOLDERS -- replace with measured
+# specs before publishing supply-voltage guidance.
+schema_version: "1.0"
+model_id: miniscope_v4
+manufacturer: "Aharoni Lab / Open Ephys"
+part_number: ""
+description: "Miniscope V4 head-mounted microscope (placeholder power values)"
+tags:
+  - miniscope_v4
+miniscope_version: "4.4"
+sensor_type: "CMOS"
+led_type: "excitation LED"
+weight_g: 2.6
+min_operating_voltage_v: 3.3
+baseline_current_ma: 150.0
+max_current_ma: 300.0

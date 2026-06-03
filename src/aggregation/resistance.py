@@ -10,27 +10,15 @@ import pandas as pd
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-from src.aggregation.base import BaseAggregator
-from src.core.loading import load_experiment
-from src.core.schemas import ExperimentDefinition
+from src.aggregation.base import BaseAggregator, SessionContext
+from src.core.schemas import MeasurementDefinition
 
 logger = logging.getLogger(__name__)
 
 
-def _get_experiment_id(exp_dir: Path) -> str | None:
-    """Read experiment_id from experiment.yaml, or fall back to dir name."""
-    yaml_path = exp_dir / "experiment.yaml"
-    if yaml_path.exists():
-        try:
-            return load_experiment(yaml_path).experiment_id
-        except Exception:
-            pass
-    return exp_dir.name
-
-
 class ResistanceSummary(BaseAggregator):
     """
-    Aggregates processed resistance data across experiments.
+    Aggregates processed resistance data across sessions.
     Produces a summary table CSV and a boxplot PNG.
     """
 
@@ -43,13 +31,13 @@ class ResistanceSummary(BaseAggregator):
 
     def aggregate(
         self,
-        experiment_dirs: list[Path],
-        definition: ExperimentDefinition,
+        sessions: list[SessionContext],
+        definition: MeasurementDefinition,
         output_dir: Path,
     ) -> dict[str, Path]:
         output_dir.mkdir(parents=True, exist_ok=True)
 
-        summaries = self._load_experiment_summaries(experiment_dirs)
+        summaries = self._load_session_summaries(sessions)
         outputs: dict[str, Path] = {}
 
         if summaries:
@@ -59,26 +47,19 @@ class ResistanceSummary(BaseAggregator):
             outputs["resistance_summary_table"] = table_path
 
             boxplot_path = output_dir / "resistance_boxplot.png"
-            self._generate_boxplot(experiment_dirs, boxplot_path)
+            self._generate_boxplot(sessions, boxplot_path)
             outputs["resistance_boxplot"] = boxplot_path
 
         return outputs
 
-    def _normalized_dir(self, exp_dir: Path, exp_id: str) -> Path:
-        """Resolve the normalized output directory for an experiment."""
-        if self._derived_dir is not None:
-            return self._derived_dir / "normalized" / exp_id
-        return exp_dir.parent.parent / "derived" / "normalized" / exp_id
-
-    def _load_experiment_summaries(self, experiment_dirs: list[Path]) -> list[dict]:
-        """Load resistance_summary.json from each experiment's normalized output."""
+    def _load_session_summaries(self, sessions: list[SessionContext]) -> list[dict]:
+        """Load resistance_summary.json from each session's derived output."""
         summaries: list[dict] = []
-        for exp_dir in experiment_dirs:
-            exp_id = _get_experiment_id(exp_dir)
-            summary_path = self._normalized_dir(exp_dir, exp_id) / "resistance_summary.json"
+        for ctx in sessions:
+            summary_path = ctx.derived_dir / "resistance_summary.json"
 
             if not summary_path.exists():
-                logger.warning("No processed summary for %s, skipping", exp_id)
+                logger.warning("No processed summary for %s, skipping", ctx.label)
                 continue
 
             with open(summary_path) as f:
@@ -87,22 +68,24 @@ class ResistanceSummary(BaseAggregator):
         return summaries
 
     def _build_summary_table(self, summaries: list[dict]) -> pd.DataFrame:
-        """Build a DataFrame with one row per experiment."""
+        """Build a DataFrame with one row per session."""
         columns = [
-            "experiment_id",
-            "cable_model",
+            "profile_id",
+            "cable_length_mm",
+            "session_id",
+            "date",
+            "operator",
             "measurement_method",
             "measurement_instrument",
             "temperature_c",
-            "cable_length_mm",
             "num_measurements",
             "mean_resistance_ohm",
             "std_resistance_ohm",
             "min_resistance_ohm",
             "max_resistance_ohm",
             "median_resistance_ohm",
-            "mean_resistance_per_m",
-            "std_resistance_per_m",
+            "mean_roundtrip_resistance_ohm_per_m",
+            "std_roundtrip_resistance_ohm_per_m",
         ]
         rows: list[dict] = []
         for s in summaries:
@@ -111,14 +94,13 @@ class ResistanceSummary(BaseAggregator):
 
         return pd.DataFrame(rows, columns=columns)
 
-    def _generate_boxplot(self, experiment_dirs: list[Path], output_path: Path) -> None:
-        """Generate a boxplot of resistance_ohm distributions across experiments."""
+    def _generate_boxplot(self, sessions: list[SessionContext], output_path: Path) -> None:
+        """Generate a boxplot of resistance_ohm distributions across sessions."""
         data: list[list[float]] = []
         labels: list[str] = []
 
-        for exp_dir in experiment_dirs:
-            exp_id = _get_experiment_id(exp_dir)
-            csv_path = self._normalized_dir(exp_dir, exp_id) / "normalized_resistance.csv"
+        for ctx in sessions:
+            csv_path = ctx.derived_dir / "normalized_resistance.csv"
 
             if not csv_path.exists():
                 continue
@@ -128,15 +110,15 @@ class ResistanceSummary(BaseAggregator):
                 values = df["resistance_ohm"].dropna().tolist()
                 if values:
                     data.append(values)
-                    labels.append(exp_id)
+                    labels.append(ctx.label)
 
         if not data:
             return
 
         fig, ax = plt.subplots(figsize=(max(6, len(data) * 1.5), 5))
         ax.boxplot(data, tick_labels=labels)
-        ax.set_ylabel("Resistance (ohm)")
-        ax.set_title("Resistance Distribution by Experiment")
+        ax.set_ylabel("Round-trip resistance (ohm)")
+        ax.set_title("Resistance Distribution by Session")
         if len(labels) > 3:
             plt.xticks(rotation=45, ha="right")
         fig.tight_layout()

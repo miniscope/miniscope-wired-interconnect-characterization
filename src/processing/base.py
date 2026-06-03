@@ -3,34 +3,34 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from pathlib import Path
 
-from src.core.experiment_schemas import ExperimentRecord
-from src.core.schemas import ExperimentDefinition
+from src.core.schemas import MeasurementDefinition
+from src.core.session_schemas import SessionRecord
 
 
 class BaseProcessor(ABC):
     """
-    Abstract base class for experiment data processors.
+    Abstract base class for session data processors.
 
     Each processor corresponds to a `processing_steps` entry in a
-    definition.yaml. It takes an experiment directory and produces
+    definition.yaml. It takes a session directory and produces
     derived output files.
     """
 
     @abstractmethod
     def process(
         self,
-        experiment_dir: Path,
-        experiment: ExperimentRecord,
-        definition: ExperimentDefinition,
+        session_dir: Path,
+        session: SessionRecord,
+        definition: MeasurementDefinition,
         output_dir: Path,
     ) -> dict[str, Path]:
         """
-        Process one experiment.
+        Process one session.
 
         Args:
-            experiment_dir: Path to the experiment folder (contains experiment.yaml + data)
-            experiment: The validated ExperimentRecord
-            definition: The experiment type definition
+            session_dir: Path to the session folder (contains session.yaml + data)
+            session: The validated SessionRecord
+            definition: The measurement type definition
             output_dir: Where to write derived outputs
 
         Returns:

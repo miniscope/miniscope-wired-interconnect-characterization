@@ -20,7 +20,7 @@ class FieldType(str, Enum):
 
 
 class FieldSpec(BaseModel):
-    """Specification for a single field in an experiment type."""
+    """Specification for a single field in a measurement type."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -40,7 +40,7 @@ class FieldSpec(BaseModel):
 
 
 class FileSpec(BaseModel):
-    """Specification for a required/optional data file in an experiment."""
+    """Specification for a required/optional data file in a measurement session."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -52,7 +52,7 @@ class FileSpec(BaseModel):
 
 
 class ProcessingStep(BaseModel):
-    """Defines a processing step that applies to this experiment type."""
+    """Defines a processing step that applies to this measurement type."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -64,7 +64,7 @@ class ProcessingStep(BaseModel):
 
 
 class AggregationSpec(BaseModel):
-    """Defines how experiments of this type aggregate across the dataset."""
+    """Defines how sessions of this measurement type aggregate across the dataset."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -74,10 +74,10 @@ class AggregationSpec(BaseModel):
     outputs: list[str] = Field(default_factory=list)
 
 
-class ExperimentDefinition(BaseModel):
+class MeasurementDefinition(BaseModel):
     """
-    Top-level model for an experiment type definition.yaml.
-    Lives at experiment_types/<type_name>/v<N>/definition.yaml
+    Top-level model for a measurement type definition.yaml.
+    Lives at measurement_types/<type_name>/v<N>/definition.yaml
     """
 
     model_config = ConfigDict(extra="forbid")

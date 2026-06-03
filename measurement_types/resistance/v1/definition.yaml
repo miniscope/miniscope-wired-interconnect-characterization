@@ -1,0 +1,57 @@
+name: resistance
+version: 1
+description: >
+  Round-trip DC loop resistance measurement of a coaxial cable.
+  One end of the cable is shorted (center conductor to shield) and the
+  loop resistance is measured at the other end with an LCR meter, so the
+  measured value is the combined center-conductor + shield-return
+  resistance. The cable profile and length come from the session's
+  location in the measurements/ tree. The analysis pipeline derives
+  round-trip resistivity (ohm/m) across sessions and lengths.
+
+fields:
+  - name: measurement_instrument
+    field_type: string
+    required: true
+    description: Instrument used for the measurement (e.g. "BK Precision 891 LCR meter")
+
+  - name: measurement_method
+    field_type: enum
+    required: true
+    enum_values: ["lcr_shorted_loop", "multimeter_shorted_loop", "four_wire", "other"]
+    description: How the round-trip loop resistance was measured
+
+  - name: temperature_c
+    field_type: float
+    required: false
+    default: 25.0
+    description: Ambient temperature during measurement in Celsius
+
+  - name: connector_model
+    field_type: model_ref
+    model_ref_type: connector_models
+    required: false
+    description: Reference to the connector model on the cable assembly, if relevant
+
+files:
+  - name: resistance_csv
+    filename_pattern: "resistance.csv"
+    file_format: csv
+    required: true
+    description: >
+      CSV with columns: resistance_ohm (required), [notes].
+      resistance_ohm is the round-trip loop resistance in ohms.
+      Multiple rows = repeated measurements within this session.
+      Cable length is NOT a column; it comes from the session folder.
+
+processing_steps:
+  - name: normalize_resistance
+    processor: src.processing.resistance.NormalizeResistance
+    description: Normalize raw CSV, compute round-trip resistance per meter
+    outputs: ["normalized_resistance_csv", "resistance_summary_json"]
+
+aggregation:
+  - name: resistance_summary
+    aggregator: src.aggregation.resistance.ResistanceSummary
+    description: Aggregate resistance measurements across sessions
+    outputs: ["resistance_summary_table", "resistance_boxplot"]

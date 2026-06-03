@@ -7,7 +7,7 @@ import yaml
 from pydantic import ValidationError
 
 from src.core.loading import load_model
-from src.core.model_schemas import CableModel, ConnectorModel
+from src.core.model_schemas import CableModel, ConnectorModel, MiniscopeModel
 
 
 class TestCableModel:
@@ -58,6 +58,32 @@ class TestConnectorModel:
                 schema_version="1.0",
                 model_id="bad",
                 pin_count=0,
+            )
+
+
+class TestMiniscopeModel:
+    def test_power_fields(self):
+        scope = MiniscopeModel(
+            schema_version="1.0",
+            model_id="test_scope",
+            min_operating_voltage_v=3.3,
+            baseline_current_ma=150.0,
+            max_current_ma=300.0,
+        )
+        assert scope.min_operating_voltage_v == 3.3
+        assert scope.baseline_current_ma == 150.0
+        assert scope.max_current_ma == 300.0
+
+    def test_power_fields_optional(self):
+        scope = MiniscopeModel(schema_version="1.0", model_id="test_scope")
+        assert scope.min_operating_voltage_v is None
+
+    def test_power_fields_must_be_positive(self):
+        with pytest.raises(ValidationError):
+            MiniscopeModel(
+                schema_version="1.0",
+                model_id="bad",
+                min_operating_voltage_v=-1.0,
             )
 
 

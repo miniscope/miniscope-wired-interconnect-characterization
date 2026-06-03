@@ -1,0 +1,14 @@
+schema_version: "1.0"
+session_id: "20250115_01"
+profile_id: test_cable
+cable_length_mm: 500
+measurement_type: resistance
+measurement_type_version: 1
+date: 2025-01-15
+operator: Test Operator
+notes: "fixture resistance session"
+type_fields:
+  measurement_instrument: "Test LCR Meter"
+  measurement_method: lcr_shorted_loop
+  temperature_c: 23.5
+  connector_model: test_connector

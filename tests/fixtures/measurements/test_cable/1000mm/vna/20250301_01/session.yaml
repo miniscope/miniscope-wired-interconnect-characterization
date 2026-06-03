@@ -1,0 +1,13 @@
+schema_version: "1.0"
+session_id: "20250301_01"
+profile_id: test_cable
+cable_length_mm: 1000
+measurement_type: vna
+measurement_type_version: 1
+date: 2025-03-01
+operator: Test Operator
+notes: "fixture VNA session"
+type_fields:
+  vna_instrument: "Test VNA"
+  calibration_type: SOLT
+  port_impedance_ohm: 50.0

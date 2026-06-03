@@ -6,10 +6,10 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from src.core.experiment_schemas import ExperimentRecord
-from src.core.schemas import ExperimentDefinition
+from src.core.schemas import MeasurementDefinition
+from src.core.session_schemas import SessionRecord
 from src.processing.base import BaseProcessor
-from src.processing.touchstone import parse_s2p
+from src.processing.touchstone import TouchstoneData, parse_s2p
 
 
 def _interpolate_at_freq(
@@ -21,10 +21,23 @@ def _interpolate_at_freq(
     return float(np.interp(target_hz, frequencies_hz, values_db))
 
 
+def estimate_characteristic_impedance(ts: TouchstoneData) -> float | None:
+    """
+    Estimate the cable's characteristic impedance from S-parameters.
+
+    TODO (deferred decision): choose the extraction method (e.g. TDR-style
+    transform of S11 vs analytic fit against the reference impedance).
+    Until then this returns None and downstream consumers must handle it.
+    """
+    return None
+
+
 class ProcessVNA(BaseProcessor):
     """
-    Parses Touchstone .s2p files, extracts S-parameters, computes insertion loss
+    Parses Touchstone .s2p files, extracts S-parameters, computes attenuation
     metrics, and writes metrics CSV + traces CSV + summary JSON.
+
+    Cable length is structural: it comes from the session, not the manifest.
     """
 
     METRIC_FREQUENCIES_HZ = [1e6, 10e6, 100e6, 1e9]
@@ -39,23 +52,23 @@ class ProcessVNA(BaseProcessor):
 
     def process(
         self,
-        experiment_dir: Path,
-        experiment: ExperimentRecord,
-        definition: ExperimentDefinition,
+        session_dir: Path,
+        session: SessionRecord,
+        definition: MeasurementDefinition,
         output_dir: Path,
     ) -> dict[str, Path]:
         output_dir.mkdir(parents=True, exist_ok=True)
 
-        manifest = pd.read_csv(experiment_dir / "manifest.csv")
+        manifest = pd.read_csv(session_dir / "manifest.csv")
         manifest.columns = manifest.columns.str.strip()
 
+        cable_length_mm = session.cable_length_mm
         metric_rows: list[dict] = []
         trace_rows: list[dict] = []
 
         for _, mrow in manifest.iterrows():
             filename = str(mrow["filename"]).strip()
-            s2p_path = experiment_dir / "raw" / filename
-            cable_length_mm = float(mrow["cable_length_mm"])
+            s2p_path = session_dir / "raw" / filename
             description = str(mrow.get("description", "")) if "description" in mrow.index else ""
 
             ts = parse_s2p(s2p_path)
@@ -67,13 +80,12 @@ class ProcessVNA(BaseProcessor):
                         "frequency_hz": float(freq),
                         "s21_db": round(float(s21), 4),
                         "s11_db": round(float(s11), 4),
-                        "cable_length_mm": cable_length_mm,
+                        "attenuation_db": round(-float(s21), 4),
                     }
                 )
 
             metrics = self._compute_file_metrics(ts, cable_length_mm)
             metrics["filename"] = filename
-            metrics["cable_length_mm"] = cable_length_mm
             metrics["description"] = description
             metrics["num_points"] = ts.num_points
             metrics["frequency_start_hz"] = ts.frequency_start_hz
@@ -88,7 +100,7 @@ class ProcessVNA(BaseProcessor):
         traces_path = output_dir / "vna_traces.csv"
         traces_df.to_csv(traces_path, index=False)
 
-        summary = self._compute_summary(metrics_df, experiment)
+        summary = self._compute_summary(metrics_df, session)
         summary_path = output_dir / "vna_summary.json"
         with open(summary_path, "w") as f:
             json.dump(summary, f, indent=2)
@@ -99,12 +111,17 @@ class ProcessVNA(BaseProcessor):
             "vna_summary_json": summary_path,
         }
 
-    def _compute_file_metrics(self, ts, cable_length_mm: float) -> dict:
+    def _compute_file_metrics(self, ts: TouchstoneData, cable_length_mm: float) -> dict:
         """Compute scalar metrics for one .s2p file."""
         metrics: dict = {}
 
         metrics["max_insertion_loss_db"] = round(float(np.min(ts.s21_db)), 4)
         metrics["min_return_loss_db"] = round(float(np.max(ts.s11_db)), 4)
+
+        impedance = estimate_characteristic_impedance(ts)
+        metrics["characteristic_impedance_ohm"] = (
+            round(impedance, 2) if impedance is not None else None
+        )
 
         cable_length_m = cable_length_mm / 1000.0
 
@@ -119,9 +136,14 @@ class ProcessVNA(BaseProcessor):
 
         return metrics
 
-    def _compute_summary(self, df: pd.DataFrame, experiment: ExperimentRecord) -> dict:
+    def _compute_summary(self, df: pd.DataFrame, session: SessionRecord) -> dict:
         summary: dict = {
-            "experiment_id": experiment.experiment_id,
+            "session_id": session.session_id,
+            "profile_id": session.profile_id,
+            "cable_length_mm": session.cable_length_mm,
+            "measurement_type": session.measurement_type,
+            "date": str(session.date),
+            "operator": session.operator,
             "num_files": len(df),
         }
 
@@ -131,12 +153,8 @@ class ProcessVNA(BaseProcessor):
                 summary[f"mean_{col}"] = round(float(series.mean()), 4)
                 summary[f"worst_{col}"] = round(float(series.min()), 4)
 
-        if "cable_length_mm" in df.columns and not df["cable_length_mm"].isna().all():
-            lengths = df["cable_length_mm"].dropna().unique()
-            summary["cable_length_mm_values"] = sorted(float(v) for v in lengths)
-
-        type_fields = experiment.type_fields
-        for key in ["cable_model", "vna_instrument", "calibration_type", "port_impedance_ohm"]:
+        type_fields = session.type_fields
+        for key in ["vna_instrument", "calibration_type", "port_impedance_ohm"]:
             if key in type_fields:
                 summary[key] = type_fields[key]
 

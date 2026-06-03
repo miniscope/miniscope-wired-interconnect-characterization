@@ -11,8 +11,8 @@ from typing import Any
 
 import yaml
 
-from src.core.experiment_schemas import ExperimentRecord
-from src.core.schemas import ExperimentDefinition, FieldType
+from src.core.schemas import FieldType, MeasurementDefinition
+from src.core.session_schemas import SessionRecord, length_dir_name
 from src.wiki.base import BaseWikiClient
 
 logger = logging.getLogger(__name__)
@@ -59,9 +59,9 @@ class UnresolvedModel:
 
 @dataclass
 class ResolutionManifest:
-    """Records how all model references in an experiment were resolved."""
+    """Records how all model references in a session were resolved."""
 
-    experiment_id: str
+    session_ref: str
     resolved_at: str = ""
     models: dict[str, ResolvedModel | UnresolvedModel] = field(default_factory=dict)
 
@@ -71,7 +71,7 @@ class ResolutionManifest:
 
     def to_dict(self) -> dict:
         return {
-            "experiment_id": self.experiment_id,
+            "session_ref": self.session_ref,
             "resolved_at": self.resolved_at,
             "models": {name: model.to_dict() for name, model in self.models.items()},
         }
@@ -83,6 +83,18 @@ class ResolutionManifest:
         path.parent.mkdir(parents=True, exist_ok=True)
         with open(path, "w") as f:
             f.write(self.to_json())
+
+
+def session_ref(session: SessionRecord) -> str:
+    """Globally-unique session reference: profile/length/type/session_id."""
+    return "/".join(
+        [
+            session.profile_id,
+            length_dir_name(session.cable_length_mm),
+            session.measurement_type,
+            session.session_id,
+        ]
+    )
 
 
 class ModelResolver:
@@ -150,13 +162,13 @@ class ModelResolver:
             reason="not found in wiki or repo",
         )
 
-    def resolve_experiment(
+    def resolve_session(
         self,
-        experiment: ExperimentRecord,
-        definition: ExperimentDefinition,
+        session: SessionRecord,
+        definition: MeasurementDefinition,
     ) -> ResolutionManifest:
-        """Resolve all model_ref fields in an experiment."""
-        manifest = ResolutionManifest(experiment_id=experiment.experiment_id)
+        """Resolve all model_ref fields in a session."""
+        manifest = ResolutionManifest(session_ref=session_ref(session))
 
         for field_spec in definition.fields:
             if field_spec.field_type != FieldType.MODEL_REF:
@@ -164,7 +176,7 @@ class ModelResolver:
             if field_spec.model_ref_type is None:
                 continue
 
-            model_id = experiment.type_fields.get(field_spec.name)
+            model_id = session.type_fields.get(field_spec.name)
             if model_id is None:
                 if field_spec.required:
                     manifest.models[field_spec.name] = UnresolvedModel(

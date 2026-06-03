@@ -9,80 +9,142 @@ from pathlib import Path
 
 
 def cmd_validate(args: argparse.Namespace) -> int:
-    """Validate a single experiment."""
-    from src.core.experiment_validator import validate_experiment
-    from src.core.loading import load_experiment
-    from src.experiment_types.registry import ExperimentTypeRegistry
+    """Validate a single session."""
+    from src.core.loading import load_session
+    from src.core.session_validator import validate_session
+    from src.measurement_types.registry import MeasurementTypeRegistry
 
-    exp_dir = Path(args.experiment_dir)
+    session_dir = Path(args.session_dir)
     repo_root = Path(args.repo_root)
 
-    experiment = load_experiment(exp_dir / "experiment.yaml")
-    registry = ExperimentTypeRegistry(repo_root / "experiment_types")
-    definition = registry.get(experiment.experiment_type, experiment.experiment_type_version)
+    session = load_session(session_dir / "session.yaml")
+    registry = MeasurementTypeRegistry(repo_root / "measurement_types")
+    definition = registry.get(session.measurement_type, session.measurement_type_version)
 
-    result = validate_experiment(exp_dir, experiment, definition, models_dir=repo_root / "models")
+    result = validate_session(
+        session_dir,
+        session,
+        definition,
+        models_dir=repo_root / "models",
+        profiles_dir=repo_root / "profiles",
+    )
 
+    ref = "/".join(session_dir.resolve().parts[-4:])
     if result.warnings:
         for w in result.warnings:
             print(f"  WARNING: {w}")
     if result.errors:
         for e in result.errors:
             print(f"  ERROR: {e}")
-        print(f"FAILED: {experiment.experiment_id}")
+        print(f"FAILED: {ref}")
         return 1
 
-    print(f"VALID: {experiment.experiment_id}")
+    print(f"VALID: {ref}")
     return 0
 
 
-def cmd_process(args: argparse.Namespace) -> int:
-    """Process a single experiment."""
-    from src.pipeline import process_experiment
+def cmd_validate_all(args: argparse.Namespace) -> int:
+    """Validate every profile and session in the repository."""
+    from src.core.loading import load_profile, load_session
+    from src.core.session_validator import validate_session
+    from src.measurement_types.registry import MeasurementTypeRegistry
+    from src.pipeline import discover_sessions
 
-    exp_dir = Path(args.experiment_dir)
+    repo_root = Path(args.repo_root)
+    failures = 0
+
+    # Profiles
+    profiles_dir = repo_root / "profiles"
+    n_profiles = 0
+    if profiles_dir.exists():
+        for profile_path in sorted(profiles_dir.glob("*.yaml")):
+            n_profiles += 1
+            try:
+                load_profile(profile_path)
+                print(f"  [OK]   profile {profile_path.stem}")
+            except Exception as e:
+                print(f"  [FAIL] profile {profile_path.stem}: {e}")
+                failures += 1
+
+    # Sessions
+    registry = MeasurementTypeRegistry(repo_root / "measurement_types")
+    sessions = discover_sessions(repo_root / "measurements")
+    for session_dir in sessions:
+        ref = "/".join(session_dir.resolve().parts[-4:])
+        try:
+            session = load_session(session_dir / "session.yaml")
+            definition = registry.get(session.measurement_type, session.measurement_type_version)
+        except Exception as e:
+            print(f"  [FAIL] {ref}: {e}")
+            failures += 1
+            continue
+
+        result = validate_session(
+            session_dir,
+            session,
+            definition,
+            models_dir=repo_root / "models",
+            profiles_dir=repo_root / "profiles",
+        )
+        if result.is_valid:
+            print(f"  [OK]   {ref}")
+        else:
+            for e in result.errors:
+                print(f"         ERROR: {e}")
+            print(f"  [FAIL] {ref}")
+            failures += 1
+
+    print(f"\nValidated {n_profiles} profiles and {len(sessions)} sessions, {failures} failures")
+    return 1 if failures else 0
+
+
+def cmd_process(args: argparse.Namespace) -> int:
+    """Process a single session."""
+    from src.pipeline import process_session
+
+    session_dir = Path(args.session_dir)
     repo_root = Path(args.repo_root)
 
-    result = process_experiment(exp_dir, repo_root)
+    result = process_session(session_dir, repo_root)
 
     if not result.validation.is_valid:
         for e in result.validation.errors:
             print(f"  ERROR: {e}")
-        print(f"VALIDATION FAILED: {result.experiment_id}")
+        print(f"VALIDATION FAILED: {result.session_ref}")
         return 1
 
     if result.error:
         print(f"PROCESSING FAILED: {result.error}")
         return 1
 
-    print(f"PROCESSED: {result.experiment_id}")
+    print(f"PROCESSED: {result.session_ref}")
     for name, path in result.outputs.items():
         print(f"  {name}: {path}")
     return 0
 
 
 def cmd_process_all(args: argparse.Namespace) -> int:
-    """Process all experiments."""
+    """Process all sessions."""
     from src.pipeline import process_all
 
     repo_root = Path(args.repo_root)
-    results = process_all(repo_root / "experiments", repo_root, args.type)
+    results = process_all(repo_root / "measurements", repo_root, args.type)
 
     failures = 0
     for r in results:
         status = "OK" if r.validation.is_valid and not r.error else "FAIL"
-        print(f"  [{status}] {r.experiment_id}")
+        print(f"  [{status}] {r.session_ref}")
         if r.error:
             print(f"         {r.error}")
         if not r.validation.is_valid:
             failures += 1
 
-    print(f"\nProcessed {len(results)} experiments, {failures} failures")
+    print(f"\nProcessed {len(results)} sessions, {failures} failures")
     return 1 if failures else 0
 
 
 def cmd_aggregate(args: argparse.Namespace) -> int:
-    """Run aggregation for an experiment type."""
+    """Run aggregation for a measurement type."""
     from src.pipeline import aggregate_type
 
     repo_root = Path(args.repo_root)
@@ -102,8 +164,8 @@ def cmd_generate_payloads(args: argparse.Namespace) -> int:
     outputs = generate_wiki_payloads(repo_root)
 
     print(f"Generated {len(outputs)} wiki payloads:")
-    for model_id, path in outputs.items():
-        print(f"  {model_id}: {path}")
+    for profile_id, path in outputs.items():
+        print(f"  {profile_id}: {path}")
     return 0
 
 
@@ -117,7 +179,7 @@ def cmd_run_all(args: argparse.Namespace) -> int:
     processed = summary["processed"]
     failures = sum(1 for p in processed if p.get("error") or not p.get("valid"))
 
-    print(f"Processed {len(processed)} experiments ({failures} failures)")
+    print(f"Processed {len(processed)} sessions ({failures} failures)")
     print(f"Aggregated {len(summary['aggregated'])} types")
     print(f"Generated {len(summary['wiki_payloads'])} wiki payloads")
 
@@ -136,20 +198,23 @@ def app() -> None:
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
 
     # validate
-    p_validate = subparsers.add_parser("validate", help="Validate an experiment")
-    p_validate.add_argument("experiment_dir", help="Path to experiment directory")
+    p_validate = subparsers.add_parser("validate", help="Validate a session")
+    p_validate.add_argument("session_dir", help="Path to session directory")
+
+    # validate-all
+    subparsers.add_parser("validate-all", help="Validate every profile and session")
 
     # process
-    p_process = subparsers.add_parser("process", help="Process an experiment")
-    p_process.add_argument("experiment_dir", help="Path to experiment directory")
+    p_process = subparsers.add_parser("process", help="Process a session")
+    p_process.add_argument("session_dir", help="Path to session directory")
 
     # process-all
-    p_process_all = subparsers.add_parser("process-all", help="Process all experiments")
-    p_process_all.add_argument("--type", default=None, help="Filter by experiment type")
+    p_process_all = subparsers.add_parser("process-all", help="Process all sessions")
+    p_process_all.add_argument("--type", default=None, help="Filter by measurement type")
 
     # aggregate
-    p_aggregate = subparsers.add_parser("aggregate", help="Aggregate an experiment type")
-    p_aggregate.add_argument("type", help="Experiment type name")
+    p_aggregate = subparsers.add_parser("aggregate", help="Aggregate a measurement type")
+    p_aggregate.add_argument("type", help="Measurement type name")
 
     # generate-payloads
     subparsers.add_parser("generate-payloads", help="Generate wiki payloads")
@@ -166,6 +231,7 @@ def app() -> None:
 
     commands = {
         "validate": cmd_validate,
+        "validate-all": cmd_validate_all,
         "process": cmd_process,
         "process-all": cmd_process_all,
         "aggregate": cmd_aggregate,

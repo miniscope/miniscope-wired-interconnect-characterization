@@ -73,45 +73,30 @@ def generate_bad_s2p(output_path: Path) -> None:
 
 
 def main() -> None:
-    # --- Valid experiment fixture ---
-    valid_dir = FIXTURES_DIR / "experiments" / "vna" / "valid_experiment" / "raw"
+    vna_sessions = FIXTURES_DIR / "measurements" / "test_cable" / "1000mm" / "vna"
+    bad_vna_sessions = FIXTURES_DIR / "measurements_bad" / "test_cable" / "1000mm" / "vna"
+
+    # --- Valid session with two repeat sweeps ---
+    raw_dir = vna_sessions / "20250301_01" / "raw"
     generate_s2p(
-        valid_dir / "cable_500mm.s2p",
+        raw_dir / "sweep_01.s2p",
         base_insertion_loss_db=-1.5,
         freq_slope_db_per_ghz=-3.0,
     )
     generate_s2p(
-        valid_dir / "cable_1000mm.s2p",
-        base_insertion_loss_db=-3.0,
-        freq_slope_db_per_ghz=-5.0,
+        raw_dir / "sweep_02.s2p",
+        base_insertion_loss_db=-1.6,
+        freq_slope_db_per_ghz=-3.1,
     )
 
-    # --- Valid minimal ---
-    minimal_dir = FIXTURES_DIR / "experiments" / "vna" / "valid_minimal" / "raw"
+    # --- Minimal session with one sweep ---
     generate_s2p(
-        minimal_dir / "test_cable.s2p",
+        vna_sessions / "20250302_01" / "raw" / "sweep_01.s2p",
         num_points=21,
     )
 
     # --- Bad s2p format ---
-    bad_dir = FIXTURES_DIR / "experiments" / "vna" / "bad_s2p_format" / "raw"
-    generate_bad_s2p(bad_dir / "bad_file.s2p")
-
-    # --- Example experiment ---
-    example_dir = (
-        FIXTURES_DIR.parent.parent / "experiments" / "EXP_2025_03_01_vna_coax_40awg" / "raw"
-    )
-    for length, il_base, il_slope in [
-        (500, -1.0, -2.0),
-        (1000, -2.0, -4.0),
-        (1500, -3.0, -6.0),
-    ]:
-        generate_s2p(
-            example_dir / f"vna_{length}mm.s2p",
-            base_insertion_loss_db=il_base,
-            freq_slope_db_per_ghz=il_slope,
-            num_points=201,
-        )
+    generate_bad_s2p(bad_vna_sessions / "20250305_01" / "raw" / "bad_file.s2p")
 
     print("Generated all VNA fixtures successfully.")
 

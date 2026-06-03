@@ -10,26 +10,15 @@ import pandas as pd
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-from src.aggregation.base import BaseAggregator
-from src.core.loading import load_experiment
-from src.core.schemas import ExperimentDefinition
+from src.aggregation.base import BaseAggregator, SessionContext
+from src.core.schemas import MeasurementDefinition
 
 logger = logging.getLogger(__name__)
 
 
-def _get_experiment_id(exp_dir: Path) -> str | None:
-    yaml_path = exp_dir / "experiment.yaml"
-    if yaml_path.exists():
-        try:
-            return load_experiment(yaml_path).experiment_id
-        except Exception:
-            pass
-    return exp_dir.name
-
-
 class VNASummary(BaseAggregator):
     """
-    Aggregates processed VNA data across experiments.
+    Aggregates processed VNA data across sessions.
     Produces a comparison table CSV and an overlay plot PNG.
     """
 
@@ -42,13 +31,13 @@ class VNASummary(BaseAggregator):
 
     def aggregate(
         self,
-        experiment_dirs: list[Path],
-        definition: ExperimentDefinition,
+        sessions: list[SessionContext],
+        definition: MeasurementDefinition,
         output_dir: Path,
     ) -> dict[str, Path]:
         output_dir.mkdir(parents=True, exist_ok=True)
 
-        summaries = self._load_experiment_summaries(experiment_dirs)
+        summaries = self._load_session_summaries(sessions)
         outputs: dict[str, Path] = {}
 
         if summaries:
@@ -58,24 +47,18 @@ class VNASummary(BaseAggregator):
             outputs["vna_comparison_table"] = table_path
 
             plot_path = output_dir / "vna_comparison.png"
-            self._generate_overlay_plot(experiment_dirs, plot_path)
+            self._generate_overlay_plot(sessions, plot_path)
             outputs["vna_overlay_plot"] = plot_path
 
         return outputs
 
-    def _normalized_dir(self, exp_dir: Path, exp_id: str) -> Path:
-        if self._derived_dir is not None:
-            return self._derived_dir / "normalized" / exp_id
-        return exp_dir.parent.parent / "derived" / "normalized" / exp_id
-
-    def _load_experiment_summaries(self, experiment_dirs: list[Path]) -> list[dict]:
+    def _load_session_summaries(self, sessions: list[SessionContext]) -> list[dict]:
         summaries: list[dict] = []
-        for exp_dir in experiment_dirs:
-            exp_id = _get_experiment_id(exp_dir)
-            summary_path = self._normalized_dir(exp_dir, exp_id) / "vna_summary.json"
+        for ctx in sessions:
+            summary_path = ctx.derived_dir / "vna_summary.json"
 
             if not summary_path.exists():
-                logger.warning("No processed VNA summary for %s, skipping", exp_id)
+                logger.warning("No processed VNA summary for %s, skipping", ctx.label)
                 continue
 
             with open(summary_path) as f:
@@ -85,8 +68,11 @@ class VNASummary(BaseAggregator):
 
     def _build_comparison_table(self, summaries: list[dict]) -> pd.DataFrame:
         columns = [
-            "experiment_id",
-            "cable_model",
+            "profile_id",
+            "cable_length_mm",
+            "session_id",
+            "date",
+            "operator",
             "vna_instrument",
             "calibration_type",
             "num_files",
@@ -101,14 +87,13 @@ class VNASummary(BaseAggregator):
 
         return pd.DataFrame(rows, columns=columns)
 
-    def _generate_overlay_plot(self, experiment_dirs: list[Path], output_path: Path) -> None:
-        """Overlay plot of insertion loss (S21) vs frequency across experiments."""
+    def _generate_overlay_plot(self, sessions: list[SessionContext], output_path: Path) -> None:
+        """Overlay plot of insertion loss (S21) vs frequency across sessions."""
         fig, ax = plt.subplots(figsize=(10, 6))
         has_data = False
 
-        for exp_dir in experiment_dirs:
-            exp_id = _get_experiment_id(exp_dir)
-            traces_path = self._normalized_dir(exp_dir, exp_id) / "vna_traces.csv"
+        for ctx in sessions:
+            traces_path = ctx.derived_dir / "vna_traces.csv"
 
             if not traces_path.exists():
                 continue
@@ -119,7 +104,7 @@ class VNASummary(BaseAggregator):
 
             for filename, group in df.groupby("filename"):
                 group = group.sort_values("frequency_hz")
-                label = f"{exp_id}/{filename}"
+                label = f"{ctx.label}/{filename}"
                 ax.plot(
                     group["frequency_hz"] / 1e6,
                     group["s21_db"],

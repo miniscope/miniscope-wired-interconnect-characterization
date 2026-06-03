@@ -1,4 +1,4 @@
-"""Tests for ExperimentDefinition and related Pydantic models."""
+"""Tests for MeasurementDefinition and related Pydantic models."""
 
 from pathlib import Path
 
@@ -7,10 +7,10 @@ import yaml
 from pydantic import ValidationError
 
 from src.core.schemas import (
-    ExperimentDefinition,
     FieldSpec,
     FieldType,
     FileSpec,
+    MeasurementDefinition,
     ProcessingStep,
 )
 
@@ -94,11 +94,11 @@ class TestProcessingStep:
         assert step.depends_on == ["normalize"]
 
 
-class TestExperimentDefinition:
+class TestMeasurementDefinition:
     def test_load_valid_minimal(self, valid_definition_path: Path):
         with open(valid_definition_path) as f:
             raw = yaml.safe_load(f)
-        defn = ExperimentDefinition.model_validate(raw)
+        defn = MeasurementDefinition.model_validate(raw)
         assert defn.name == "test_type"
         assert defn.version == 1
         assert len(defn.fields) == 1
@@ -106,7 +106,7 @@ class TestExperimentDefinition:
     def test_load_valid_full(self, full_definition_path: Path):
         with open(full_definition_path) as f:
             raw = yaml.safe_load(f)
-        defn = ExperimentDefinition.model_validate(raw)
+        defn = MeasurementDefinition.model_validate(raw)
         assert defn.name == "full_test_type"
         assert len(defn.fields) == 3
         assert len(defn.files) == 1
@@ -118,18 +118,18 @@ class TestExperimentDefinition:
         with open(path) as f:
             raw = yaml.safe_load(f)
         with pytest.raises(ValidationError):
-            ExperimentDefinition.model_validate(raw)
+            MeasurementDefinition.model_validate(raw)
 
     def test_invalid_enum_no_values(self, fixtures_dir: Path):
         path = fixtures_dir / "definitions" / "invalid_enum_no_values.yaml"
         with open(path) as f:
             raw = yaml.safe_load(f)
         with pytest.raises(ValidationError):
-            ExperimentDefinition.model_validate(raw)
+            MeasurementDefinition.model_validate(raw)
 
     def test_extra_fields_forbidden(self):
         with pytest.raises(ValidationError):
-            ExperimentDefinition(
+            MeasurementDefinition(
                 name="test",
                 version=1,
                 description="test",

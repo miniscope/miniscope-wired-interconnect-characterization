@@ -1,0 +1,12 @@
+schema_version: "1.0"
+profile_id: test_cable
+name: "Test Coax Cable"
+manufacturer: "Test Manufacturer"
+part_number: "TC-001"
+characteristic_impedance_ohm: 50.0
+wire_gauge_awg: 40
+shield_type: braided
+cable_type: coaxial
+notes: "Fixture profile for tests"
+tags:
+  - test

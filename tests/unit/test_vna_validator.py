@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from src.core.experiment_validator import (
+from src.core.session_validator import (
     ValidationResult,
     validate_s2p_file,
     validate_vna_manifest_csv,
@@ -10,33 +10,53 @@ from src.core.experiment_validator import (
 
 
 class TestValidateVnaManifestCsv:
-    def test_valid_manifest(self, vna_fixtures_dir: Path):
-        csv_path = vna_fixtures_dir / "valid_experiment" / "manifest.csv"
-        exp_dir = vna_fixtures_dir / "valid_experiment"
+    def test_valid_manifest(self, vna_session_dir: Path):
         result = ValidationResult()
-        validate_vna_manifest_csv(csv_path, result, experiment_dir=exp_dir)
+        validate_vna_manifest_csv(
+            vna_session_dir / "manifest.csv", result, session_dir=vna_session_dir
+        )
         assert result.is_valid
 
-    def test_missing_columns(self, vna_fixtures_dir: Path):
-        csv_path = vna_fixtures_dir / "bad_manifest_columns" / "manifest.csv"
+    def test_missing_columns(self, bad_measurements_fixtures_dir: Path):
+        csv_path = (
+            bad_measurements_fixtures_dir
+            / "test_cable"
+            / "1000mm"
+            / "vna"
+            / "20250304_01"
+            / "manifest.csv"
+        )
         result = ValidationResult()
         validate_vna_manifest_csv(csv_path, result)
         assert not result.is_valid
         assert any("filename" in e for e in result.errors)
 
-    def test_missing_s2p_reference(self, vna_fixtures_dir: Path):
-        csv_path = vna_fixtures_dir / "missing_s2p" / "manifest.csv"
-        exp_dir = vna_fixtures_dir / "missing_s2p"
+    def test_length_column_rejected(self, bad_measurements_fixtures_dir: Path):
+        csv_path = (
+            bad_measurements_fixtures_dir
+            / "test_cable"
+            / "1000mm"
+            / "vna"
+            / "20250304_01"
+            / "manifest.csv"
+        )
         result = ValidationResult()
-        validate_vna_manifest_csv(csv_path, result, experiment_dir=exp_dir)
+        validate_vna_manifest_csv(csv_path, result)
+        assert any("cable_length_mm" in e for e in result.errors)
+
+    def test_missing_s2p_reference(self, bad_measurements_fixtures_dir: Path):
+        session_dir = (
+            bad_measurements_fixtures_dir / "test_cable" / "1000mm" / "vna" / "20250303_01"
+        )
+        result = ValidationResult()
+        validate_vna_manifest_csv(session_dir / "manifest.csv", result, session_dir=session_dir)
         assert not result.is_valid
         assert any("not found" in e for e in result.errors)
 
-    def test_valid_minimal(self, vna_fixtures_dir: Path):
-        csv_path = vna_fixtures_dir / "valid_minimal" / "manifest.csv"
-        exp_dir = vna_fixtures_dir / "valid_minimal"
+    def test_valid_minimal(self, measurements_fixtures_dir: Path):
+        session_dir = measurements_fixtures_dir / "test_cable" / "1000mm" / "vna" / "20250302_01"
         result = ValidationResult()
-        validate_vna_manifest_csv(csv_path, result, experiment_dir=exp_dir)
+        validate_vna_manifest_csv(session_dir / "manifest.csv", result, session_dir=session_dir)
         assert result.is_valid
 
     def test_nonexistent_csv(self, tmp_path: Path):
@@ -44,23 +64,23 @@ class TestValidateVnaManifestCsv:
         validate_vna_manifest_csv(tmp_path / "nope.csv", result)
         assert not result.is_valid
 
-    def test_negative_cable_length(self, tmp_path: Path):
-        csv_path = tmp_path / "manifest.csv"
-        csv_path.write_text("filename,cable_length_mm\ntest.s2p,-100\n")
-        result = ValidationResult()
-        validate_vna_manifest_csv(csv_path, result)
-        assert not result.is_valid
-
 
 class TestValidateS2pFile:
-    def test_valid_s2p(self, vna_fixtures_dir: Path):
-        s2p_path = vna_fixtures_dir / "valid_experiment" / "raw" / "cable_500mm.s2p"
+    def test_valid_s2p(self, vna_session_dir: Path):
         result = ValidationResult()
-        validate_s2p_file(s2p_path, result)
+        validate_s2p_file(vna_session_dir / "raw" / "sweep_01.s2p", result)
         assert result.is_valid
 
-    def test_bad_s2p_no_data(self, vna_fixtures_dir: Path):
-        s2p_path = vna_fixtures_dir / "bad_s2p_format" / "raw" / "bad_file.s2p"
+    def test_bad_s2p_no_data(self, bad_measurements_fixtures_dir: Path):
+        s2p_path = (
+            bad_measurements_fixtures_dir
+            / "test_cable"
+            / "1000mm"
+            / "vna"
+            / "20250305_01"
+            / "raw"
+            / "bad_file.s2p"
+        )
         result = ValidationResult()
         validate_s2p_file(s2p_path, result)
         assert not result.is_valid

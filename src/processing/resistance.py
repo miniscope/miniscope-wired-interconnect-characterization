@@ -5,15 +5,20 @@ from pathlib import Path
 
 import pandas as pd
 
-from src.core.experiment_schemas import ExperimentRecord
-from src.core.schemas import ExperimentDefinition
+from src.core.schemas import MeasurementDefinition
+from src.core.session_schemas import SessionRecord
 from src.processing.base import BaseProcessor
 
 
 class NormalizeResistance(BaseProcessor):
     """
-    Reads measurements.csv, normalizes columns, computes resistance per meter,
-    and writes normalized CSV + summary JSON.
+    Reads resistance.csv, computes round-trip resistance per meter, and
+    writes normalized CSV + summary JSON.
+
+    The resistance protocol measures round-trip loop resistance (one cable
+    end shorted, LCR meter at the other), so the per-meter value is the
+    combined center-conductor + shield-return resistance per meter of cable.
+    Cable length is structural: it comes from the session, not the CSV.
     """
 
     def __init__(self, models_dir: Path | None = None) -> None:
@@ -25,20 +30,20 @@ class NormalizeResistance(BaseProcessor):
 
     def process(
         self,
-        experiment_dir: Path,
-        experiment: ExperimentRecord,
-        definition: ExperimentDefinition,
+        session_dir: Path,
+        session: SessionRecord,
+        definition: MeasurementDefinition,
         output_dir: Path,
     ) -> dict[str, Path]:
         output_dir.mkdir(parents=True, exist_ok=True)
 
-        df = self._read_measurements(experiment_dir)
-        df = self._compute_derived(df)
+        df = self._read_measurements(session_dir)
+        df = self._compute_derived(df, session.cable_length_mm)
 
         normalized_path = output_dir / "normalized_resistance.csv"
         df.to_csv(normalized_path, index=False)
 
-        summary = self._compute_summary(df, experiment)
+        summary = self._compute_summary(df, session)
         summary_path = output_dir / "resistance_summary.json"
         with open(summary_path, "w") as f:
             json.dump(summary, f, indent=2)
@@ -48,32 +53,37 @@ class NormalizeResistance(BaseProcessor):
             "resistance_summary_json": summary_path,
         }
 
-    def _read_measurements(self, experiment_dir: Path) -> pd.DataFrame:
-        """Read measurements.csv and validate column types."""
-        csv_path = experiment_dir / "measurements.csv"
+    def _read_measurements(self, session_dir: Path) -> pd.DataFrame:
+        """Read resistance.csv and validate column types."""
+        csv_path = session_dir / "resistance.csv"
         df = pd.read_csv(csv_path)
 
         df.columns = df.columns.str.strip()
         df["resistance_ohm"] = pd.to_numeric(df["resistance_ohm"], errors="coerce")
-        df["cable_length_mm"] = pd.to_numeric(df["cable_length_mm"], errors="coerce")
 
-        df = df.dropna(subset=["resistance_ohm", "cable_length_mm"])
+        df = df.dropna(subset=["resistance_ohm"])
         return df
 
-    def _compute_derived(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Compute resistance_per_m from resistance and cable length."""
+    def _compute_derived(self, df: pd.DataFrame, cable_length_mm: float) -> pd.DataFrame:
+        """Compute round-trip resistance per meter from the session's cable length."""
         df = df.copy()
-        df["resistance_per_m"] = df["resistance_ohm"] / (df["cable_length_mm"] / 1000.0)
+        cable_length_m = cable_length_mm / 1000.0
+        df["roundtrip_resistance_ohm_per_m"] = df["resistance_ohm"] / cable_length_m
         return df
 
-    def _compute_summary(self, df: pd.DataFrame, experiment: ExperimentRecord) -> dict:
-        """Compute summary statistics and attach experiment metadata."""
+    def _compute_summary(self, df: pd.DataFrame, session: SessionRecord) -> dict:
+        """Compute summary statistics and attach session metadata."""
         summary: dict = {
-            "experiment_id": experiment.experiment_id,
+            "session_id": session.session_id,
+            "profile_id": session.profile_id,
+            "cable_length_mm": session.cable_length_mm,
+            "measurement_type": session.measurement_type,
+            "date": str(session.date),
+            "operator": session.operator,
             "num_measurements": len(df),
         }
 
-        for col in ["resistance_ohm", "resistance_per_m"]:
+        for col in ["resistance_ohm", "roundtrip_resistance_ohm_per_m"]:
             if col in df.columns and not df[col].isna().all():
                 series = df[col].dropna()
                 summary[f"mean_{col}"] = round(float(series.mean()), 6)
@@ -82,15 +92,8 @@ class NormalizeResistance(BaseProcessor):
                 summary[f"max_{col}"] = round(float(series.max()), 6)
                 summary[f"median_{col}"] = round(float(series.median()), 6)
 
-        if not df["cable_length_mm"].isna().all():
-            lengths = df["cable_length_mm"].dropna().unique()
-            if len(lengths) == 1:
-                summary["cable_length_mm"] = float(lengths[0])
-            else:
-                summary["cable_length_mm_values"] = [float(v) for v in sorted(lengths)]
-
-        type_fields = experiment.type_fields
-        for key in ["cable_model", "measurement_method", "measurement_instrument", "temperature_c"]:
+        type_fields = session.type_fields
+        for key in ["measurement_method", "measurement_instrument", "temperature_c"]:
             if key in type_fields:
                 summary[key] = type_fields[key]
 

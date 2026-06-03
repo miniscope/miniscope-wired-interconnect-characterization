@@ -9,8 +9,8 @@ from src.processing.touchstone import TouchstoneData, parse_s2p
 
 
 class TestParseS2p:
-    def test_parse_valid_fixture(self, vna_fixtures_dir: Path):
-        s2p_path = vna_fixtures_dir / "valid_experiment" / "raw" / "cable_500mm.s2p"
+    def test_parse_valid_fixture(self, vna_session_dir: Path):
+        s2p_path = vna_session_dir / "raw" / "sweep_01.s2p"
         ts = parse_s2p(s2p_path)
 
         assert isinstance(ts, TouchstoneData)
@@ -21,16 +21,16 @@ class TestParseS2p:
         assert len(ts.s21_db) == 101
         assert len(ts.s11_db) == 101
 
-    def test_frequencies_in_hz(self, vna_fixtures_dir: Path):
-        s2p_path = vna_fixtures_dir / "valid_experiment" / "raw" / "cable_500mm.s2p"
+    def test_frequencies_in_hz(self, vna_session_dir: Path):
+        s2p_path = vna_session_dir / "raw" / "sweep_01.s2p"
         ts = parse_s2p(s2p_path)
 
         assert ts.frequency_start_hz == pytest.approx(1e6, rel=0.01)
         assert ts.frequency_stop_hz == pytest.approx(1e9, rel=0.01)
 
-    def test_s21_values_negative(self, vna_fixtures_dir: Path):
+    def test_s21_values_negative(self, vna_session_dir: Path):
         """Insertion loss should be negative dB values."""
-        s2p_path = vna_fixtures_dir / "valid_experiment" / "raw" / "cable_500mm.s2p"
+        s2p_path = vna_session_dir / "raw" / "sweep_01.s2p"
         ts = parse_s2p(s2p_path)
         assert np.all(ts.s21_db <= 0)
 
@@ -77,8 +77,8 @@ class TestParseS2p:
         with pytest.raises(ValueError, match="at least 9 columns"):
             parse_s2p(s2p)
 
-    def test_comments_captured(self, vna_fixtures_dir: Path):
-        s2p_path = vna_fixtures_dir / "valid_experiment" / "raw" / "cable_500mm.s2p"
+    def test_comments_captured(self, vna_session_dir: Path):
+        s2p_path = vna_session_dir / "raw" / "sweep_01.s2p"
         ts = parse_s2p(s2p_path)
         assert "comments" in ts.metadata
         assert len(ts.metadata["comments"]) > 0

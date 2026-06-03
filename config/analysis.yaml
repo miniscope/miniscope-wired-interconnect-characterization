@@ -1,0 +1,33 @@
+# Analysis configuration: quality-score weights, zone thresholds, and
+# reference parameters. Values here are intentionally easy to change
+# without touching code.
+#
+# TODO (deferred decision -- Daniel): finalize the quality-score formula,
+# weights, and zone thresholds once real measurements exist. The current
+# values are placeholders so the plumbing can be exercised end to end.
+
+quality_score:
+  # Weighted combination of normalized metric scores in [0, 1].
+  # Inputs are documented in src/analysis/quality_score.py.
+  weights:
+    eye_area: 0.4
+    link_margin: 0.4
+    attenuation: 0.2
+  # Normalization references (metric value that maps to a score of 1.0).
+  references:
+    link_margin_full_scale_mv: 200.0
+    attenuation_full_scale_db: 20.0
+
+# Zones for the user-facing quality-vs-length plot.
+# score >= works            -> "should just work"
+# score >= marginal         -> "may have issues"
+# score <  marginal         -> "not recommended"
+zones:
+  works: 0.8
+  marginal: 0.5
+
+# SerDes data rates characterized (Gbps).
+serdes_rates_gbps: [3, 6]
+
+# Frequencies at which scalar attenuation metrics are reported.
+vna_reference_frequencies_hz: [1.0e6, 10.0e6, 100.0e6, 1.0e9]

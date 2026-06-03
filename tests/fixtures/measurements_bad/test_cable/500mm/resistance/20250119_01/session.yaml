@@ -1,0 +1,12 @@
+schema_version: "1.0"
+session_id: "20250119_01"
+profile_id: test_cable
+cable_length_mm: 500
+measurement_type: resistance
+measurement_type_version: 1
+date: 2025-01-19
+operator: Test Operator
+notes: "missing resistance.csv"
+type_fields:
+  measurement_instrument: "Test LCR Meter"
+  measurement_method: lcr_shorted_loop

@@ -7,63 +7,46 @@ from src.pipeline import run_full_pipeline
 
 
 class TestFullPipeline:
-    def test_run_full_pipeline(self, tmp_path: Path):
-        """Run the complete pipeline on all example experiments."""
-        repo_root = Path(".")
-
-        test_repo = tmp_path / "repo"
-        test_repo.mkdir()
-
-        for link_name in ["experiment_types", "models"]:
-            (test_repo / link_name).symlink_to(
-                (repo_root / link_name).resolve(), target_is_directory=True
-            )
-
-        # Copy all experiments
-        src_experiments = repo_root / "experiments"
-        dst_experiments = test_repo / "experiments"
-        dst_experiments.mkdir()
-
-        for exp_dir in src_experiments.iterdir():
-            if not exp_dir.is_dir() or exp_dir.name.startswith("."):
-                continue
-            dst_exp = dst_experiments / exp_dir.name
-            dst_exp.mkdir()
-            for f in exp_dir.iterdir():
-                if f.is_dir():
-                    raw_dir = dst_exp / f.name
-                    raw_dir.mkdir()
-                    for rf in f.iterdir():
-                        (raw_dir / rf.name).write_bytes(rf.read_bytes())
-                else:
-                    (dst_exp / f.name).write_bytes(f.read_bytes())
-
-        (test_repo / "derived").mkdir()
-
+    def test_run_full_pipeline(self, test_repo: Path):
+        """Run the complete pipeline on the fixture measurement tree."""
         summary = run_full_pipeline(test_repo)
 
-        # Should have processed 3 experiments
-        assert len(summary["processed"]) == 3
+        # Should have processed 4 sessions (2 resistance + 2 vna)
+        assert len(summary["processed"]) == 4
         for p in summary["processed"]:
-            assert p["valid"], f"{p['experiment_id']} failed validation"
-            assert p["error"] is None, f"{p['experiment_id']} had error: {p['error']}"
+            assert p["valid"], f"{p['session_ref']} failed validation"
+            assert p["error"] is None, f"{p['session_ref']} had error: {p['error']}"
 
-        # Should have aggregated 3 types
-        assert len(summary["aggregated"]) == 3
-        assert "resistance_characterization" in summary["aggregated"]
-        assert "eye_diagram_characterization" in summary["aggregated"]
-        assert "vna_characterization" in summary["aggregated"]
+        # Should have aggregated both measurement types
+        assert "resistance" in summary["aggregated"]
+        assert "vna" in summary["aggregated"]
+        assert "error" not in summary["aggregated"]["resistance"]
+        assert "error" not in summary["aggregated"]["vna"]
 
-        # Should have generated wiki payload for coax_spi_sci_40awg
-        assert "coax_spi_sci_40awg" in summary["wiki_payloads"]
+        # Should have generated a wiki payload per profile
+        assert "test_cable" in summary["wiki_payloads"]
 
-        # Verify wiki payload file exists and is valid JSON
-        payload_path = Path(summary["wiki_payloads"]["coax_spi_sci_40awg"])
+        payload_path = Path(summary["wiki_payloads"]["test_cable"])
         assert payload_path.exists()
         with open(payload_path) as f:
             payload = json.load(f)
-        assert payload["model_id"] == "coax_spi_sci_40awg"
-        # All 3 experiment types reference this cable model
-        assert len(payload["characterization"]["resistance"]) >= 1
-        assert len(payload["characterization"]["eye_diagram"]) >= 1
-        assert len(payload["characterization"]["vna"]) >= 1
+        assert payload["profile_id"] == "test_cable"
+        assert len(payload["characterization"]["resistance"]) == 2
+        assert len(payload["characterization"]["vna"]) == 2
+        for entries in payload["characterization"].values():
+            for entry in entries:
+                assert entry["summary"] is not None
+
+    def test_derived_tree_layout(self, test_repo: Path):
+        """Derived outputs mirror the measurements/ tree under derived/sessions/."""
+        run_full_pipeline(test_repo)
+
+        derived_sessions = test_repo / "derived" / "sessions" / "test_cable"
+        assert (
+            derived_sessions / "500mm" / "resistance" / "20250115_01" / "resistance_summary.json"
+        ).exists()
+        assert (derived_sessions / "1000mm" / "vna" / "20250301_01" / "vna_summary.json").exists()
+
+        aggregated = test_repo / "derived" / "aggregated"
+        assert (aggregated / "resistance" / "resistance_summary.csv").exists()
+        assert (aggregated / "vna" / "vna_comparison.csv").exists()

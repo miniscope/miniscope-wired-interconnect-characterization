@@ -1,0 +1,12 @@
+schema_version: "1.0"
+session_id: "20250304_01"
+profile_id: test_cable
+cable_length_mm: 1000
+measurement_type: vna
+measurement_type_version: 1
+date: 2025-03-04
+operator: Test Operator
+notes: "manifest has wrong columns"
+type_fields:
+  vna_instrument: "Test VNA"
+  calibration_type: SOLT

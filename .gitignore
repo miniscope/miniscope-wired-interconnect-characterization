@@ -47,3 +47,5 @@ ENV/
 *.swo
 *~
 CLAUDE.md
+
+.claude/

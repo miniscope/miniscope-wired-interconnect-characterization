@@ -3,82 +3,72 @@
 import json
 from pathlib import Path
 
+from src.pipeline import process_all
 from src.wiki.payloads import generate_wiki_payloads
 
 
 class TestGenerateWikiPayloads:
-    def _setup_repo(self, tmp_path: Path) -> Path:
-        """Create a minimal repo structure with a processed experiment."""
-        repo_root = Path(".")
-        test_repo = tmp_path / "repo"
-        test_repo.mkdir()
-
-        for link_name in ["experiment_types", "models"]:
-            (test_repo / link_name).symlink_to(
-                (repo_root / link_name).resolve(), target_is_directory=True
-            )
-
-        example_dir = repo_root / "experiments" / "EXP_2025_01_15_resistance_coax_40awg"
-        exp_dir = test_repo / "experiments" / "EXP_2025_01_15_resistance_coax_40awg"
-        exp_dir.mkdir(parents=True)
-        for f in example_dir.iterdir():
-            if f.is_file():
-                (exp_dir / f.name).write_bytes(f.read_bytes())
-
-        (test_repo / "derived" / "wiki_payloads").mkdir(parents=True)
-
-        # Process the experiment first
-        from src.pipeline import process_experiment
-
-        (test_repo / "derived" / "manifests").mkdir(parents=True, exist_ok=True)
-        process_experiment(exp_dir, test_repo)
-
+    def _process_repo(self, test_repo: Path) -> Path:
+        results = process_all(test_repo / "measurements", test_repo)
+        assert all(r.error is None for r in results)
         return test_repo
 
-    def test_generates_payload_for_referenced_model(self, tmp_path: Path):
-        test_repo = self._setup_repo(tmp_path)
+    def test_generates_payload_per_profile(self, test_repo: Path):
+        self._process_repo(test_repo)
         outputs = generate_wiki_payloads(test_repo)
 
-        assert "coax_spi_sci_40awg" in outputs
-        assert outputs["coax_spi_sci_40awg"].exists()
+        assert "test_cable" in outputs
+        assert outputs["test_cable"].exists()
 
-    def test_payload_contains_model_metadata(self, tmp_path: Path):
-        test_repo = self._setup_repo(tmp_path)
+    def test_payload_contains_profile(self, test_repo: Path):
+        self._process_repo(test_repo)
         outputs = generate_wiki_payloads(test_repo)
 
-        with open(outputs["coax_spi_sci_40awg"]) as f:
+        with open(outputs["test_cable"]) as f:
             payload = json.load(f)
 
-        assert payload["model_id"] == "coax_spi_sci_40awg"
-        assert payload["model_metadata"] is not None
-        assert payload["model_metadata"]["model_id"] == "coax_spi_sci_40awg"
+        assert payload["profile_id"] == "test_cable"
+        assert payload["profile"] is not None
+        assert payload["profile"]["profile_id"] == "test_cable"
 
-    def test_payload_contains_characterization_data(self, tmp_path: Path):
-        test_repo = self._setup_repo(tmp_path)
+    def test_payload_contains_characterization_data(self, test_repo: Path):
+        self._process_repo(test_repo)
         outputs = generate_wiki_payloads(test_repo)
 
-        with open(outputs["coax_spi_sci_40awg"]) as f:
+        with open(outputs["test_cable"]) as f:
             payload = json.load(f)
 
-        assert len(payload["characterization"]["resistance"]) >= 1
-        exp_entry = payload["characterization"]["resistance"][0]
-        assert exp_entry["experiment_id"] == "EXP_2025_01_15_resistance_coax_40awg"
-        assert exp_entry["summary"] is not None
+        assert len(payload["characterization"]["resistance"]) == 2
+        assert len(payload["characterization"]["vna"]) == 2
 
-    def test_payload_has_generated_at(self, tmp_path: Path):
-        test_repo = self._setup_repo(tmp_path)
+        entry = payload["characterization"]["resistance"][0]
+        assert entry["session_ref"] == "test_cable/500mm/resistance/20250115_01"
+        assert entry["cable_length_mm"] == 500.0
+        assert entry["summary"] is not None
+
+    def test_payload_has_generated_at(self, test_repo: Path):
+        self._process_repo(test_repo)
         outputs = generate_wiki_payloads(test_repo)
 
-        with open(outputs["coax_spi_sci_40awg"]) as f:
+        with open(outputs["test_cable"]) as f:
             payload = json.load(f)
 
         assert "generated_at" in payload
 
-    def test_no_experiments_no_payloads(self, tmp_path: Path):
-        test_repo = tmp_path / "empty_repo"
-        (test_repo / "experiments").mkdir(parents=True)
-        (test_repo / "models" / "cable_models").mkdir(parents=True)
-        (test_repo / "derived" / "wiki_payloads").mkdir(parents=True)
-
+    def test_unprocessed_sessions_have_null_summary(self, test_repo: Path):
+        """Payloads still list sessions even before processing has run."""
         outputs = generate_wiki_payloads(test_repo)
+
+        with open(outputs["test_cable"]) as f:
+            payload = json.load(f)
+
+        assert len(payload["characterization"]["resistance"]) == 2
+        assert all(e["summary"] is None for e in payload["characterization"]["resistance"])
+
+    def test_no_profiles_no_payloads(self, tmp_path: Path):
+        empty_repo = tmp_path / "empty_repo"
+        (empty_repo / "measurements").mkdir(parents=True)
+        (empty_repo / "derived").mkdir()
+
+        outputs = generate_wiki_payloads(empty_repo)
         assert outputs == {}

@@ -1,0 +1,11 @@
+schema_version: "1.0"
+session_id: "20250302_01"
+profile_id: test_cable
+cable_length_mm: 1000
+measurement_type: vna
+measurement_type_version: 1
+date: 2025-03-02
+operator: Test Operator
+type_fields:
+  vna_instrument: "Test VNA"
+  calibration_type: SOLT

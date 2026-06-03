@@ -1,0 +1,8 @@
+schema_version: "1.0"
+model_id: test_miniscope
+manufacturer: "Test Lab"
+description: "Fixture miniscope model with power requirements"
+miniscope_version: "4.4"
+min_operating_voltage_v: 3.3
+baseline_current_ma: 150.0
+max_current_ma: 300.0

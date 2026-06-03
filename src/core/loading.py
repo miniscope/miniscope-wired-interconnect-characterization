@@ -4,33 +4,57 @@ from pathlib import Path
 
 import yaml
 
-from src.core.experiment_schemas import ExperimentRecord
 from src.core.model_schemas import (
     BaseHardwareModel,
     CableModel,
     CommutatorModel,
     ConnectorModel,
     MiniscopeModel,
-    PowerProfile,
 )
+from src.core.profile_schemas import CableProfile
+from src.core.session_schemas import SessionRecord
 
-_MODEL_TYPE_MAP: dict[str, type[BaseHardwareModel] | type[PowerProfile]] = {
+_MODEL_TYPE_MAP: dict[str, type[BaseHardwareModel]] = {
     "cable_models": CableModel,
     "connector_models": ConnectorModel,
     "commutator_models": CommutatorModel,
     "miniscope_models": MiniscopeModel,
-    "power_profiles": PowerProfile,
 }
 
 
-def load_experiment(path: Path) -> ExperimentRecord:
-    """Load and validate an experiment.yaml file."""
+def load_session(path: Path) -> SessionRecord:
+    """Load and validate a session.yaml file."""
     with open(path) as f:
         raw = yaml.safe_load(f)
-    return ExperimentRecord.model_validate(raw)
+    return SessionRecord.model_validate(raw)
 
 
-def load_model(path: Path, model_type: str | None = None) -> BaseHardwareModel | PowerProfile:
+def load_profile(path: Path) -> CableProfile:
+    """
+    Load and validate a cable profile YAML file.
+
+    The profile_id must match the filename stem so profiles are
+    discoverable by id without opening every file.
+    """
+    with open(path) as f:
+        raw = yaml.safe_load(f)
+    profile = CableProfile.model_validate(raw)
+    if profile.profile_id != path.stem:
+        raise ValueError(f"profile_id '{profile.profile_id}' does not match filename '{path.name}'")
+    return profile
+
+
+def list_profiles(profiles_dir: Path) -> list[CableProfile]:
+    """Load every cable profile in profiles_dir, sorted by profile_id."""
+    profiles: list[CableProfile] = []
+    if not profiles_dir.exists():
+        return profiles
+    for path in sorted(profiles_dir.glob("*.yaml")):
+        profiles.append(load_profile(path))
+    return profiles
+
+
+def load_model(path: Path, model_type: str | None = None) -> BaseHardwareModel:
     """
     Load a hardware model YAML file.
 

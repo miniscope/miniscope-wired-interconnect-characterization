@@ -5,16 +5,15 @@ import logging
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from src.aggregation.base import BaseAggregator
-from src.core.experiment_validator import (
+from src.aggregation.base import BaseAggregator, SessionContext
+from src.core.loading import load_session
+from src.core.session_validator import (
     ValidationResult,
-    validate_experiment,
-    validate_eye_manifest_csv,
     validate_resistance_csv,
+    validate_session,
     validate_vna_manifest_csv,
 )
-from src.core.loading import load_experiment
-from src.experiment_types.registry import ExperimentTypeRegistry
+from src.measurement_types.registry import MeasurementTypeRegistry
 from src.processing.base import BaseProcessor
 from src.wiki.payloads import generate_wiki_payloads
 from src.wiki.resolver import ModelResolver
@@ -24,20 +23,19 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class PipelineResult:
-    """Result of running the pipeline for one experiment."""
+    """Result of running the pipeline for one session."""
 
-    experiment_id: str
+    session_ref: str
     validation: ValidationResult
     outputs: dict[str, Path] = field(default_factory=dict)
     error: str | None = None
 
 
-# CSV validators keyed by experiment type name.
-# Each entry is (filename, validator_fn, needs_experiment_dir).
+# CSV validators keyed by measurement type name.
+# Each entry is (filename, validator_fn, needs_session_dir).
 _CSV_VALIDATORS: dict[str, list[tuple[str, callable, bool]]] = {
-    "resistance_characterization": [("measurements.csv", validate_resistance_csv, False)],
-    "eye_diagram_characterization": [("manifest.csv", validate_eye_manifest_csv, True)],
-    "vna_characterization": [("manifest.csv", validate_vna_manifest_csv, True)],
+    "resistance": [("resistance.csv", validate_resistance_csv, False)],
+    "vna": [("manifest.csv", validate_vna_manifest_csv, True)],
 }
 
 
@@ -60,156 +58,176 @@ def _resolve_aggregator(dotted_path: str, **kwargs) -> BaseAggregator:
     return cls(**kwargs)
 
 
-def process_experiment(
-    experiment_dir: Path,
+def session_rel_path(session_dir: Path, measurements_dir: Path) -> Path:
+    """Relative path of a session inside measurements/: profile/length/type/session."""
+    return session_dir.resolve().relative_to(measurements_dir.resolve())
+
+
+def derived_session_dir(repo_root: Path, session_dir: Path) -> Path:
+    """Where a session's derived outputs live: derived/sessions/<profile>/<len>/<type>/<id>."""
+    rel = session_rel_path(session_dir, repo_root / "measurements")
+    return repo_root / "derived" / "sessions" / rel
+
+
+def discover_sessions(
+    measurements_dir: Path,
+    measurement_type: str | None = None,
+) -> list[Path]:
+    """
+    Walk measurements/<profile>/<length>mm/<type>/<session>/ and return all
+    session directories (those containing a session.yaml), optionally
+    filtered by measurement type (the third path level).
+    """
+    sessions: list[Path] = []
+    if not measurements_dir.exists():
+        return sessions
+
+    for yaml_path in sorted(measurements_dir.glob("*/*/*/*/session.yaml")):
+        session_dir = yaml_path.parent
+        type_name = session_dir.parent.name
+        if measurement_type is not None and type_name != measurement_type:
+            continue
+        sessions.append(session_dir)
+
+    return sessions
+
+
+def process_session(
+    session_dir: Path,
     repo_root: Path | None = None,
 ) -> PipelineResult:
     """
-    Full pipeline for a single experiment:
-    1. Load experiment.yaml
-    2. Resolve experiment type definition
-    3. Validate
-    4. Run processing steps
+    Full pipeline for a single session:
+    1. Load session.yaml
+    2. Resolve measurement type definition
+    3. Validate (including path<->yaml identity)
+    4. Resolve model references (provenance manifest)
+    5. Run processing steps
     """
     if repo_root is None:
-        repo_root = experiment_dir.parent.parent
+        repo_root = session_dir.parents[4]
+
+    ref = "/".join(session_dir.resolve().parts[-4:])
 
     try:
-        experiment = load_experiment(experiment_dir / "experiment.yaml")
+        session = load_session(session_dir / "session.yaml")
     except Exception as e:
         result = ValidationResult()
-        result.add_error(f"Failed to load experiment.yaml: {e}")
-        return PipelineResult(
-            experiment_id=experiment_dir.name,
-            validation=result,
-            error=str(e),
-        )
+        result.add_error(f"Failed to load session.yaml: {e}")
+        return PipelineResult(session_ref=ref, validation=result, error=str(e))
 
-    registry = ExperimentTypeRegistry(repo_root / "experiment_types")
+    registry = MeasurementTypeRegistry(repo_root / "measurement_types")
     try:
-        definition = registry.get(experiment.experiment_type, experiment.experiment_type_version)
+        definition = registry.get(session.measurement_type, session.measurement_type_version)
     except FileNotFoundError as e:
         result = ValidationResult()
         result.add_error(str(e))
-        return PipelineResult(
-            experiment_id=experiment.experiment_id,
-            validation=result,
-            error=str(e),
-        )
+        return PipelineResult(session_ref=ref, validation=result, error=str(e))
 
-    validation = validate_experiment(
-        experiment_dir, experiment, definition, models_dir=repo_root / "models"
+    validation = validate_session(
+        session_dir,
+        session,
+        definition,
+        models_dir=repo_root / "models",
+        profiles_dir=repo_root / "profiles",
     )
 
-    csv_validators = _CSV_VALIDATORS.get(experiment.experiment_type, [])
-    for filename, validator_fn, needs_exp_dir in csv_validators:
-        csv_path = experiment_dir / filename
+    csv_validators = _CSV_VALIDATORS.get(session.measurement_type, [])
+    for filename, validator_fn, needs_session_dir in csv_validators:
+        csv_path = session_dir / filename
         if csv_path.exists():
-            if needs_exp_dir:
-                validator_fn(csv_path, validation, experiment_dir=experiment_dir)
+            if needs_session_dir:
+                validator_fn(csv_path, validation, session_dir=session_dir)
             else:
                 validator_fn(csv_path, validation)
 
     if not validation.is_valid:
-        return PipelineResult(
-            experiment_id=experiment.experiment_id,
-            validation=validation,
-        )
+        return PipelineResult(session_ref=ref, validation=validation)
+
+    output_dir = derived_session_dir(repo_root, session_dir)
 
     # Resolve model references and write provenance manifest
     resolver = ModelResolver(models_dir=repo_root / "models")
-    manifest = resolver.resolve_experiment(experiment, definition)
-    manifest_dir = repo_root / "derived" / "manifests" / experiment.experiment_id
-    manifest.write(manifest_dir / "resolution_manifest.json")
+    manifest = resolver.resolve_session(session, definition)
+    manifest.write(output_dir / "resolution_manifest.json")
 
-    output_dir = repo_root / "derived" / "normalized" / experiment.experiment_id
     all_outputs: dict[str, Path] = {}
 
     for step in definition.processing_steps:
         try:
             processor = _resolve_processor(step.processor, models_dir=repo_root / "models")
-            outputs = processor.process(experiment_dir, experiment, definition, output_dir)
+            outputs = processor.process(session_dir, session, definition, output_dir)
             all_outputs.update(outputs)
         except Exception as e:
             logger.error("Processing step '%s' failed: %s", step.name, e)
             return PipelineResult(
-                experiment_id=experiment.experiment_id,
+                session_ref=ref,
                 validation=validation,
                 outputs=all_outputs,
                 error=f"Processing step '{step.name}' failed: {e}",
             )
 
-    return PipelineResult(
-        experiment_id=experiment.experiment_id,
-        validation=validation,
-        outputs=all_outputs,
-    )
+    return PipelineResult(session_ref=ref, validation=validation, outputs=all_outputs)
 
 
 def process_all(
-    experiments_dir: Path,
+    measurements_dir: Path,
     repo_root: Path | None = None,
-    experiment_type: str | None = None,
+    measurement_type: str | None = None,
 ) -> list[PipelineResult]:
-    """Process all experiments, optionally filtered by type."""
+    """Process all sessions, optionally filtered by measurement type."""
     if repo_root is None:
-        repo_root = experiments_dir.parent
+        repo_root = measurements_dir.parent
 
     results: list[PipelineResult] = []
-    for exp_dir in sorted(experiments_dir.iterdir()):
-        if not exp_dir.is_dir():
-            continue
-        yaml_path = exp_dir / "experiment.yaml"
-        if not yaml_path.exists():
-            continue
-
-        if experiment_type is not None:
-            try:
-                exp = load_experiment(yaml_path)
-                if exp.experiment_type != experiment_type:
-                    continue
-            except Exception:
-                continue
-
-        result = process_experiment(exp_dir, repo_root)
-        results.append(result)
+    for session_dir in discover_sessions(measurements_dir, measurement_type):
+        results.append(process_session(session_dir, repo_root))
 
     return results
 
 
+def _collect_session_contexts(
+    repo_root: Path,
+    measurement_type: str,
+) -> list[SessionContext]:
+    """Build SessionContexts for every loadable session of a measurement type."""
+    contexts: list[SessionContext] = []
+    for session_dir in discover_sessions(repo_root / "measurements", measurement_type):
+        try:
+            record = load_session(session_dir / "session.yaml")
+        except Exception as e:
+            logger.warning("Skipping unloadable session %s: %s", session_dir, e)
+            continue
+        contexts.append(
+            SessionContext(
+                session_dir=session_dir,
+                derived_dir=derived_session_dir(repo_root, session_dir),
+                record=record,
+            )
+        )
+    return contexts
+
+
 def aggregate_type(
-    experiment_type: str,
+    measurement_type: str,
     repo_root: Path | None = None,
 ) -> dict[str, Path]:
-    """Run aggregation for all processed experiments of a given type."""
+    """Run aggregation for all processed sessions of a given measurement type."""
     if repo_root is None:
         repo_root = Path(".")
 
-    registry = ExperimentTypeRegistry(repo_root / "experiment_types")
-    definition = registry.get_latest(experiment_type)
+    registry = MeasurementTypeRegistry(repo_root / "measurement_types")
+    definition = registry.get_latest(measurement_type)
 
-    experiments_dir = repo_root / "experiments"
-    experiment_dirs: list[Path] = []
-    for exp_dir in sorted(experiments_dir.iterdir()):
-        if not exp_dir.is_dir():
-            continue
-        yaml_path = exp_dir / "experiment.yaml"
-        if not yaml_path.exists():
-            continue
-        try:
-            exp = load_experiment(yaml_path)
-            if exp.experiment_type == experiment_type:
-                experiment_dirs.append(exp_dir)
-        except Exception:
-            continue
+    contexts = _collect_session_contexts(repo_root, measurement_type)
 
     all_outputs: dict[str, Path] = {}
     derived_dir = repo_root / "derived"
 
     for agg_spec in definition.aggregation:
         aggregator = _resolve_aggregator(agg_spec.aggregator, derived_dir=derived_dir)
-        output_dir = derived_dir / "aggregated" / experiment_type
-        outputs = aggregator.aggregate(experiment_dirs, definition, output_dir)
+        output_dir = derived_dir / "aggregated" / measurement_type
+        outputs = aggregator.aggregate(contexts, definition, output_dir)
         all_outputs.update(outputs)
 
     return all_outputs
@@ -217,7 +235,7 @@ def aggregate_type(
 
 def run_full_pipeline(repo_root: Path | None = None) -> dict:
     """
-    Run the complete pipeline: process all experiments, aggregate all types,
+    Run the complete pipeline: process all sessions, aggregate all types,
     generate wiki payloads.
 
     Returns a summary dict with processing results, aggregation outputs,
@@ -232,22 +250,22 @@ def run_full_pipeline(repo_root: Path | None = None) -> dict:
         "wiki_payloads": {},
     }
 
-    # Process all experiments
-    experiments_dir = repo_root / "experiments"
-    if experiments_dir.exists():
-        results = process_all(experiments_dir, repo_root)
+    # Process all sessions
+    measurements_dir = repo_root / "measurements"
+    if measurements_dir.exists():
+        results = process_all(measurements_dir, repo_root)
         for r in results:
             summary["processed"].append(
                 {
-                    "experiment_id": r.experiment_id,
+                    "session_ref": r.session_ref,
                     "valid": r.validation.is_valid,
                     "error": r.error,
                     "outputs": {k: str(v) for k, v in r.outputs.items()},
                 }
             )
 
-    # Aggregate all experiment types
-    registry = ExperimentTypeRegistry(repo_root / "experiment_types")
+    # Aggregate all measurement types
+    registry = MeasurementTypeRegistry(repo_root / "measurement_types")
     for type_name, _version in registry.discover():
         try:
             outputs = aggregate_type(type_name, repo_root)

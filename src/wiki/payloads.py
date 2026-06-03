@@ -1,4 +1,4 @@
-"""Generate wiki-ready JSON payloads combining model metadata with characterization results."""
+"""Generate wiki-ready JSON payloads combining cable profiles with characterization results."""
 
 from __future__ import annotations
 
@@ -9,134 +9,100 @@ from pathlib import Path
 
 import yaml
 
-from src.core.loading import load_experiment
+from src.core.loading import load_session
+from src.core.session_schemas import length_dir_name
 
 logger = logging.getLogger(__name__)
+
+# Summary JSON written by each measurement type's processor.
+_SUMMARY_FILES: dict[str, str] = {
+    "resistance": "resistance_summary.json",
+    "serdes": "serdes_summary.json",
+    "vna": "vna_summary.json",
+}
 
 
 def generate_wiki_payloads(repo_root: Path) -> dict[str, Path]:
     """
-    Generate a wiki payload JSON for each cable model referenced by experiments.
+    Generate a wiki payload JSON for each cable profile.
 
     Each payload combines:
-    - Model metadata from models/cable_models/
-    - Aggregated characterization summaries from derived/normalized/
+    - The profile specification from profiles/<profile_id>.yaml
+    - Per-session characterization summaries from derived/sessions/
 
-    Returns mapping of model_id -> payload file path.
+    Returns mapping of profile_id -> payload file path.
     """
-    output_dir = repo_root / "derived" / "wiki_payloads"
+    output_dir = repo_root / "derived" / "wiki" / "payloads"
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    # Discover all experiments and their cable model references
-    model_experiments: dict[str, list[dict]] = {}
-    experiments_dir = repo_root / "experiments"
-
-    if experiments_dir.exists():
-        for exp_dir in sorted(experiments_dir.iterdir()):
-            if not exp_dir.is_dir():
-                continue
-            yaml_path = exp_dir / "experiment.yaml"
-            if not yaml_path.exists():
-                continue
-            try:
-                experiment = load_experiment(yaml_path)
-                cable_model = experiment.type_fields.get("cable_model")
-                if cable_model:
-                    if cable_model not in model_experiments:
-                        model_experiments[cable_model] = []
-
-                    # Load the experiment's summary if it exists
-                    summary = _load_experiment_summary(
-                        repo_root, experiment.experiment_id, experiment.experiment_type
-                    )
-                    model_experiments[cable_model].append(
-                        {
-                            "experiment_id": experiment.experiment_id,
-                            "experiment_type": experiment.experiment_type,
-                            "date": str(experiment.date),
-                            "description": experiment.description,
-                            "summary": summary,
-                        }
-                    )
-            except Exception as e:
-                logger.warning("Failed to load %s: %s", yaml_path, e)
-
+    profiles_dir = repo_root / "profiles"
     outputs: dict[str, Path] = {}
 
-    for model_id, experiments in model_experiments.items():
-        payload = _build_payload(repo_root, model_id, experiments)
-        payload_path = output_dir / f"{model_id}.json"
+    if not profiles_dir.exists():
+        return outputs
+
+    for profile_path in sorted(profiles_dir.glob("*.yaml")):
+        profile_id = profile_path.stem
+        payload = _build_payload(repo_root, profile_id, profile_path)
+        payload_path = output_dir / f"{profile_id}.json"
         with open(payload_path, "w") as f:
             json.dump(payload, f, indent=2)
-        outputs[model_id] = payload_path
-        logger.info("Generated wiki payload for %s", model_id)
+        outputs[profile_id] = payload_path
+        logger.info("Generated wiki payload for %s", profile_id)
 
     return outputs
 
 
-def _load_experiment_summary(
-    repo_root: Path, experiment_id: str, experiment_type: str
-) -> dict | None:
-    """Load the processed summary JSON for an experiment."""
-    summary_names = {
-        "resistance_characterization": "resistance_summary.json",
-        "eye_diagram_characterization": "eye_summary.json",
-        "vna_characterization": "vna_summary.json",
+def _build_payload(repo_root: Path, profile_id: str, profile_path: Path) -> dict:
+    """Build a wiki payload for one cable profile."""
+    payload: dict = {
+        "profile_id": profile_id,
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "profile": None,
+        "characterization": {key: [] for key in _SUMMARY_FILES},
     }
-    summary_name = summary_names.get(experiment_type)
-    if not summary_name:
-        return None
-
-    summary_path = repo_root / "derived" / "normalized" / experiment_id / summary_name
-    if not summary_path.exists():
-        return None
 
     try:
-        with open(summary_path) as f:
-            return json.load(f)
-    except Exception:
-        return None
+        with open(profile_path) as f:
+            payload["profile"] = yaml.safe_load(f)
+    except Exception as e:
+        logger.warning("Failed to load profile %s: %s", profile_path, e)
 
+    profile_measurements = repo_root / "measurements" / profile_id
+    if not profile_measurements.exists():
+        return payload
 
-def _build_payload(repo_root: Path, model_id: str, experiments: list[dict]) -> dict:
-    """Build a wiki payload for a cable model."""
-    payload: dict = {
-        "model_id": model_id,
-        "generated_at": datetime.now(timezone.utc).isoformat(),
-        "model_metadata": None,
-        "characterization": {
-            "resistance": [],
-            "eye_diagram": [],
-            "vna": [],
-        },
-    }
-
-    # Load model metadata
-    model_path = repo_root / "models" / "cable_models" / f"{model_id}.yaml"
-    if model_path.exists():
+    for yaml_path in sorted(profile_measurements.glob("*/*/*/session.yaml")):
         try:
-            with open(model_path) as f:
-                payload["model_metadata"] = yaml.safe_load(f)
+            session = load_session(yaml_path)
         except Exception as e:
-            logger.warning("Failed to load model metadata for %s: %s", model_id, e)
+            logger.warning("Failed to load %s: %s", yaml_path, e)
+            continue
 
-    # Group experiments by type
-    type_key_map = {
-        "resistance_characterization": "resistance",
-        "eye_diagram_characterization": "eye_diagram",
-        "vna_characterization": "vna",
-    }
+        summary_name = _SUMMARY_FILES.get(session.measurement_type)
+        if summary_name is None:
+            continue
 
-    for exp in experiments:
-        key = type_key_map.get(exp["experiment_type"])
-        if key:
-            payload["characterization"][key].append(
-                {
-                    "experiment_id": exp["experiment_id"],
-                    "date": exp["date"],
-                    "description": exp["description"],
-                    "summary": exp["summary"],
-                }
-            )
+        rel = Path(profile_id) / length_dir_name(session.cable_length_mm)
+        rel = rel / session.measurement_type / session.session_id
+        summary_path = repo_root / "derived" / "sessions" / rel / summary_name
+        summary = None
+        if summary_path.exists():
+            try:
+                with open(summary_path) as f:
+                    summary = json.load(f)
+            except Exception:
+                summary = None
+
+        payload["characterization"][session.measurement_type].append(
+            {
+                "session_ref": str(rel).replace("\\", "/"),
+                "cable_length_mm": session.cable_length_mm,
+                "date": str(session.date),
+                "operator": session.operator,
+                "notes": session.notes,
+                "summary": summary,
+            }
+        )
 
     return payload

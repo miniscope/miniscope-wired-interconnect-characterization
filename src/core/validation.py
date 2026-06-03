@@ -3,13 +3,13 @@ from __future__ import annotations
 from datetime import date, datetime
 from typing import Any
 
-from src.core.schemas import ExperimentDefinition, FieldSpec, FieldType
+from src.core.schemas import FieldSpec, FieldType, MeasurementDefinition
 
 
 class TypeFieldValidator:
     """
-    Validates the type_fields dict of an ExperimentRecord against
-    the FieldSpec list from an ExperimentDefinition.
+    Validates the type_fields dict of a SessionRecord against
+    the FieldSpec list from a MeasurementDefinition.
     """
 
     TYPE_MAP: dict[FieldType, type | tuple[type, ...]] = {
@@ -25,7 +25,7 @@ class TypeFieldValidator:
         FieldType.MODEL_REF: str,
     }
 
-    def __init__(self, definition: ExperimentDefinition) -> None:
+    def __init__(self, definition: MeasurementDefinition) -> None:
         self.definition = definition
         self._field_map: dict[str, FieldSpec] = {f.name: f for f in definition.fields}
 

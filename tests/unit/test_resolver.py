@@ -6,15 +6,18 @@ from pathlib import Path
 import pytest
 import yaml
 
-from src.core.loading import load_experiment
-from src.experiment_types.loader import load_definition
+from src.core.loading import load_session
+from src.measurement_types.loader import load_definition
 from src.wiki.base import BaseWikiClient
 from src.wiki.resolver import (
     ModelResolver,
     ResolutionManifest,
     ResolvedModel,
     UnresolvedModel,
+    session_ref,
 )
+
+RESISTANCE_DEFINITION = Path("measurement_types/resistance/v1/definition.yaml")
 
 
 class MockWikiClient(BaseWikiClient):
@@ -27,27 +30,33 @@ class MockWikiClient(BaseWikiClient):
         return self._models.get(f"{model_type}/{model_id}")
 
 
+class TestSessionRef:
+    def test_session_ref(self, resistance_session_dir: Path):
+        session = load_session(resistance_session_dir / "session.yaml")
+        assert session_ref(session) == "test_cable/500mm/resistance/20250115_01"
+
+
 class TestResolvedModel:
     def test_to_dict(self):
         rm = ResolvedModel(
-            field_name="cable_model",
-            model_id="test_cable",
-            model_type="cable_models",
+            field_name="connector_model",
+            model_id="test_connector",
+            model_type="connector_models",
             source="repo",
-            path="models/cable_models/test_cable.yaml",
+            path="models/connector_models/test_connector.yaml",
         )
         d = rm.to_dict()
         assert d["resolved"] is True
         assert d["source"] == "repo"
-        assert d["model_id"] == "test_cable"
+        assert d["model_id"] == "test_connector"
 
 
 class TestUnresolvedModel:
     def test_to_dict(self):
         um = UnresolvedModel(
-            field_name="cable_model",
+            field_name="connector_model",
             model_id=None,
-            model_type="cable_models",
+            model_type="connector_models",
             reason="not provided",
         )
         d = um.to_dict()
@@ -57,30 +66,30 @@ class TestUnresolvedModel:
 
 class TestResolutionManifest:
     def test_to_dict(self):
-        manifest = ResolutionManifest(experiment_id="test_exp")
-        manifest.models["cable_model"] = ResolvedModel(
-            field_name="cable_model",
-            model_id="test_cable",
-            model_type="cable_models",
+        manifest = ResolutionManifest(session_ref="test_cable/500mm/resistance/20250115_01")
+        manifest.models["connector_model"] = ResolvedModel(
+            field_name="connector_model",
+            model_id="test_connector",
+            model_type="connector_models",
             source="repo",
         )
         d = manifest.to_dict()
-        assert d["experiment_id"] == "test_exp"
+        assert d["session_ref"] == "test_cable/500mm/resistance/20250115_01"
         assert "resolved_at" in d
-        assert d["models"]["cable_model"]["resolved"] is True
+        assert d["models"]["connector_model"]["resolved"] is True
 
     def test_to_json(self):
-        manifest = ResolutionManifest(experiment_id="test_exp")
+        manifest = ResolutionManifest(session_ref="a/b/c/d")
         j = manifest.to_json()
         parsed = json.loads(j)
-        assert parsed["experiment_id"] == "test_exp"
+        assert parsed["session_ref"] == "a/b/c/d"
 
     def test_write(self, tmp_path: Path):
-        manifest = ResolutionManifest(experiment_id="test_exp")
-        manifest.models["cable_model"] = ResolvedModel(
-            field_name="cable_model",
+        manifest = ResolutionManifest(session_ref="a/b/c/d")
+        manifest.models["connector_model"] = ResolvedModel(
+            field_name="connector_model",
             model_id="test",
-            model_type="cable_models",
+            model_type="connector_models",
             source="repo",
         )
         output = tmp_path / "manifest.json"
@@ -88,7 +97,7 @@ class TestResolutionManifest:
         assert output.exists()
         with open(output) as f:
             data = json.load(f)
-        assert data["models"]["cable_model"]["resolved"] is True
+        assert data["models"]["connector_model"]["resolved"] is True
 
 
 class TestModelResolver:
@@ -98,105 +107,101 @@ class TestModelResolver:
 
     def test_resolve_from_repo(self, models_dir: Path):
         resolver = ModelResolver(models_dir=models_dir)
-        result = resolver.resolve("cable_model", "cable_models", "test_cable_for_resistance")
+        result = resolver.resolve("connector_model", "connector_models", "test_connector")
         assert isinstance(result, ResolvedModel)
         assert result.source == "repo"
-        assert result.model_id == "test_cable_for_resistance"
+        assert result.model_id == "test_connector"
         assert result.data is not None
-        assert result.data["model_id"] == "test_cable_for_resistance"
+        assert result.data["model_id"] == "test_connector"
 
     def test_resolve_not_found(self, models_dir: Path):
         resolver = ModelResolver(models_dir=models_dir)
-        result = resolver.resolve("cable_model", "cable_models", "nonexistent_cable")
+        result = resolver.resolve("connector_model", "connector_models", "nonexistent")
         assert isinstance(result, UnresolvedModel)
         assert "not found" in result.reason
 
     def test_wiki_takes_priority_over_repo(self, models_dir: Path):
-        wiki_data = {"model_id": "test_cable_for_resistance", "source": "wiki_version"}
-        wiki_client = MockWikiClient({"cable_models/test_cable_for_resistance": wiki_data})
+        wiki_data = {"model_id": "test_connector", "source": "wiki_version"}
+        wiki_client = MockWikiClient({"connector_models/test_connector": wiki_data})
         resolver = ModelResolver(models_dir=models_dir, wiki_client=wiki_client)
-        result = resolver.resolve("cable_model", "cable_models", "test_cable_for_resistance")
+        result = resolver.resolve("connector_model", "connector_models", "test_connector")
         assert isinstance(result, ResolvedModel)
         assert result.source == "wiki"
         assert result.data["source"] == "wiki_version"
 
     def test_wiki_not_found_falls_back_to_repo(self, models_dir: Path):
-        wiki_client = MockWikiClient({})  # empty — nothing found
+        wiki_client = MockWikiClient({})  # empty -- nothing found
         resolver = ModelResolver(models_dir=models_dir, wiki_client=wiki_client)
-        result = resolver.resolve("cable_model", "cable_models", "test_cable_for_resistance")
+        result = resolver.resolve("connector_model", "connector_models", "test_connector")
         assert isinstance(result, ResolvedModel)
         assert result.source == "repo"
 
     def test_no_wiki_client(self, models_dir: Path):
         resolver = ModelResolver(models_dir=models_dir, wiki_client=None)
-        result = resolver.resolve("cable_model", "cable_models", "test_cable_for_resistance")
+        result = resolver.resolve("connector_model", "connector_models", "test_connector")
         assert isinstance(result, ResolvedModel)
         assert result.source == "repo"
 
-    def test_resolve_experiment(self, models_dir: Path, resistance_fixtures_dir: Path):
-        exp_dir = resistance_fixtures_dir / "valid_experiment"
-        experiment = load_experiment(exp_dir / "experiment.yaml")
-        definition = load_definition(
-            Path("experiment_types/resistance_characterization/v1/definition.yaml")
-        )
+    def test_resolve_session(self, models_dir: Path, resistance_session_dir: Path):
+        session = load_session(resistance_session_dir / "session.yaml")
+        definition = load_definition(RESISTANCE_DEFINITION)
 
         resolver = ModelResolver(models_dir=models_dir)
-        manifest = resolver.resolve_experiment(experiment, definition)
+        manifest = resolver.resolve_session(session, definition)
 
-        assert manifest.experiment_id == "test_resistance_valid"
-        assert "cable_model" in manifest.models
-        cable = manifest.models["cable_model"]
-        assert isinstance(cable, ResolvedModel)
-        assert cable.source == "repo"
+        assert manifest.session_ref == "test_cable/500mm/resistance/20250115_01"
+        assert "connector_model" in manifest.models
+        connector = manifest.models["connector_model"]
+        assert isinstance(connector, ResolvedModel)
+        assert connector.source == "repo"
 
-    def test_resolve_experiment_optional_not_provided(self, models_dir: Path):
+    def test_resolve_session_optional_not_provided(
+        self, models_dir: Path, measurements_fixtures_dir: Path
+    ):
         """Optional model_ref fields with no value should be recorded as 'not provided'."""
-        experiment = load_experiment(
-            Path("experiments/EXP_2025_01_15_resistance_coax_40awg/experiment.yaml")
+        session_dir = (
+            measurements_fixtures_dir / "test_cable" / "500mm" / "resistance" / "20250116_01"
         )
-        definition = load_definition(
-            Path("experiment_types/resistance_characterization/v1/definition.yaml")
-        )
+        session = load_session(session_dir / "session.yaml")
+        definition = load_definition(RESISTANCE_DEFINITION)
 
         resolver = ModelResolver(models_dir=models_dir)
-        manifest = resolver.resolve_experiment(experiment, definition)
+        manifest = resolver.resolve_session(session, definition)
 
-        # connector_model is optional and not provided
         assert "connector_model" in manifest.models
         conn = manifest.models["connector_model"]
         assert isinstance(conn, UnresolvedModel)
         assert "not provided" in conn.reason
 
-    def test_resolve_experiment_model_not_in_repo(self, tmp_path: Path):
+    def test_resolve_session_model_not_in_repo(self, tmp_path: Path):
         """Model ID provided but doesn't exist in repo."""
-        # Create a minimal experiment referencing a nonexistent model
-        exp_dir = tmp_path / "exp"
-        exp_dir.mkdir()
-        exp_yaml = {
+        session_yaml = {
             "schema_version": "1.0",
-            "experiment_id": "test",
-            "experiment_type": "resistance_characterization",
-            "experiment_type_version": 1,
+            "session_id": "20250101_01",
+            "profile_id": "test_cable",
+            "cable_length_mm": 500,
+            "measurement_type": "resistance",
+            "measurement_type_version": 1,
             "date": "2025-01-01",
+            "operator": "Test",
             "type_fields": {
-                "cable_model": "nonexistent_cable",
+                "connector_model": "nonexistent_connector",
                 "measurement_instrument": "DMM",
-                "measurement_method": "two_wire",
+                "measurement_method": "lcr_shorted_loop",
             },
         }
-        with open(exp_dir / "experiment.yaml", "w") as f:
-            yaml.dump(exp_yaml, f)
+        session_path = tmp_path / "session.yaml"
+        with open(session_path, "w") as f:
+            yaml.dump(session_yaml, f)
 
-        experiment = load_experiment(exp_dir / "experiment.yaml")
-        definition = load_definition(
-            Path("experiment_types/resistance_characterization/v1/definition.yaml")
-        )
+        session = load_session(session_path)
+        definition = load_definition(RESISTANCE_DEFINITION)
 
         empty_models = tmp_path / "models"
-        (empty_models / "cable_models").mkdir(parents=True)
+        (empty_models / "connector_models").mkdir(parents=True)
         resolver = ModelResolver(models_dir=empty_models)
-        manifest = resolver.resolve_experiment(experiment, definition)
+        manifest = resolver.resolve_session(session, definition)
 
-        cable = manifest.models["cable_model"]
-        assert isinstance(cable, UnresolvedModel)
-        assert "not found" in cable.reason
+        conn = manifest.models["connector_model"]
+        assert isinstance(conn, UnresolvedModel)
+        assert "not found" in conn.reason

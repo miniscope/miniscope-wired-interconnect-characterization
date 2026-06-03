@@ -48,25 +48,33 @@ class CommutatorModel(BaseHardwareModel):
 
 
 class MiniscopeModel(BaseHardwareModel):
-    """Metadata for a Miniscope model."""
+    """
+    Metadata for a Miniscope model, including its power requirements.
+
+    The power fields feed the supply-voltage analysis: given a cable's
+    measured round-trip resistivity and a length, the pipeline computes
+    the supply voltage required at the far end of the tether as
+        V_required = min_operating_voltage_v + I * R_roundtrip
+    where I is baseline_current_ma (typical use) or max_current_ma
+    (excitation LED at full power).
+    """
 
     miniscope_version: str = ""
     sensor_type: str = ""
     led_type: str = ""
     weight_g: float | None = None
-    power_consumption_mw: float | None = None
-
-
-class PowerProfile(BaseModel):
-    """Power profile for a Miniscope configuration."""
-
-    model_config = ConfigDict(extra="allow")
-
-    schema_version: str = Field(pattern=r"^\d+\.\d+$")
-    profile_id: str = Field(min_length=1)
-    description: str = ""
-    miniscope_model: str = ""
-    voltage_v: float | None = None
-    current_draw_ma: float | None = None
-    power_mw: float | None = None
-    signal_lines: list[str] = Field(default_factory=list)
+    min_operating_voltage_v: float | None = Field(
+        default=None,
+        description="Minimum voltage required at the Miniscope side of the tether",
+        gt=0,
+    )
+    baseline_current_ma: float | None = Field(
+        default=None,
+        description="Typical current draw during a standard recording",
+        gt=0,
+    )
+    max_current_ma: float | None = Field(
+        default=None,
+        description="Worst-case current draw (e.g. excitation LED at full power)",
+        gt=0,
+    )

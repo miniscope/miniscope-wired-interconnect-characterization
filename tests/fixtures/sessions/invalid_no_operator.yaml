@@ -1,0 +1,8 @@
+schema_version: "1.0"
+session_id: "20250101_01"
+profile_id: test_cable
+cable_length_mm: 500
+measurement_type: test_type
+measurement_type_version: 1
+date: 2025-01-01
+notes: "missing operator"

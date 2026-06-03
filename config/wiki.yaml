@@ -1,0 +1,17 @@
+# MediaWiki publishing configuration (no secrets here -- bot credentials
+# come from the MEDIAWIKI_BOT_USER / MEDIAWIKI_BOT_PASSWORD environment
+# variables, set as GitHub Actions secrets).
+#
+# TODO (Daniel): confirm the api_url and page locations before the first
+# live publish.
+
+api_url: "https://wiki.miniscope.org/api.php"
+
+# Main user-facing resource page (non-technical audience).
+main_page: "Cable_Characterization"
+
+# Per-profile detail pages; {profile_id} is substituted.
+profile_page_template: "Cable_Characterization/{profile_id}"
+
+# Prefix for uploaded plot images to avoid filename collisions on the wiki.
+image_prefix: "CableChar_"
