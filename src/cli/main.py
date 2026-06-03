@@ -156,6 +156,22 @@ def cmd_aggregate(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_consolidate(args: argparse.Namespace) -> int:
+    """Consolidate per-profile metrics across sessions."""
+    from src.analysis.consolidate import consolidate_profile, consolidate_profiles
+
+    repo_root = Path(args.repo_root)
+    if args.profile:
+        outputs = consolidate_profile(repo_root, args.profile)
+    else:
+        outputs = consolidate_profiles(repo_root)
+
+    print(f"Consolidated {len(outputs)} outputs:")
+    for name, path in outputs.items():
+        print(f"  {name}: {path}")
+    return 0
+
+
 def cmd_generate_payloads(args: argparse.Namespace) -> int:
     """Generate wiki payloads."""
     from src.wiki.payloads import generate_wiki_payloads
@@ -216,6 +232,12 @@ def app() -> None:
     p_aggregate = subparsers.add_parser("aggregate", help="Aggregate a measurement type")
     p_aggregate.add_argument("type", help="Measurement type name")
 
+    # consolidate
+    p_consolidate = subparsers.add_parser(
+        "consolidate", help="Consolidate per-profile metrics across sessions"
+    )
+    p_consolidate.add_argument("--profile", default=None, help="Limit to one profile id")
+
     # generate-payloads
     subparsers.add_parser("generate-payloads", help="Generate wiki payloads")
 
@@ -235,6 +257,7 @@ def app() -> None:
         "process": cmd_process,
         "process-all": cmd_process_all,
         "aggregate": cmd_aggregate,
+        "consolidate": cmd_consolidate,
         "generate-payloads": cmd_generate_payloads,
         "run-all": cmd_run_all,
     }

@@ -22,6 +22,9 @@ class TestFullPipeline:
             assert type_name in summary["aggregated"]
             assert "error" not in summary["aggregated"][type_name]
 
+        # Should have consolidated per-profile metrics
+        assert "test_cable_consolidated_json" in summary["consolidated"]
+
         # Should have generated a wiki payload per profile
         assert "test_cable" in summary["wiki_payloads"]
 
@@ -54,3 +57,9 @@ class TestFullPipeline:
         assert (aggregated / "resistance" / "resistance_summary.csv").exists()
         assert (aggregated / "serdes" / "serdes_metrics.csv").exists()
         assert (aggregated / "vna" / "vna_comparison.csv").exists()
+
+        profile_dir = test_repo / "derived" / "profiles" / "test_cable"
+        assert (profile_dir / "consolidated.json").exists()
+        assert (profile_dir / "resistance_by_length.csv").exists()
+        assert (profile_dir / "serdes_by_length.csv").exists()
+        assert (profile_dir / "vna_by_length.csv").exists()

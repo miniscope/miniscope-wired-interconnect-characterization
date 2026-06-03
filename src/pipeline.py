@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from src.aggregation.base import BaseAggregator, SessionContext
+from src.analysis.consolidate import consolidate_profiles
 from src.core.loading import load_session
 from src.core.session_validator import (
     ValidationResult,
@@ -246,10 +247,10 @@ def aggregate_type(
 def run_full_pipeline(repo_root: Path | None = None) -> dict:
     """
     Run the complete pipeline: process all sessions, aggregate all types,
-    generate wiki payloads.
+    consolidate per-profile metrics, generate wiki payloads.
 
     Returns a summary dict with processing results, aggregation outputs,
-    and wiki payload paths.
+    consolidation outputs, and wiki payload paths.
     """
     if repo_root is None:
         repo_root = Path(".")
@@ -257,6 +258,7 @@ def run_full_pipeline(repo_root: Path | None = None) -> dict:
     summary: dict = {
         "processed": [],
         "aggregated": {},
+        "consolidated": {},
         "wiki_payloads": {},
     }
 
@@ -283,6 +285,14 @@ def run_full_pipeline(repo_root: Path | None = None) -> dict:
         except Exception as e:
             logger.error("Aggregation failed for %s: %s", type_name, e)
             summary["aggregated"][type_name] = {"error": str(e)}
+
+    # Consolidate per-profile metrics across sessions
+    try:
+        consolidated = consolidate_profiles(repo_root)
+        summary["consolidated"] = {k: str(v) for k, v in consolidated.items()}
+    except Exception as e:
+        logger.error("Profile consolidation failed: %s", e)
+        summary["consolidated"] = {"error": str(e)}
 
     # Generate wiki payloads
     try:
