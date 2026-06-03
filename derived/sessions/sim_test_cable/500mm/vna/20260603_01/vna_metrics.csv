@@ -1,2 +1,0 @@
-max_insertion_loss_db,min_return_loss_db,characteristic_impedance_ohm,insertion_loss_1MHz_db,insertion_loss_1MHz_db_per_m,insertion_loss_10MHz_db,insertion_loss_10MHz_db_per_m,insertion_loss_100MHz_db,insertion_loss_100MHz_db_per_m,insertion_loss_1GHz_db,insertion_loss_1GHz_db_per_m,filename,description,num_points,frequency_start_hz,frequency_stop_hz
--2.6995,-18.4164,,-0.2816,-0.5632,-0.3488,-0.6977,-0.5662,-1.1324,-1.25,-2.5,sweep_01.s2p,nan,1001,1000000.0,6000000000.0

@@ -1,3 +1,0 @@
-cable_length_mm,n_sessions,mean_max_insertion_loss_db,std_max_insertion_loss_db,worst_max_insertion_loss_db
-500.0,1,-2.6995,,-2.6995
-2000.0,1,-10.798,,-10.798

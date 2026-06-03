@@ -1,2 +1,0 @@
-profile_id,roundtrip_resistivity_ohm_per_m,intercept_ohm,r_squared,n_lengths,method
-sim_test_cable,21.133333,-0.6,1.0,2,linear_fit

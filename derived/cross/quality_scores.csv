@@ -1,5 +1,0 @@
-profile_id,cable_length_mm,rate_gbps,worst_eye_area_ratio,worst_link_margin_mv,attenuation_db,quality_score,zone
-sim_test_cable,500.0,3,0.516602,51.0,2.6995,0.677646,marginal
-sim_test_cable,500.0,6,0.390625,66.0,2.6995,0.597255,marginal
-sim_test_cable,2000.0,3,0.25,96.0,10.798,0.40002,not_recommended
-sim_test_cable,2000.0,6,0.165039,111.0,10.798,0.336036,not_recommended

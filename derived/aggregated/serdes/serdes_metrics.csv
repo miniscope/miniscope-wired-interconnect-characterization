@@ -1,9 +1,0 @@
-profile_id,cable_length_mm,session_id,date,operator,channel,rate_gbps,eye_height_ratio,eye_width_ratio,eye_area_ratio,eye_height_mv,eye_width_ps,link_margin_mv,error_onset_mv
-sim_test_cable,2000.0,20260603_01,2026-06-03,Daniel Aharoni,forward,3,0.53125,0.53125,0.282227,425.0,177.083,91.0,90.0
-sim_test_cable,2000.0,20260603_01,2026-06-03,Daniel Aharoni,forward,6,0.4375,0.4375,0.191406,350.0,72.917,106.0,105.0
-sim_test_cable,2000.0,20260603_01,2026-06-03,Daniel Aharoni,back,3,0.5,0.5,0.25,400.0,166.667,96.0,95.0
-sim_test_cable,2000.0,20260603_01,2026-06-03,Daniel Aharoni,back,6,0.40625,0.40625,0.165039,325.0,67.708,111.0,110.0
-sim_test_cable,500.0,20260603_01,2026-06-03,Daniel Aharoni,forward,3,0.75,0.75,0.5625,600.0,250.0,46.0,45.0
-sim_test_cable,500.0,20260603_01,2026-06-03,Daniel Aharoni,forward,6,0.65625,0.65625,0.430664,525.0,109.375,61.0,60.0
-sim_test_cable,500.0,20260603_01,2026-06-03,Daniel Aharoni,back,3,0.71875,0.71875,0.516602,575.0,239.583,51.0,50.0
-sim_test_cable,500.0,20260603_01,2026-06-03,Daniel Aharoni,back,6,0.625,0.625,0.390625,500.0,104.167,66.0,65.0

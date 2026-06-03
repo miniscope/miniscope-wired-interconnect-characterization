@@ -1,9 +1,0 @@
-cable_length_mm,channel,rate_gbps,n_sessions,mean_eye_area_ratio,std_eye_area_ratio,mean_eye_height_mv,std_eye_height_mv,mean_eye_width_ps,std_eye_width_ps,mean_link_margin_mv,std_link_margin_mv
-500.0,back,3,1,0.516602,,575.0,,239.583,,51.0,
-500.0,back,6,1,0.390625,,500.0,,104.167,,66.0,
-500.0,forward,3,1,0.5625,,600.0,,250.0,,46.0,
-500.0,forward,6,1,0.430664,,525.0,,109.375,,61.0,
-2000.0,back,3,1,0.25,,400.0,,166.667,,96.0,
-2000.0,back,6,1,0.165039,,325.0,,67.708,,111.0,
-2000.0,forward,3,1,0.282227,,425.0,,177.083,,91.0,
-2000.0,forward,6,1,0.191406,,350.0,,72.917,,106.0,

@@ -9,18 +9,5 @@
       "file": "pages/Coax_cable_characterization__coax_spi_sci_40awg.wiki"
     }
   ],
-  "images": [
-    {
-      "local_path": "derived\\cross\\quality_vs_length_3g.png",
-      "wiki_name": "CoaxCableChar_cross_quality_vs_length_3g.png"
-    },
-    {
-      "local_path": "derived\\cross\\quality_vs_length_6g.png",
-      "wiki_name": "CoaxCableChar_cross_quality_vs_length_6g.png"
-    },
-    {
-      "local_path": "derived\\cross\\supply_voltage_miniscope_v4.png",
-      "wiki_name": "CoaxCableChar_cross_supply_voltage_miniscope_v4.png"
-    }
-  ]
+  "images": []
 }
