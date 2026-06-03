@@ -7,10 +7,6 @@
     {
       "title": "Coax_cable_characterization/coax_spi_sci_40awg",
       "file": "pages/Coax_cable_characterization__coax_spi_sci_40awg.wiki"
-    },
-    {
-      "title": "Coax_cable_characterization/sim_test_cable",
-      "file": "pages/Coax_cable_characterization__sim_test_cable.wiki"
     }
   ],
   "images": [
@@ -25,50 +21,6 @@
     {
       "local_path": "derived\\cross\\supply_voltage_miniscope_v4.png",
       "wiki_name": "CoaxCableChar_cross_supply_voltage_miniscope_v4.png"
-    },
-    {
-      "local_path": "derived\\sessions\\sim_test_cable\\2000mm\\serdes\\20260603_01\\eye_back_3g.png",
-      "wiki_name": "CoaxCableChar_sessions_sim_test_cable_2000mm_serdes_20260603_01_eye_back_3g.png"
-    },
-    {
-      "local_path": "derived\\sessions\\sim_test_cable\\2000mm\\serdes\\20260603_01\\eye_back_6g.png",
-      "wiki_name": "CoaxCableChar_sessions_sim_test_cable_2000mm_serdes_20260603_01_eye_back_6g.png"
-    },
-    {
-      "local_path": "derived\\sessions\\sim_test_cable\\2000mm\\serdes\\20260603_01\\eye_forward_3g.png",
-      "wiki_name": "CoaxCableChar_sessions_sim_test_cable_2000mm_serdes_20260603_01_eye_forward_3g.png"
-    },
-    {
-      "local_path": "derived\\sessions\\sim_test_cable\\2000mm\\serdes\\20260603_01\\eye_forward_6g.png",
-      "wiki_name": "CoaxCableChar_sessions_sim_test_cable_2000mm_serdes_20260603_01_eye_forward_6g.png"
-    },
-    {
-      "local_path": "derived\\sessions\\sim_test_cable\\500mm\\serdes\\20260603_01\\eye_back_3g.png",
-      "wiki_name": "CoaxCableChar_sessions_sim_test_cable_500mm_serdes_20260603_01_eye_back_3g.png"
-    },
-    {
-      "local_path": "derived\\sessions\\sim_test_cable\\500mm\\serdes\\20260603_01\\eye_back_6g.png",
-      "wiki_name": "CoaxCableChar_sessions_sim_test_cable_500mm_serdes_20260603_01_eye_back_6g.png"
-    },
-    {
-      "local_path": "derived\\sessions\\sim_test_cable\\500mm\\serdes\\20260603_01\\eye_forward_3g.png",
-      "wiki_name": "CoaxCableChar_sessions_sim_test_cable_500mm_serdes_20260603_01_eye_forward_3g.png"
-    },
-    {
-      "local_path": "derived\\sessions\\sim_test_cable\\500mm\\serdes\\20260603_01\\eye_forward_6g.png",
-      "wiki_name": "CoaxCableChar_sessions_sim_test_cable_500mm_serdes_20260603_01_eye_forward_6g.png"
-    },
-    {
-      "local_path": "derived\\aggregated\\serdes\\serdes_eye_vs_length.png",
-      "wiki_name": "CoaxCableChar_aggregated_serdes_serdes_eye_vs_length.png"
-    },
-    {
-      "local_path": "derived\\aggregated\\serdes\\serdes_margin_vs_length.png",
-      "wiki_name": "CoaxCableChar_aggregated_serdes_serdes_margin_vs_length.png"
-    },
-    {
-      "local_path": "derived\\aggregated\\vna\\vna_comparison.png",
-      "wiki_name": "CoaxCableChar_aggregated_vna_vna_comparison.png"
     }
   ]
 }
