@@ -47,7 +47,13 @@ def landing_page() -> None:
         lambda e: ui.navigate.to(f"/profile/{e.args[1]['profile_id']}"),
     )
 
-    ui.button("New cable profile", icon="add", on_click=_new_profile_dialog)
+    with ui.row():
+        ui.button("New cable profile", icon="add", on_click=_new_profile_dialog)
+        ui.button(
+            "Miniscope models",
+            icon="memory",
+            on_click=lambda: ui.navigate.to("/miniscopes"),
+        ).props("outline")
 
 
 def _new_profile_dialog() -> None:

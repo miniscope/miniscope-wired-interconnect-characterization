@@ -1,0 +1,16 @@
+schema_version: "1.0"
+model_id: test_miniscope_fpd
+manufacturer: "Test Lab"
+description: "Fixture FPD-Link III miniscope: quality is projected from VNA attenuation"
+miniscope_version: "4.0"
+min_operating_voltage_v: 3.3
+max_operating_voltage_v: 5.5
+min_current_ma: 20.0
+baseline_current_ma: 150.0
+max_current_ma: 300.0
+poc_dcr_supply_ohm: 0.05
+poc_dcr_receive_ohm: 0.05
+supply_mode: fixed_5v
+default_supply_v: 5.0
+serdes_family: "FPD-Link III"
+serdes_rate_gbps: 1.5

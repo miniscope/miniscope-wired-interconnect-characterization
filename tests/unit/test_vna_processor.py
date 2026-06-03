@@ -100,6 +100,25 @@ class TestProcessVNA:
         assert "mean_max_insertion_loss_db" in summary
         assert summary["vna_instrument"] == "Test VNA"
 
+    def test_summary_attenuation_by_frequency(
+        self, processor, definition, vna_session_dir: Path, tmp_path: Path
+    ):
+        """Summary carries attenuation at the reference frequencies the sweep covered."""
+        session = load_session(vna_session_dir / "session.yaml")
+        outputs = processor.process(vna_session_dir, session, definition, tmp_path / "output")
+
+        with open(outputs["vna_summary_json"]) as f:
+            summary = json.load(f)
+
+        att = summary["attenuation_db_by_hz"]
+        # Fixture sweeps 1 MHz - 1 GHz: 750 MHz (FPD-Link III Nyquist) is
+        # covered, the GMSL2 Nyquist points (1.5/3 GHz) are not.
+        assert "750000000" in att
+        assert "3000000000" not in att
+        assert all(v > 0 for v in att.values())  # attenuation is positive dB
+        # More attenuation at higher frequency (coax loss grows with f)
+        assert att["750000000"] > att["1000000"]
+
     def test_minimal_session(
         self, processor, definition, measurements_fixtures_dir: Path, tmp_path: Path
     ):

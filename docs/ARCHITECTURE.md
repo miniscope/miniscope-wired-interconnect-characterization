@@ -127,10 +127,23 @@ conflicts between concurrent PRs).
    repeated sessions into one row per condition with across-session
    variability. Downstream consumers never re-derive statistics.
 4. **cross** (`src/analysis/cross.py`) -- the headline outputs that span
-   types: the resistance-vs-length fit (slope = round-trip resistivity,
-   intercept = connector resistance), supply-voltage requirements per
-   miniscope (V_min + I*rho*L -- no factor of 2, the shorted-loop
-   protocol already measures the round trip), and the 0-1 quality score.
+   types. Two co-equal guidance products per (miniscope x cable) over
+   length -- a Miniscope fails by brownout OR by link errors, so both are
+   always published:
+   - **Supply-voltage window**: the DC loop runs supply-side PoC choke ->
+     cable (round-trip; no factor of 2, the shorted-loop protocol already
+     measures the full path) -> receive-side PoC choke. Floor
+     `Vmin + I_max*R_chain`, ceiling `Vmax + I_min*R_chain`; an empty
+     window means the (cable, length) is infeasible, and the floor's
+     crossing of the default 5 V supply gives the voltage-limited max
+     length. The miniscope model carries the DAQ-implied parameters (the
+     Miniscope<->DAQ pairing is 1:1, so there is no separate DAQ entity).
+   - **Quality at the miniscope's own rate**: measured eye/link data for
+     rates we capture (GMSL2), or projected from the cable's VNA
+     attenuation at the link's Nyquist frequency for rates without eye
+     hardware (FPD-Link III) -- always tagged measured vs projected.
+   Plus the resistance-vs-length fit (slope = round-trip resistivity,
+   intercept = connector resistance) and the per-rate 0-1 quality score.
 5. **render/publish wiki** (`src/wiki/`) -- pure offline rendering of
    pages + an image manifest, then a thin mwclient publisher. Rendering
    and publishing are separate so pages are testable without a network.
@@ -189,7 +202,9 @@ pick the new type up from the definition.
 - Additional eye metrics (jitter, Q-factor) -- `src/processing/eye.py`
 - Real SerDes driver -- `src/instruments/serdes/real.py` (awaiting the
   lab's GMSL2 scripts)
-- Miniscope power values are placeholders -- `models/miniscope_models/`
+- Miniscope electrical values are placeholders -- `models/miniscope_models/`
+  (regulator limits, currents, PoC choke DCRs, FPD-Link III rate). Models
+  are entered/viewed via the acquisition app's `/miniscopes` page.
 
 Resolved since the original design:
 

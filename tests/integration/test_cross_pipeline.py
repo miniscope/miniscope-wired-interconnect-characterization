@@ -24,10 +24,14 @@ class TestCrossAnalysis:
         assert "resistivity_summary" in outputs
         assert "supply_voltage_table" in outputs
         assert "supply_voltage_plot_test_miniscope" in outputs
+        assert "supply_voltage_plot_test_miniscope_fpd" in outputs
         assert "max_length_summary" in outputs
         assert "quality_scores" in outputs
         assert "quality_vs_length_plot_3g" in outputs
         assert "quality_vs_length_plot_6g" in outputs
+        assert "miniscope_quality" in outputs
+        assert "miniscope_quality_plot_test_miniscope" in outputs
+        assert "miniscope_quality_plot_test_miniscope_fpd" in outputs
         for path in outputs.values():
             assert path.exists()
             assert path.stat().st_size > 0
@@ -47,26 +51,50 @@ class TestCrossAnalysis:
         outputs = run_cross_analysis(analyzed_repo)
         df = pd.read_csv(outputs["supply_voltage_table"])
 
-        # 1 miniscope x 1 profile x 2 lengths (500, 1000)
-        assert len(df) == 2
+        # 2 miniscopes x 1 profile x 2 lengths (500, 1000)
+        assert len(df) == 4
+        assert set(df["miniscope_model"]) == {"test_miniscope", "test_miniscope_fpd"}
         assert set(df["cable_length_mm"]) == {500.0, 1000.0}
         # Floor below ceiling -> feasible window; fixture sits in the 5 V window
         assert (df["v_supply_min"] < df["v_supply_max"]).all()
         assert df["feasible"].all()
         # Worst-case droop floor grows with length
-        by_length = df.set_index("cable_length_mm")["v_supply_min"]
+        scope_df = df[df["miniscope_model"] == "test_miniscope"]
+        by_length = scope_df.set_index("cable_length_mm")["v_supply_min"]
         assert by_length[1000.0] > by_length[500.0]
 
     def test_max_length_summary(self, analyzed_repo: Path):
         outputs = run_cross_analysis(analyzed_repo)
         df = pd.read_csv(outputs["max_length_summary"])
 
-        # 1 miniscope x 1 profile
-        assert len(df) == 1
-        row = df.iloc[0]
-        assert row["miniscope_model"] == "test_miniscope"
-        assert row["profile_id"] == "test_cable"
-        assert row["voltage_limited_max_length_mm"] > 0
+        # 2 miniscopes x 1 profile
+        assert len(df) == 2
+        assert set(df["miniscope_model"]) == {"test_miniscope", "test_miniscope_fpd"}
+        assert (df["profile_id"] == "test_cable").all()
+        assert (df["voltage_limited_max_length_mm"] > 0).all()
+
+    def test_miniscope_quality(self, analyzed_repo: Path):
+        outputs = run_cross_analysis(analyzed_repo)
+        df = pd.read_csv(outputs["miniscope_quality"])
+
+        # GMSL2 fixture scope (6 Gbps is a measured rate) -> measured rows
+        gmsl = df[df["miniscope_model"] == "test_miniscope"]
+        assert not gmsl.empty
+        assert set(gmsl["source"]) == {"measured"}
+        assert set(gmsl["rate_gbps"]) == {6.0}
+        assert set(gmsl["cable_length_mm"]) == {500.0, 1000.0}
+
+        # FPD-Link III fixture scope (1.5 Gbps unmeasured) -> projected from
+        # VNA attenuation at 750 MHz; fixtures only have VNA data at 1000mm
+        fpd = df[df["miniscope_model"] == "test_miniscope_fpd"]
+        assert not fpd.empty
+        assert set(fpd["source"]) == {"projected_from_vna"}
+        assert set(fpd["cable_length_mm"]) == {1000.0}
+        assert (fpd["attenuation_db"] > 0).all()
+
+        assert (df["quality_score"] >= 0).all()
+        assert (df["quality_score"] <= 1).all()
+        assert set(df["zone"]).issubset({"works", "marginal", "not_recommended"})
 
     def test_quality_scores(self, analyzed_repo: Path):
         outputs = run_cross_analysis(analyzed_repo)

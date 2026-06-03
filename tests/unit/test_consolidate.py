@@ -78,6 +78,20 @@ class TestConsolidateProfile:
         # Both VNA sessions are at 1000mm -> one pooled row
         assert len(df) == 1
         assert df.iloc[0]["n_sessions"] == 2
+        # Nested attenuation map stays out of the flat CSV
+        assert "attenuation_db_by_hz" not in df.columns
+
+    def test_vna_attenuation_map_pooled(self, processed_repo: Path):
+        outputs = consolidate_profile(processed_repo, "test_cable")
+
+        with open(outputs["test_cable_consolidated_json"]) as f:
+            consolidated = json.load(f)
+
+        att = consolidated["vna_by_length"][0]["attenuation_db_by_hz"]
+        # Pooled across both 1000mm sessions; 750 MHz (FPD-Link III Nyquist)
+        # is inside the fixtures' 1 MHz - 1 GHz sweep
+        assert "750000000" in att
+        assert all(v > 0 for v in att.values())
 
     def test_consolidated_json_structure(self, processed_repo: Path):
         outputs = consolidate_profile(processed_repo, "test_cable")

@@ -89,8 +89,12 @@ class ProcessVNA(BaseProcessor):
     Cable length is structural: it comes from the session, not the manifest.
     """
 
-    METRIC_FREQUENCIES_HZ = [1e6, 10e6, 100e6, 1e9]
-    METRIC_FREQ_LABELS = ["1MHz", "10MHz", "100MHz", "1GHz"]
+    # Reference frequencies include the Nyquist fundamentals of the link
+    # rates we project/report quality at: 750 MHz (FPD-Link III ~1.5 Gbps),
+    # 1.5 GHz (GMSL2 3 Gbps), 3 GHz (GMSL2 6 Gbps). Frequencies outside a
+    # sweep's span are skipped.
+    METRIC_FREQUENCIES_HZ = [1e6, 10e6, 100e6, 500e6, 750e6, 1e9, 1.5e9, 3e9]
+    METRIC_FREQ_LABELS = ["1MHz", "10MHz", "100MHz", "500MHz", "750MHz", "1GHz", "1500MHz", "3GHz"]
 
     def __init__(self, models_dir: Path | None = None) -> None:
         self._models_dir = models_dir
@@ -215,6 +219,19 @@ class ProcessVNA(BaseProcessor):
         ):
             series = df["characteristic_impedance_ohm"].dropna()
             summary["mean_characteristic_impedance_ohm"] = round(float(series.mean()), 2)
+
+        # Attenuation (positive dB) at each reference frequency the sweep
+        # covered, keyed by frequency in Hz. Downstream, quality projection
+        # interpolates this map at a link rate's Nyquist frequency.
+        attenuation_by_hz: dict[str, float] = {}
+        for freq_hz, label in zip(
+            self.METRIC_FREQUENCIES_HZ, self.METRIC_FREQ_LABELS, strict=False
+        ):
+            col = f"insertion_loss_{label}_db"
+            if col in df.columns and not df[col].isna().all():
+                attenuation_by_hz[str(int(freq_hz))] = round(-float(df[col].dropna().mean()), 4)
+        if attenuation_by_hz:
+            summary["attenuation_db_by_hz"] = attenuation_by_hz
 
         type_fields = session.type_fields
         for key in ["vna_instrument", "calibration_type", "port_impedance_ohm"]:

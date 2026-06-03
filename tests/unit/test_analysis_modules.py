@@ -5,6 +5,7 @@ from pathlib import Path
 import pytest
 
 from src.analysis.config import load_analysis_config
+from src.analysis.projection import attenuation_at_hz, nyquist_hz
 from src.analysis.quality_score import QualityInputs, score, zone
 from src.analysis.resistivity import fit_resistivity
 from src.analysis.supply_voltage import (
@@ -132,6 +133,32 @@ class TestSupplyVoltage:
         assert supply_voltage_rows(scope, "test_cable", 2.0, [500.0]) == []
         assert supply_window(scope, 2.0, 1.0) is None
         assert max_length_at_default_v(scope, 2.0) is None
+
+
+class TestProjection:
+    def test_nyquist(self):
+        assert nyquist_hz(1.5) == pytest.approx(750e6)
+        assert nyquist_hz(6.0) == pytest.approx(3e9)
+
+    def test_interpolates_between_points(self):
+        att = {"100000000": 1.0, "1000000000": 4.0}  # 1 dB @ 100 MHz, 4 dB @ 1 GHz
+        # Linear midpoint at 550 MHz
+        assert attenuation_at_hz(att, 550e6) == pytest.approx(2.5)
+
+    def test_exact_point(self):
+        att = {"750000000": 3.2, "1000000000": 4.0}
+        assert attenuation_at_hz(att, 750e6) == pytest.approx(3.2)
+
+    def test_never_extrapolates(self):
+        att = {"100000000": 1.0, "1000000000": 4.0}
+        assert attenuation_at_hz(att, 3e9) is None  # above the sweep
+        assert attenuation_at_hz(att, 1e6) is None  # below the sweep
+
+    def test_empty_map(self):
+        assert attenuation_at_hz({}, 750e6) is None
+
+    def test_numeric_keys_accepted(self):
+        assert attenuation_at_hz({1e8: 1.0, 1e9: 4.0}, 1e9) == pytest.approx(4.0)
 
 
 class TestQualityScore:

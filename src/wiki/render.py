@@ -130,6 +130,36 @@ class WikiRenderer:
                 )
             )
 
+        # Per-miniscope quality at the miniscope's own link rate
+        miniscope_quality_df = self._cross_csv("miniscope_quality.csv")
+        if miniscope_quality_df is not None:
+            parts.append("\n== Which cable works with my Miniscope? ==\n")
+            parts.append(
+                "Each Miniscope runs its link at one rate, so these curves show "
+                "cable quality at that rate. Curves marked ''projected'' are "
+                "derived from the cable's measured attenuation rather than a "
+                "direct eye measurement.\n"
+            )
+            for plot in sorted(cross_dir.glob("miniscope_quality_*.png")):
+                scope = plot.stem.replace("miniscope_quality_", "")
+                wiki_name = self._register_image(plot)
+                if wiki_name:
+                    parts.append(_image_ref(wiki_name, f"Cable quality vs length ({scope})"))
+            parts.append(
+                _wiki_table(
+                    miniscope_quality_df,
+                    {
+                        "miniscope_model": "Miniscope",
+                        "profile_id": "Cable",
+                        "cable_length_mm": "Length (mm)",
+                        "rate_gbps": "Rate (Gbps)",
+                        "quality_score": "Score",
+                        "zone": "Recommendation",
+                        "source": "Source",
+                    },
+                )
+            )
+
         # Supply voltage guidance
         parts.append("\n== What supply voltage do I need? ==\n")
         parts.append(

@@ -30,7 +30,7 @@ class ProfileSummary:
 
 @dataclass
 class FormField:
-    """One input in the auto-generated create-profile form."""
+    """One input in a schema-derived form (profiles, miniscope models)."""
 
     name: str
     label: str
@@ -38,6 +38,7 @@ class FormField:
     required: bool
     default: Any = None
     description: str = ""
+    choices: list[str] | None = None  # Literal fields render as a select
 
 
 # Fields the app fills automatically rather than asking the user.
