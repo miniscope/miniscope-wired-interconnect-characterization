@@ -1,5 +1,0 @@
-channel,rate_gbps,eye_npz,margin_csv
-forward,3,eye_forward_3g.npz,margin_forward_3g.csv
-forward,6,eye_forward_6g.npz,margin_forward_6g.csv
-back,3,eye_back_3g.npz,margin_back_3g.csv
-back,6,eye_back_6g.npz,margin_back_6g.csv

@@ -74,4 +74,3 @@ Thin coax drops voltage. Power your Miniscope with at least the max-load voltage
 == Per-cable details ==
 
 * [[Coax_cable_characterization/coax_spi_sci_40awg|coax_spi_sci_40awg]]
-* [[Coax_cable_characterization/sim_test_cable|sim_test_cable]]
