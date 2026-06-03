@@ -1,0 +1,11 @@
+schema_version: '1.0'
+profile_id: sim_test_cable
+name: Simulated Test Cable
+manufacturer: ''
+part_number: ''
+shield_type: ''
+connector_type_a: ''
+connector_type_b: ''
+cable_type: coaxial
+notes: ''
+tags: []

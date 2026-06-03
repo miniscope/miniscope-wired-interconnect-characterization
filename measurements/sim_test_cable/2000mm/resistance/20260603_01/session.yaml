@@ -1,0 +1,13 @@
+schema_version: '1.0'
+session_id: '20260603_01'
+profile_id: sim_test_cable
+cable_length_mm: 2000.0
+measurement_type: resistance
+measurement_type_version: 1
+date: 2026-06-03
+operator: Daniel Aharoni
+notes: ''
+type_fields:
+  measurement_instrument: Simulated resistance measurement
+  measurement_method: lcr_shorted_loop
+  temperature_c: 25.0

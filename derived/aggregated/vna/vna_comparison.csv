@@ -1,0 +1,3 @@
+profile_id,cable_length_mm,session_id,date,operator,vna_instrument,calibration_type,num_files,mean_max_insertion_loss_db,worst_max_insertion_loss_db,mean_min_return_loss_db
+sim_test_cable,2000.0,20260603_01,2026-06-03,Daniel Aharoni,Simulated VNA,SOLT,1,-10.798,-10.798,-18.4164
+sim_test_cable,500.0,20260603_01,2026-06-03,Daniel Aharoni,Simulated VNA,SOLT,1,-2.6995,-2.6995,-18.4164

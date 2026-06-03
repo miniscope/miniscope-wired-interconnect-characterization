@@ -1,0 +1,3 @@
+miniscope_model,profile_id,cable_length_mm,roundtrip_resistivity_ohm_per_m,min_supply_v_baseline,min_supply_v_max_load
+miniscope_v4,sim_test_cable,500.0,21.1333,4.885,6.47
+miniscope_v4,sim_test_cable,2000.0,21.1333,9.64,15.98
