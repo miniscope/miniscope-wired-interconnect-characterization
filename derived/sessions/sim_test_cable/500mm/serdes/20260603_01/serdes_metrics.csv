@@ -1,0 +1,5 @@
+channel,rate_gbps,eye_npz,eye_height_bins,eye_width_bins,eye_height_ratio,eye_width_ratio,eye_area_ratio,eye_height_mv,eye_width_ps,eye_png,margin_csv,link_margin_mv,error_onset_mv,num_margin_points
+forward,3,eye_forward_3g.npz,48,48,0.75,0.75,0.5625,600.0,250.0,eye_forward_3g.png,margin_forward_3g.csv,46.0,45.0,47
+forward,6,eye_forward_6g.npz,42,42,0.65625,0.65625,0.430664,525.0,109.375,eye_forward_6g.png,margin_forward_6g.csv,61.0,60.0,47
+back,3,eye_back_3g.npz,46,46,0.71875,0.71875,0.516602,575.0,239.583,eye_back_3g.png,margin_back_3g.csv,51.0,50.0,47
+back,6,eye_back_6g.npz,40,40,0.625,0.625,0.390625,500.0,104.167,eye_back_6g.png,margin_back_6g.csv,66.0,65.0,47

@@ -67,13 +67,15 @@ class TestRenderWiki:
 
     def test_upload_manifest(self, analyzed_repo: Path):
         outputs = render_wiki(analyzed_repo)
+        config = load_wiki_config(analyzed_repo / "config" / "wiki.yaml")
         with open(outputs["upload_manifest"]) as f:
             manifest = json.load(f)
 
         assert len(manifest["pages"]) == 2  # main + 1 profile
         assert len(manifest["images"]) > 0
         for image in manifest["images"]:
-            assert image["wiki_name"].startswith("CableChar_")
+            # Prefix comes from config/wiki.yaml, never hardcoded
+            assert image["wiki_name"].startswith(config.image_prefix)
             assert (analyzed_repo / image["local_path"]).exists()
 
     def test_render_without_analysis_still_produces_pages(self, test_repo: Path):

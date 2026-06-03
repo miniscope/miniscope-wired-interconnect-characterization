@@ -1,0 +1,58 @@
+{
+  "session_id": "20260603_01",
+  "profile_id": "sim_test_cable",
+  "cable_length_mm": 2000.0,
+  "measurement_type": "serdes",
+  "date": "2026-06-03",
+  "operator": "Daniel Aharoni",
+  "num_combos": 4,
+  "combos": [
+    {
+      "channel": "forward",
+      "rate_gbps": 3,
+      "eye_height_ratio": 0.53125,
+      "eye_width_ratio": 0.53125,
+      "eye_area_ratio": 0.282227,
+      "eye_height_mv": 425.0,
+      "eye_width_ps": 177.083,
+      "link_margin_mv": 91.0,
+      "error_onset_mv": 90.0
+    },
+    {
+      "channel": "forward",
+      "rate_gbps": 6,
+      "eye_height_ratio": 0.4375,
+      "eye_width_ratio": 0.4375,
+      "eye_area_ratio": 0.191406,
+      "eye_height_mv": 350.0,
+      "eye_width_ps": 72.917,
+      "link_margin_mv": 106.0,
+      "error_onset_mv": 105.0
+    },
+    {
+      "channel": "back",
+      "rate_gbps": 3,
+      "eye_height_ratio": 0.5,
+      "eye_width_ratio": 0.5,
+      "eye_area_ratio": 0.25,
+      "eye_height_mv": 400.0,
+      "eye_width_ps": 166.667,
+      "link_margin_mv": 96.0,
+      "error_onset_mv": 95.0
+    },
+    {
+      "channel": "back",
+      "rate_gbps": 6,
+      "eye_height_ratio": 0.40625,
+      "eye_width_ratio": 0.40625,
+      "eye_area_ratio": 0.165039,
+      "eye_height_mv": 325.0,
+      "eye_width_ps": 67.708,
+      "link_margin_mv": 111.0,
+      "error_onset_mv": 110.0
+    }
+  ],
+  "worst_eye_area_ratio": 0.165039,
+  "worst_link_margin_mv": 111.0,
+  "serdes_device": "Sim SerDes"
+}
