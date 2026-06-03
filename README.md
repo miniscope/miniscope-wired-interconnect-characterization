@@ -74,9 +74,15 @@ pipeline run regenerates everything downstream.
 ## Submitting data
 
 1. Run your sessions through the app (they land in `measurements/`).
-2. Open a PR. CI lints, tests, validates every session, and runs the full
-   analysis as a dry run (derived outputs attached as a preview artifact).
-3. Merge. CI re-runs the analysis, commits `derived/` back to main, and
+2. Commit **only** your `measurements/` (and any new `profiles/`) changes
+   -- **never commit `derived/` in a PR.** CI regenerates and commits it
+   after every merge, so including it only creates merge conflicts
+   between concurrent PRs. If you ran `run-all` locally, leave its output
+   out of the commit (`git add measurements/ profiles/`).
+3. Open the PR. CI lints, tests, validates every session, and runs the
+   full analysis as a dry run (derived outputs attached as a preview
+   artifact you can inspect).
+4. Merge. CI re-runs the analysis, commits `derived/` back to main, and
    publishes the updated pages to the Miniscope wiki.
 
 ## Analysis pipeline
@@ -85,6 +91,11 @@ pipeline run regenerates everything downstream.
 poetry run miniscope-char validate-all   # every profile + session
 poetry run miniscope-char run-all        # process -> aggregate -> consolidate -> cross -> render
 ```
+
+`run-all` wipes the regenerable `derived/` subtrees first, so its output
+always reflects exactly the current `measurements/` tree -- including
+deletions. Removing a bad session is just `git rm -r` of its folder; the
+next run (locally or in CI) prunes everything derived from it.
 
 Stages (each runnable individually -- see `miniscope-char --help`):
 

@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import importlib
 import logging
+import shutil
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -259,16 +260,45 @@ def aggregate_type(
     return all_outputs
 
 
-def run_full_pipeline(repo_root: Path | None = None) -> dict:
+# Regenerable derived/ subtrees, wiped before a full pipeline run so that
+# deleted sessions/profiles don't leave stale outputs behind.
+_DERIVED_SUBDIRS = ["sessions", "aggregated", "profiles", "cross", "wiki"]
+
+
+def clean_derived(repo_root: Path) -> None:
+    """
+    Remove all regenerable derived outputs.
+
+    Everything under these subtrees is reproducible from measurements/, so
+    wiping them before a full run is always safe -- and it is the only way
+    deletions propagate (the stages overwrite files they generate, but
+    know nothing about outputs whose source data no longer exists).
+    """
+    for name in _DERIVED_SUBDIRS:
+        target = repo_root / "derived" / name
+        if target.exists():
+            shutil.rmtree(target)
+        target.mkdir(parents=True, exist_ok=True)
+        (target / ".gitkeep").touch()
+
+
+def run_full_pipeline(repo_root: Path | None = None, clean: bool = True) -> dict:
     """
     Run the complete pipeline: process all sessions, aggregate all types,
     consolidate per-profile metrics, generate wiki payloads.
+
+    By default the regenerable derived/ subtrees are wiped first so the
+    outputs exactly reflect the current measurements/ tree (pass
+    clean=False to skip, e.g. for incremental experimentation).
 
     Returns a summary dict with processing results, aggregation outputs,
     consolidation outputs, and wiki payload paths.
     """
     if repo_root is None:
         repo_root = Path(".")
+
+    if clean:
+        clean_derived(repo_root)
 
     summary: dict = {
         "processed": [],

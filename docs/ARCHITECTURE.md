@@ -109,7 +109,14 @@ realistic data shapes.
 
 ## The pipeline (`src/pipeline.py` + `src/analysis/`)
 
-Five deterministic stages, each idempotent and individually runnable:
+Five deterministic stages, each idempotent and individually runnable.
+A full run (`run-all`) first wipes the regenerable `derived/` subtrees so
+the outputs mirror the current `measurements/` tree exactly -- this is how
+deleting a bad session propagates: the stages overwrite what they
+generate, but only the clean step removes outputs whose source data is
+gone. Corollary for contributors: never commit `derived/` in a PR (CI
+regenerates and commits it on merge; committing it yourself only creates
+conflicts between concurrent PRs).
 
 1. **process** (`src/processing/`) -- one session in, normalized
    CSV/JSON out. Per-type processors compute the metrics: round-trip
