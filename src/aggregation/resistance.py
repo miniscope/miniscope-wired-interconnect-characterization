@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import json
-import logging
 from pathlib import Path
 
 import matplotlib
@@ -13,8 +11,6 @@ import matplotlib.pyplot as plt
 from src.aggregation.base import BaseAggregator, SessionContext
 from src.core.schemas import MeasurementDefinition
 
-logger = logging.getLogger(__name__)
-
 
 class ResistanceSummary(BaseAggregator):
     """
@@ -25,10 +21,6 @@ class ResistanceSummary(BaseAggregator):
     def __init__(self, derived_dir: Path | None = None) -> None:
         self._derived_dir = derived_dir
 
-    @property
-    def name(self) -> str:
-        return "resistance_summary"
-
     def aggregate(
         self,
         sessions: list[SessionContext],
@@ -37,7 +29,7 @@ class ResistanceSummary(BaseAggregator):
     ) -> dict[str, Path]:
         output_dir.mkdir(parents=True, exist_ok=True)
 
-        summaries = self._load_session_summaries(sessions)
+        summaries = self.load_summaries(sessions, "resistance")
         outputs: dict[str, Path] = {}
 
         if summaries:
@@ -51,21 +43,6 @@ class ResistanceSummary(BaseAggregator):
             outputs["resistance_boxplot"] = boxplot_path
 
         return outputs
-
-    def _load_session_summaries(self, sessions: list[SessionContext]) -> list[dict]:
-        """Load resistance_summary.json from each session's derived output."""
-        summaries: list[dict] = []
-        for ctx in sessions:
-            summary_path = ctx.derived_dir / "resistance_summary.json"
-
-            if not summary_path.exists():
-                logger.warning("No processed summary for %s, skipping", ctx.label)
-                continue
-
-            with open(summary_path) as f:
-                summaries.append(json.load(f))
-
-        return summaries
 
     def _build_summary_table(self, summaries: list[dict]) -> pd.DataFrame:
         """Build a DataFrame with one row per session."""

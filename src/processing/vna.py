@@ -8,7 +8,7 @@ import pandas as pd
 
 from src.core.schemas import MeasurementDefinition
 from src.core.session_schemas import SessionRecord
-from src.processing.base import BaseProcessor
+from src.processing.base import BaseProcessor, copy_type_fields, session_header
 from src.processing.touchstone import TouchstoneData, parse_s2p
 
 
@@ -98,10 +98,6 @@ class ProcessVNA(BaseProcessor):
 
     def __init__(self, models_dir: Path | None = None) -> None:
         self._models_dir = models_dir
-
-    @property
-    def name(self) -> str:
-        return "process_vna"
 
     def process(
         self,
@@ -199,16 +195,7 @@ class ProcessVNA(BaseProcessor):
         return metrics
 
     def _compute_summary(self, df: pd.DataFrame, session: SessionRecord) -> dict:
-        summary: dict = {
-            "session_id": session.session_id,
-            "profile_id": session.profile_id,
-            "cable_length_mm": session.cable_length_mm,
-            "condition": session.condition,
-            "measurement_type": session.measurement_type,
-            "date": str(session.date),
-            "operator": session.operator,
-            "num_files": len(df),
-        }
+        summary: dict = {**session_header(session), "num_files": len(df)}
 
         for col in ["max_insertion_loss_db", "min_return_loss_db"]:
             if col in df.columns and not df[col].isna().all():
@@ -236,9 +223,7 @@ class ProcessVNA(BaseProcessor):
         if attenuation_by_hz:
             summary["attenuation_db_by_hz"] = attenuation_by_hz
 
-        type_fields = session.type_fields
-        for key in ["vna_instrument", "calibration_type", "port_impedance_ohm"]:
-            if key in type_fields:
-                summary[key] = type_fields[key]
-
+        copy_type_fields(
+            summary, session, ["vna_instrument", "calibration_type", "port_impedance_ohm"]
+        )
         return summary

@@ -25,9 +25,6 @@ class TestProcessSerdes:
     def definition(self):
         return load_definition(Path("measurement_types/serdes/v1/definition.yaml"))
 
-    def test_name_property(self, processor: ProcessSerdes):
-        assert processor.name == "process_serdes"
-
     def test_process_valid(self, processor, definition, serdes_session_dir: Path, tmp_path: Path):
         session = load_session(serdes_session_dir / "session.yaml")
         outputs = processor.process(serdes_session_dir, session, definition, tmp_path / "output")

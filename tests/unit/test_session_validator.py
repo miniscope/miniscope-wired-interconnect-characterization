@@ -148,7 +148,6 @@ class TestValidateSession:
     def test_valid_session(
         self,
         resistance_session_dir: Path,
-        fixture_models_dir: Path,
         fixture_profiles_dir: Path,
         definition,
     ):
@@ -157,7 +156,6 @@ class TestValidateSession:
             resistance_session_dir,
             session,
             definition,
-            models_dir=fixture_models_dir,
             profiles_dir=fixture_profiles_dir,
         )
         assert result.is_valid, result.errors
@@ -199,48 +197,3 @@ class TestValidateSession:
         )
         assert not result.is_valid
         assert any("DUT profile" in e for e in result.errors)
-
-    @pytest.fixture
-    def model_ref_definition(self):
-        """Fixture definition carrying a required miniscope_models model_ref."""
-        return load_definition(Path("tests/fixtures/definitions/valid_full.yaml"))
-
-    @pytest.fixture
-    def model_ref_session(self, resistance_session_dir: Path):
-        """The fixture session, with a miniscope reference injected."""
-        session = load_session(resistance_session_dir / "session.yaml")
-        return session.model_copy(
-            update={"type_fields": {"miniscope_model": "test_miniscope", "method": "method_a"}}
-        )
-
-    def test_model_ref_resolves(
-        self,
-        resistance_session_dir: Path,
-        fixture_models_dir: Path,
-        model_ref_definition,
-        model_ref_session,
-    ):
-        result = validate_session(
-            resistance_session_dir,
-            model_ref_session,
-            model_ref_definition,
-            models_dir=fixture_models_dir,
-        )
-        assert not any("Model reference" in w for w in result.warnings)
-
-    def test_model_ref_missing_warns(
-        self,
-        resistance_session_dir: Path,
-        tmp_path: Path,
-        model_ref_definition,
-        model_ref_session,
-    ):
-        empty_models = tmp_path / "models"
-        (empty_models / "miniscope_models").mkdir(parents=True)
-        result = validate_session(
-            resistance_session_dir,
-            model_ref_session,
-            model_ref_definition,
-            models_dir=empty_models,
-        )
-        assert any("Model reference" in w for w in result.warnings)

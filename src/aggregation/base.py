@@ -1,11 +1,16 @@
 from __future__ import annotations
 
+import json
+import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
 
 from src.core.schemas import MeasurementDefinition
 from src.core.session_schemas import SessionRecord
+from src.processing.base import summary_filename
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -50,8 +55,23 @@ class BaseAggregator(ABC):
         """
         ...
 
-    @property
-    @abstractmethod
-    def name(self) -> str:
-        """The name of this aggregator (must match definition.yaml aggregation name)."""
-        ...
+    @staticmethod
+    def load_summaries(sessions: list[SessionContext], measurement_type: str) -> list[dict]:
+        """
+        Load each session's per-session summary JSON.
+
+        Sessions whose summary is missing (processing hasn't run, or failed)
+        are skipped with a warning rather than aborting the aggregation.
+        """
+        filename = summary_filename(measurement_type)
+        summaries: list[dict] = []
+        for ctx in sessions:
+            summary_path = ctx.derived_dir / filename
+            if not summary_path.exists():
+                logger.warning(
+                    "No processed %s summary for %s, skipping", measurement_type, ctx.label
+                )
+                continue
+            with open(summary_path) as f:
+                summaries.append(json.load(f))
+        return summaries

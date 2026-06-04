@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any
 
 import yaml
+from pydantic import BaseModel
 
 from src.core.loading import list_profiles as _load_all_profiles
 from src.core.profile_schemas import CableProfile, CommutatorProfile, Profile
@@ -45,11 +46,18 @@ class FormField:
 _AUTO_FIELDS = {"schema_version", "profile_type"}
 
 
-def _form_fields_for(schema: type[CableProfile] | type[CommutatorProfile]) -> list[FormField]:
-    """Derive form inputs from a profile schema."""
+def form_fields_for(
+    schema: type[BaseModel], auto_fields: set[str] = _AUTO_FIELDS
+) -> list[FormField]:
+    """
+    Derive form inputs from a Pydantic schema (profile or miniscope model).
+
+    Fields named in ``auto_fields`` are filled by the app rather than asked
+    of the user, so they are skipped here.
+    """
     fields: list[FormField] = []
     for name, info in schema.model_fields.items():
-        if name in _AUTO_FIELDS:
+        if name in auto_fields:
             continue
         annotation = str(info.annotation)
         if "list[str]" in annotation:
@@ -73,12 +81,12 @@ def _form_fields_for(schema: type[CableProfile] | type[CommutatorProfile]) -> li
 
 def profile_form_fields() -> list[FormField]:
     """Derive form inputs from the CableProfile schema."""
-    return _form_fields_for(CableProfile)
+    return form_fields_for(CableProfile)
 
 
 def commutator_form_fields() -> list[FormField]:
     """Derive form inputs from the CommutatorProfile schema."""
-    return _form_fields_for(CommutatorProfile)
+    return form_fields_for(CommutatorProfile)
 
 
 def list_profile_summaries(repo_root: Path) -> list[ProfileSummary]:
@@ -166,21 +174,3 @@ def list_conditions(repo_root: Path, profile_id: str) -> list[ConditionSummary]:
             )
         )
     return summaries
-
-
-# Backwards-compatible alias used by cable-centric callers/tests.
-@dataclass
-class LengthSummary:
-    """One cable length under a profile, with per-type session counts."""
-
-    cable_length_mm: float
-    sessions_by_type: dict[str, int]
-
-
-def list_lengths(repo_root: Path, profile_id: str) -> list[LengthSummary]:
-    """Length conditions only (cables), with session counts per type."""
-    return [
-        LengthSummary(cable_length_mm=c.cable_length_mm, sessions_by_type=c.sessions_by_type)
-        for c in list_conditions(repo_root, profile_id)
-        if c.cable_length_mm is not None
-    ]

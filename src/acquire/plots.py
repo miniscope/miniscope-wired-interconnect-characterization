@@ -16,6 +16,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
 from src.instruments.types import EyeDiagram, MarginSweep, VnaSweepResult
+from src.processing.eye import eye_figure
 
 
 def _fig_to_png(fig) -> bytes:
@@ -28,24 +29,13 @@ def _fig_to_png(fig) -> bytes:
 
 def render_eye(eye: EyeDiagram) -> bytes:
     """Heatmap of the eye diagram's error counts (log scale)."""
-    fig, ax = plt.subplots(figsize=(4.5, 3.5))
-    counts = eye.error_counts.astype(float)
-    im = ax.imshow(
-        np.log1p(counts),
-        origin="lower",
-        aspect="auto",
-        extent=(
-            eye.time_range_ps[0],
-            eye.time_range_ps[1],
-            eye.voltage_range_mv[0],
-            eye.voltage_range_mv[1],
-        ),
-        cmap="inferno",
+    fig = eye_figure(
+        eye.error_counts,
+        eye.voltage_range_mv,
+        eye.time_range_ps,
+        eye.channel.value,
+        eye.rate.value,
     )
-    ax.set_xlabel("Time (ps)")
-    ax.set_ylabel("Voltage (mV)")
-    ax.set_title(f"Eye: {eye.channel.value} @ {eye.rate.value} Gbps")
-    fig.colorbar(im, ax=ax, label="log(1 + errors)")
     return _fig_to_png(fig)
 
 

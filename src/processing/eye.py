@@ -13,7 +13,41 @@ by the processor, the acquisition app's live previews, and tests.
 
 from __future__ import annotations
 
+import matplotlib
 import numpy as np
+
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
+
+
+def eye_figure(
+    error_counts: np.ndarray,
+    voltage_range_mv: np.ndarray,
+    time_range_ps: np.ndarray,
+    channel: str,
+    rate: str | int | float,
+):
+    """
+    Heatmap figure of an eye diagram's error counts (log color scale).
+
+    Returns a matplotlib Figure (no file I/O): the pipeline saves it to a
+    PNG, the live preview encodes it to bytes. Shared so the saved diagram
+    and the in-app preview never drift apart.
+    """
+    counts = np.asarray(error_counts, dtype=float)
+    fig, ax = plt.subplots(figsize=(4.5, 3.5))
+    im = ax.imshow(
+        np.log1p(counts),
+        origin="lower",
+        aspect="auto",
+        extent=(time_range_ps[0], time_range_ps[1], voltage_range_mv[0], voltage_range_mv[1]),
+        cmap="inferno",
+    )
+    ax.set_xlabel("Time (ps)")
+    ax.set_ylabel("Voltage (mV)")
+    ax.set_title(f"Eye: {channel} @ {rate} Gbps")
+    fig.colorbar(im, ax=ax, label="log(1 + errors)")
+    return fig
 
 
 def _longest_zero_run(arr: np.ndarray) -> tuple[int, int]:

@@ -45,9 +45,6 @@ class TestSerdesSummary:
             ),
         ]
 
-    def test_name_property(self):
-        assert SerdesSummary().name == "serdes_summary"
-
     def test_aggregate(self, processed_sessions, definition, tmp_path: Path):
         aggregator = SerdesSummary()
         outputs = aggregator.aggregate(processed_sessions, definition, tmp_path / "aggregated")

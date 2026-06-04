@@ -33,8 +33,6 @@ from src.core.session_validator import (
 )
 from src.measurement_types.registry import MeasurementTypeRegistry
 from src.processing.base import BaseProcessor
-from src.wiki.payloads import generate_wiki_payloads
-from src.wiki.resolver import ModelResolver
 
 logger = logging.getLogger(__name__)
 
@@ -118,17 +116,22 @@ def discover_sessions(
 def process_session(
     session_dir: Path,
     repo_root: Path | None = None,
+    registry: MeasurementTypeRegistry | None = None,
 ) -> PipelineResult:
     """
     Full pipeline for a single session:
     1. Load session.yaml
     2. Resolve measurement type definition
     3. Validate (including path<->yaml identity)
-    4. Resolve model references (provenance manifest)
-    5. Run processing steps
+    4. Run processing steps
+
+    Pass a shared `registry` when processing many sessions so the type
+    definitions are parsed once instead of per session.
     """
     if repo_root is None:
         repo_root = session_dir.parents[4]
+    if registry is None:
+        registry = MeasurementTypeRegistry(repo_root / "measurement_types")
 
     ref = "/".join(session_dir.resolve().parts[-4:])
 
@@ -139,7 +142,6 @@ def process_session(
         result.add_error(f"Failed to load session.yaml: {e}")
         return PipelineResult(session_ref=ref, validation=result, error=str(e))
 
-    registry = MeasurementTypeRegistry(repo_root / "measurement_types")
     try:
         definition = registry.get(session.measurement_type, session.measurement_type_version)
     except FileNotFoundError as e:
@@ -151,7 +153,6 @@ def process_session(
         session_dir,
         session,
         definition,
-        models_dir=repo_root / "models",
         profiles_dir=repo_root / "profiles",
     )
 
@@ -172,11 +173,6 @@ def process_session(
         return PipelineResult(session_ref=ref, validation=validation)
 
     output_dir = derived_session_dir(repo_root, session_dir)
-
-    # Resolve model references and write provenance manifest
-    resolver = ModelResolver(models_dir=repo_root / "models")
-    manifest = resolver.resolve_session(session, definition)
-    manifest.write(output_dir / "resolution_manifest.json")
 
     all_outputs: dict[str, Path] = {}
 
@@ -206,9 +202,10 @@ def process_all(
     if repo_root is None:
         repo_root = measurements_dir.parent
 
+    registry = MeasurementTypeRegistry(repo_root / "measurement_types")
     results: list[PipelineResult] = []
     for session_dir in discover_sessions(measurements_dir, measurement_type):
-        results.append(process_session(session_dir, repo_root))
+        results.append(process_session(session_dir, repo_root, registry))
 
     return results
 
@@ -285,14 +282,14 @@ def clean_derived(repo_root: Path) -> None:
 def run_full_pipeline(repo_root: Path | None = None, clean: bool = True) -> dict:
     """
     Run the complete pipeline: process all sessions, aggregate all types,
-    consolidate per-profile metrics, generate wiki payloads.
+    consolidate per-profile metrics, run cross-cutting analysis, render wiki.
 
     By default the regenerable derived/ subtrees are wiped first so the
     outputs exactly reflect the current measurements/ tree (pass
     clean=False to skip, e.g. for incremental experimentation).
 
     Returns a summary dict with processing results, aggregation outputs,
-    consolidation outputs, and wiki payload paths.
+    consolidation outputs, cross-cutting analysis, and rendered wiki pages.
     """
     if repo_root is None:
         repo_root = Path(".")
@@ -305,7 +302,6 @@ def run_full_pipeline(repo_root: Path | None = None, clean: bool = True) -> dict
         "aggregated": {},
         "consolidated": {},
         "cross": {},
-        "wiki_payloads": {},
         "wiki_rendered": {},
     }
 
@@ -348,14 +344,6 @@ def run_full_pipeline(repo_root: Path | None = None, clean: bool = True) -> dict
     except Exception as e:
         logger.error("Cross-cutting analysis failed: %s", e)
         summary["cross"] = {"error": str(e)}
-
-    # Generate wiki payloads
-    try:
-        payloads = generate_wiki_payloads(repo_root)
-        summary["wiki_payloads"] = {k: str(v) for k, v in payloads.items()}
-    except Exception as e:
-        logger.error("Wiki payload generation failed: %s", e)
-        summary["wiki_payloads"] = {"error": str(e)}
 
     # Render wiki pages (publishing happens separately, on main merges)
     try:
