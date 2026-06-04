@@ -144,6 +144,7 @@ class ProcessSerdes(BaseProcessor):
             "session_id": session.session_id,
             "profile_id": session.profile_id,
             "cable_length_mm": session.cable_length_mm,
+            "condition": session.condition,
             "measurement_type": session.measurement_type,
             "date": str(session.date),
             "operator": session.operator,

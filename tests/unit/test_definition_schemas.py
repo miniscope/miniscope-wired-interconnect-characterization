@@ -37,9 +37,9 @@ class TestFieldSpec:
         spec = FieldSpec(
             name="cable",
             field_type=FieldType.MODEL_REF,
-            model_ref_type="cable_models",
+            model_ref_type="miniscope_models",
         )
-        assert spec.model_ref_type == "cable_models"
+        assert spec.model_ref_type == "miniscope_models"
 
     def test_extra_fields_forbidden(self):
         with pytest.raises(ValidationError):

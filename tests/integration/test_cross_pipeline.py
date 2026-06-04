@@ -110,6 +110,46 @@ class TestCrossAnalysis:
         pivot = df.pivot_table(index="cable_length_mm", columns="rate_gbps", values="quality_score")
         assert (pivot[6] <= pivot[3]).all()
 
+    def test_commutator_impact(self, analyzed_repo: Path):
+        outputs = run_cross_analysis(analyzed_repo)
+        assert "commutator_impact" in outputs
+        df = pd.read_csv(outputs["commutator_impact"])
+
+        # 1 commutator x 2 miniscopes
+        assert set(df["commutator_id"]) == {"test_commutator"}
+        assert set(df["miniscope_model"]) == {"test_miniscope", "test_miniscope_fpd"}
+
+        # Fixture series resistance ~0.35 ohm; floor increase = I_max * R
+        row = df[df["miniscope_model"] == "test_miniscope"].iloc[0]
+        assert row["added_resistance_ohm"] == pytest.approx(0.35, abs=0.01)
+        assert row["supply_floor_increase_v"] == pytest.approx(0.3 * 0.35, abs=0.005)
+
+        # FPD scope (750 MHz Nyquist, inside the 1 MHz - 1 GHz sweep) gets a
+        # measured added attenuation; the 6 Gbps scope (3 GHz) is outside.
+        fpd = df[df["miniscope_model"] == "test_miniscope_fpd"].iloc[0]
+        assert fpd["added_attenuation_db"] > 0
+        gmsl = df[df["miniscope_model"] == "test_miniscope"].iloc[0]
+        assert pd.isna(gmsl["added_attenuation_db"])
+
+    def test_commutator_length_impact(self, analyzed_repo: Path):
+        outputs = run_cross_analysis(analyzed_repo)
+        assert "commutator_length_impact" in outputs
+        df = pd.read_csv(outputs["commutator_length_impact"])
+
+        # 1 commutator x 1 cable; reduction = R_comm / rho
+        assert len(df) == 1
+        row = df.iloc[0]
+        assert row["profile_id"] == "test_cable"
+        # rho ~2.4 ohm/m, R ~0.35 ohm -> ~146 mm of cable budget
+        assert 100 < row["max_length_reduction_mm"] < 200
+
+    def test_commutator_excluded_from_cable_outputs(self, analyzed_repo: Path):
+        """Commutators must not leak into the cable-centric tables."""
+        outputs = run_cross_analysis(analyzed_repo)
+        for key in ["resistivity_summary", "supply_voltage_table", "quality_scores"]:
+            df = pd.read_csv(outputs[key])
+            assert "test_commutator" not in set(df["profile_id"])
+
     def test_no_consolidated_data(self, test_repo: Path):
         """Without processing/consolidation there is nothing to analyze."""
         assert run_cross_analysis(test_repo) == {}

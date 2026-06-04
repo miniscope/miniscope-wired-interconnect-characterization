@@ -8,14 +8,18 @@ from src.acquire.controllers.sessions import run_vna_capture, save_vna_session
 from src.acquire.pages.components import header, png_source, protocol_panel, require_operator
 from src.acquire.plots import render_attenuation
 from src.acquire.state import STATE
+from src.core.session_schemas import parse_condition_dir
 from src.instruments.types import VnaSweepResult
 
 CALIBRATION_TYPES = ["SOLT", "TRL", "electronic_cal", "other"]
 
 
-@ui.page("/measure/vna/{profile_id}/{length_mm}")
-def vna_page(profile_id: str, length_mm: float) -> None:
-    header(f"VNA -- {profile_id} @ {length_mm:g} mm")
+@ui.page("/measure/vna/{profile_id}/{condition}")
+def vna_page(profile_id: str, condition: str) -> None:
+    header(f"VNA -- {profile_id} @ {condition}")
+    # Simulated drivers model loss vs cable length; named conditions
+    # (commutator states) use a short nominal length.
+    sim_length_mm = parse_condition_dir(condition) or 100.0
     protocol_panel("vna")
 
     instrument = ui.input(label="VNA instrument *").props("outlined").classes("w-96")
@@ -34,7 +38,7 @@ def vna_page(profile_id: str, length_mm: float) -> None:
         capture_button.disable()
         try:
             result: VnaSweepResult = await run.io_bound(
-                run_vna_capture, length_mm, None, STATE.simulate
+                run_vna_capture, sim_length_mm, None, STATE.simulate
             )
             shared["result"] = result
             preview.clear()
@@ -62,7 +66,7 @@ def vna_page(profile_id: str, length_mm: float) -> None:
             ref = save_vna_session(
                 STATE.repo_root,
                 profile_id,
-                length_mm,
+                condition,
                 result,
                 operator=STATE.operator,
                 notes=notes.value or "",

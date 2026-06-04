@@ -89,6 +89,7 @@ class VNASummary(BaseAggregator):
     def _build_comparison_table(self, summaries: list[dict]) -> pd.DataFrame:
         columns = [
             "profile_id",
+            "condition",
             "cable_length_mm",
             "session_id",
             "date",

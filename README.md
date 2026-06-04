@@ -40,8 +40,8 @@ acquisition app  ──writes──>  measurements/  ──PR──>  CI validat
 
 | Path | What lives there |
 |---|---|
-| `profiles/` | Cable profiles: static specs only (impedance, gauge, ...). Never measured values. |
-| `measurements/` | All raw data: `<profile>/<length>mm/<type>/<YYYYMMDD_NN>/session.yaml + data` |
+| `profiles/` | DUT profiles (cables, commutators): static specs only. Never measured values. |
+| `measurements/` | All raw data: `<profile>/<condition>/<type>/<YYYYMMDD_NN>/session.yaml + data` (condition = `<N>mm` for cables, `static` for commutators) |
 | `measurement_types/` | Versioned definitions (`<type>/v<N>/definition.yaml`): fields, required files, processing + aggregation contracts |
 | `models/` | Hardware metadata: miniscopes (incl. power requirements), connectors, commutators |
 | `config/` | `analysis.yaml` (quality-score weights, zones), `wiki.yaml` (publish destinations) |

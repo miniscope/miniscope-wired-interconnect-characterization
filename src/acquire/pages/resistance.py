@@ -9,9 +9,9 @@ from src.acquire.pages.components import header, protocol_panel, require_operato
 from src.acquire.state import STATE
 
 
-@ui.page("/measure/resistance/{profile_id}/{length_mm}")
-def resistance_page(profile_id: str, length_mm: float) -> None:
-    header(f"Resistance -- {profile_id} @ {length_mm:g} mm")
+@ui.page("/measure/resistance/{profile_id}/{condition}")
+def resistance_page(profile_id: str, condition: str) -> None:
+    header(f"Resistance -- {profile_id} @ {condition}")
     protocol_panel("resistance")
 
     instrument = ui.input(label="Measurement instrument *").props("outlined").classes("w-96")
@@ -52,7 +52,7 @@ def resistance_page(profile_id: str, length_mm: float) -> None:
             ref = record_resistance_session(
                 STATE.repo_root,
                 profile_id,
-                length_mm,
+                condition,
                 readings,
                 operator=STATE.operator,
                 notes=notes.value or "",

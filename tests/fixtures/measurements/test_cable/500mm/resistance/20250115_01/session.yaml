@@ -11,4 +11,3 @@ type_fields:
   measurement_instrument: "Test LCR Meter"
   measurement_method: lcr_shorted_loop
   temperature_c: 23.5
-  connector_model: test_connector

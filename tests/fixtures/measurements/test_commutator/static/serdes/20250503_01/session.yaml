@@ -1,0 +1,12 @@
+schema_version: "1.0"
+session_id: "20250503_01"
+profile_id: test_commutator
+condition: static
+measurement_type: serdes
+measurement_type_version: 1
+date: 2025-05-03
+operator: Test Operator
+notes: "fixture commutator SerDes session (through commutator, short jumpers)"
+type_fields:
+  serdes_device: "Test GMSL2 eval kit"
+  temperature_c: 23.0

@@ -64,11 +64,16 @@ class NormalizeResistance(BaseProcessor):
         df = df.dropna(subset=["resistance_ohm"])
         return df
 
-    def _compute_derived(self, df: pd.DataFrame, cable_length_mm: float) -> pd.DataFrame:
-        """Compute round-trip resistance per meter from the session's cable length."""
+    def _compute_derived(self, df: pd.DataFrame, cable_length_mm: float | None) -> pd.DataFrame:
+        """
+        Compute round-trip resistance per meter from the session's cable
+        length. Non-cable DUTs (commutators) have no length, so only the
+        absolute resistance applies.
+        """
         df = df.copy()
-        cable_length_m = cable_length_mm / 1000.0
-        df["roundtrip_resistance_ohm_per_m"] = df["resistance_ohm"] / cable_length_m
+        if cable_length_mm is not None:
+            cable_length_m = cable_length_mm / 1000.0
+            df["roundtrip_resistance_ohm_per_m"] = df["resistance_ohm"] / cable_length_m
         return df
 
     def _compute_summary(self, df: pd.DataFrame, session: SessionRecord) -> dict:
@@ -77,6 +82,7 @@ class NormalizeResistance(BaseProcessor):
             "session_id": session.session_id,
             "profile_id": session.profile_id,
             "cable_length_mm": session.cable_length_mm,
+            "condition": session.condition,
             "measurement_type": session.measurement_type,
             "date": str(session.date),
             "operator": session.operator,

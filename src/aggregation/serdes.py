@@ -86,6 +86,7 @@ class SerdesSummary(BaseAggregator):
                 rows.append(
                     {
                         "profile_id": summary.get("profile_id"),
+                        "condition": summary.get("condition"),
                         "cable_length_mm": summary.get("cable_length_mm"),
                         "session_id": summary.get("session_id"),
                         "date": summary.get("date"),
@@ -105,6 +106,12 @@ class SerdesSummary(BaseAggregator):
     ) -> None:
         """Plot a combo metric vs cable length, one subplot per rate."""
         if metric not in df.columns or df[metric].isna().all():
+            return
+
+        # Vs-length plots only make sense for length conditions; commutator
+        # (no-length) sessions surface on their own page instead.
+        df = df[df["cable_length_mm"].notna()]
+        if df.empty:
             return
 
         rates = sorted(df["rate_gbps"].dropna().unique())

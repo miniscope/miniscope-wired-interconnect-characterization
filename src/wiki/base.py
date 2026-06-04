@@ -13,8 +13,8 @@ class BaseWikiClient(ABC):
         Fetch model metadata from the wiki.
 
         Args:
-            model_type: e.g. "cable_models", "connector_models"
-            model_id: e.g. "coax_spi_sci_40awg"
+            model_type: e.g. "miniscope_models"
+            model_id: e.g. "miniscope_v4"
 
         Returns:
             Dict of model fields if found, None if not available.

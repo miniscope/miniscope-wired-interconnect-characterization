@@ -51,8 +51,16 @@ class TestParseSessionPath:
         assert info.measurement_type == "resistance"
         assert info.session_id == "20250115_01"
 
-    def test_parse_bad_length_dir(self, tmp_path: Path):
-        session_dir = tmp_path / "profile" / "notalength" / "resistance" / "20250101_01"
+    def test_parse_named_condition(self, tmp_path: Path):
+        """Non-length dirs are named conditions (commutator states)."""
+        session_dir = tmp_path / "profile" / "static" / "resistance" / "20250101_01"
+        session_dir.mkdir(parents=True)
+        info = parse_session_path(session_dir)
+        assert info.condition == "static"
+        assert info.cable_length_mm is None
+
+    def test_parse_invalid_condition_dir(self, tmp_path: Path):
+        session_dir = tmp_path / "profile" / "Not-A-Condition" / "resistance" / "20250101_01"
         session_dir.mkdir(parents=True)
         with pytest.raises(ValueError):
             parse_session_path(session_dir)
@@ -190,27 +198,49 @@ class TestValidateSession:
             resistance_session_dir, session, definition, profiles_dir=empty_profiles
         )
         assert not result.is_valid
-        assert any("Cable profile" in e for e in result.errors)
+        assert any("DUT profile" in e for e in result.errors)
+
+    @pytest.fixture
+    def model_ref_definition(self):
+        """Fixture definition carrying a required miniscope_models model_ref."""
+        return load_definition(Path("tests/fixtures/definitions/valid_full.yaml"))
+
+    @pytest.fixture
+    def model_ref_session(self, resistance_session_dir: Path):
+        """The fixture session, with a miniscope reference injected."""
+        session = load_session(resistance_session_dir / "session.yaml")
+        return session.model_copy(
+            update={"type_fields": {"miniscope_model": "test_miniscope", "method": "method_a"}}
+        )
 
     def test_model_ref_resolves(
         self,
         resistance_session_dir: Path,
         fixture_models_dir: Path,
-        definition,
+        model_ref_definition,
+        model_ref_session,
     ):
-        session = load_session(resistance_session_dir / "session.yaml")
         result = validate_session(
-            resistance_session_dir, session, definition, models_dir=fixture_models_dir
+            resistance_session_dir,
+            model_ref_session,
+            model_ref_definition,
+            models_dir=fixture_models_dir,
         )
         assert not any("Model reference" in w for w in result.warnings)
 
     def test_model_ref_missing_warns(
-        self, resistance_session_dir: Path, tmp_path: Path, definition
+        self,
+        resistance_session_dir: Path,
+        tmp_path: Path,
+        model_ref_definition,
+        model_ref_session,
     ):
-        session = load_session(resistance_session_dir / "session.yaml")
         empty_models = tmp_path / "models"
-        (empty_models / "connector_models").mkdir(parents=True)
+        (empty_models / "miniscope_models").mkdir(parents=True)
         result = validate_session(
-            resistance_session_dir, session, definition, models_dir=empty_models
+            resistance_session_dir,
+            model_ref_session,
+            model_ref_definition,
+            models_dir=empty_models,
         )
         assert any("Model reference" in w for w in result.warnings)

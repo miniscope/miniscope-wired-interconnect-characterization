@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from src.core.schemas import MeasurementDefinition
-from src.core.session_schemas import SessionRecord, length_dir_name
+from src.core.session_schemas import SessionRecord
 
 
 @dataclass
@@ -19,8 +19,7 @@ class SessionContext:
     @property
     def label(self) -> str:
         """Short human-readable label for plots and tables."""
-        length = length_dir_name(self.record.cable_length_mm)
-        return f"{self.record.profile_id} {length} {self.record.session_id}"
+        return f"{self.record.profile_id} {self.record.condition} {self.record.session_id}"
 
 
 class BaseAggregator(ABC):

@@ -31,11 +31,12 @@ class TestResolveClass:
 class TestDiscoverSessions:
     def test_discovers_all(self, test_repo: Path):
         sessions = discover_sessions(test_repo / "measurements")
-        assert len(sessions) == 6  # 2 resistance + 2 serdes + 2 vna
+        # cable: 2 resistance + 2 serdes + 2 vna; commutator: 1 of each
+        assert len(sessions) == 9
 
     def test_filter_by_type(self, test_repo: Path):
         sessions = discover_sessions(test_repo / "measurements", "resistance")
-        assert len(sessions) == 2
+        assert len(sessions) == 3
         assert all(s.parent.name == "resistance" for s in sessions)
 
     def test_missing_dir(self, tmp_path: Path):

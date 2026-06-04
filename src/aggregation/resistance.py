@@ -71,6 +71,7 @@ class ResistanceSummary(BaseAggregator):
         """Build a DataFrame with one row per session."""
         columns = [
             "profile_id",
+            "condition",
             "cable_length_mm",
             "session_id",
             "date",

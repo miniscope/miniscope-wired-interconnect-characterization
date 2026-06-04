@@ -13,7 +13,7 @@ different speeds:
 
 | Thing | Changes | Lives in |
 |---|---|---|
-| What a cable IS (specs) | almost never | `profiles/` |
+| What a DUT IS (cable/commutator specs) | almost never | `profiles/` |
 | How a measurement is DEFINED | rarely, versioned | `measurement_types/` |
 | Measured raw DATA | grows forever, never edited | `measurements/` |
 | Derived RESULTS | regenerated on every change | `derived/` |
@@ -25,21 +25,31 @@ updates. Nothing measured is ever lost to an analysis decision.
 
 ## Data model
 
-### Cable profiles (`profiles/<id>.yaml`)
+### DUT profiles (`profiles/<id>.yaml`)
 
 Static specs only -- impedance from the datasheet, wire gauge, connector
 types. **Never measured values.** Resistivity is something we measure, so
-it lives downstream in `derived/`, where it can be recomputed. The schema
-(`src/core/profile_schemas.py`) uses `extra="forbid"` so a measured value
+it lives downstream in `derived/`, where it can be recomputed. The schemas
+(`src/core/profile_schemas.py`) use `extra="forbid"` so a measured value
 cannot sneak into a profile even by accident.
 
-### Sessions (`measurements/<profile>/<length>mm/<type>/<YYYYMMDD_NN>/`)
+Two DUT kinds exist, discriminated by `profile_type` (absent means cable,
+so old profiles keep loading): **cables**, measured across lengths, and
+**commutators**, measured per condition (currently `static`; rotation
+states slot in later). Both are characterized with the same measurement
+types; a commutator's published result is its STANDALONE impact -- added
+series resistance and added insertion loss -- never a cable x commutator
+matrix (ADR 0001).
+
+### Sessions (`measurements/<profile>/<condition>/<type>/<YYYYMMDD_NN>/`)
 
 A **session** is one execution of one measurement type on one
-(profile, length). The directory path *is* the identity: profile, length,
-type, and id are read off the path, echoed inside `session.yaml` for
-self-containment, and validation rejects any mismatch
-(`src/core/session_validator.py:parse_session_path`). This makes the tree
+(profile, condition). The condition is the DUT state: a cable length
+(`500mm`) or a commutator state (`static`). The directory path *is* the
+identity: profile, condition, type, and id are read off the path, echoed
+inside `session.yaml` for self-containment, and validation rejects any
+mismatch (`src/core/session_validator.py:parse_session_path`) -- including
+a length condition on a commutator or vice versa. This makes the tree
 browsable by humans ("what do we have for this cable at 2 m?" is an `ls`)
 and unambiguous for code.
 
@@ -208,6 +218,15 @@ pick the new type up from the definition.
 - Miniscope electrical values are placeholders -- `models/miniscope_models/`
   (regulator limits, currents, PoC choke DCRs, FPD-Link III rate). Models
   are entered/viewed via the acquisition app's `/miniscopes` page.
+- Wiki page layout/wording for the link-guidance outputs -- the current
+  render (`src/wiki/render.py`) is deliberately minimal-but-working; page
+  structure, wording, and what leads vs links is an open publishing
+  decision.
+- Commutator rotation conditions -- only `static` exists
+  (`src/core/session_schemas.py:COMMUTATOR_CONDITIONS`). Rotation states
+  (e.g. `rotating_10rpm`) and a motorized-rotation driver get added there
+  when that bench work starts; the condition-based layout already has a
+  home for them.
 
 Resolved since the original design:
 

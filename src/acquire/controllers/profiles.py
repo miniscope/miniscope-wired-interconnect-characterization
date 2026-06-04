@@ -1,9 +1,10 @@
 """
-Profile controllers: list existing cable profiles and create new ones.
+Profile controllers: list existing DUT profiles and create new ones.
 
-The create-profile form in the GUI is rendered from `profile_form_fields()`,
-which introspects the CableProfile schema -- so the form can never drift
-from the validated schema and nobody ever hand-writes profile YAML.
+The create-profile forms in the GUI are rendered from
+`profile_form_fields()` / `commutator_form_fields()`, which introspect the
+profile schemas -- so the forms can never drift from the validated schemas
+and nobody ever hand-writes profile YAML.
 """
 
 from __future__ import annotations
@@ -15,16 +16,16 @@ from typing import Any
 import yaml
 
 from src.core.loading import list_profiles as _load_all_profiles
-from src.core.profile_schemas import CableProfile
-from src.core.session_schemas import parse_length_dir_name
+from src.core.profile_schemas import CableProfile, CommutatorProfile, Profile
+from src.core.session_schemas import parse_condition_dir
 
 
 @dataclass
 class ProfileSummary:
     """A profile plus how much data exists for it."""
 
-    profile: CableProfile
-    n_lengths: int
+    profile: Profile
+    n_lengths: int  # number of condition dirs (lengths for cables, states otherwise)
     n_sessions: int
 
 
@@ -41,19 +42,19 @@ class FormField:
 
 
 # Fields the app fills automatically rather than asking the user.
-_AUTO_FIELDS = {"schema_version"}
+_AUTO_FIELDS = {"schema_version", "profile_type"}
 
 
-def profile_form_fields() -> list[FormField]:
-    """Derive form inputs from the CableProfile schema."""
+def _form_fields_for(schema: type[CableProfile] | type[CommutatorProfile]) -> list[FormField]:
+    """Derive form inputs from a profile schema."""
     fields: list[FormField] = []
-    for name, info in CableProfile.model_fields.items():
+    for name, info in schema.model_fields.items():
         if name in _AUTO_FIELDS:
             continue
         annotation = str(info.annotation)
         if "list[str]" in annotation:
             python_type = "list[str]"
-        elif "float" in annotation:
+        elif "float" in annotation or "int" in annotation:
             python_type = "float"
         else:
             python_type = "str"
@@ -70,6 +71,16 @@ def profile_form_fields() -> list[FormField]:
     return fields
 
 
+def profile_form_fields() -> list[FormField]:
+    """Derive form inputs from the CableProfile schema."""
+    return _form_fields_for(CableProfile)
+
+
+def commutator_form_fields() -> list[FormField]:
+    """Derive form inputs from the CommutatorProfile schema."""
+    return _form_fields_for(CommutatorProfile)
+
+
 def list_profile_summaries(repo_root: Path) -> list[ProfileSummary]:
     """Every profile plus its measurement counts (for the landing page)."""
     summaries: list[ProfileSummary] = []
@@ -83,7 +94,11 @@ def list_profile_summaries(repo_root: Path) -> list[ProfileSummary]:
     return summaries
 
 
-def create_profile(repo_root: Path, values: dict[str, Any]) -> CableProfile:
+def _create_dut_profile(
+    repo_root: Path,
+    values: dict[str, Any],
+    schema: type[CableProfile] | type[CommutatorProfile],
+) -> Profile:
     """
     Validate form values against the schema and write profiles/<id>.yaml.
 
@@ -91,7 +106,7 @@ def create_profile(repo_root: Path, values: dict[str, Any]) -> CableProfile:
     the profile_id is taken -- the GUI surfaces both inline.
     """
     raw = {"schema_version": "1.0", **{k: v for k, v in values.items() if v not in (None, "")}}
-    profile = CableProfile.model_validate(raw)
+    profile = schema.model_validate(raw)
 
     profiles_dir = repo_root / "profiles"
     profiles_dir.mkdir(parents=True, exist_ok=True)
@@ -104,6 +119,56 @@ def create_profile(repo_root: Path, values: dict[str, Any]) -> CableProfile:
     return profile
 
 
+def create_profile(repo_root: Path, values: dict[str, Any]) -> Profile:
+    """Create a cable profile from form values."""
+    return _create_dut_profile(repo_root, values, CableProfile)
+
+
+def create_commutator_profile(repo_root: Path, values: dict[str, Any]) -> Profile:
+    """Create a commutator profile from form values."""
+    return _create_dut_profile(repo_root, values, CommutatorProfile)
+
+
+@dataclass
+class ConditionSummary:
+    """One condition under a profile, with per-type session counts."""
+
+    condition: str
+    cable_length_mm: float | None  # None for named (non-length) conditions
+    sessions_by_type: dict[str, int]
+
+
+def list_conditions(repo_root: Path, profile_id: str) -> list[ConditionSummary]:
+    """Conditions that exist for a profile, with session counts per type."""
+    profile_dir = repo_root / "measurements" / profile_id
+    summaries: list[ConditionSummary] = []
+    if not profile_dir.exists():
+        return summaries
+
+    for condition_dir in sorted(profile_dir.iterdir()):
+        if not condition_dir.is_dir():
+            continue
+        try:
+            length_mm = parse_condition_dir(condition_dir.name)
+        except ValueError:
+            continue
+        sessions_by_type: dict[str, int] = {}
+        for type_dir in sorted(condition_dir.iterdir()):
+            if type_dir.is_dir():
+                count = len(list(type_dir.glob("*/session.yaml")))
+                if count:
+                    sessions_by_type[type_dir.name] = count
+        summaries.append(
+            ConditionSummary(
+                condition=condition_dir.name,
+                cable_length_mm=length_mm,
+                sessions_by_type=sessions_by_type,
+            )
+        )
+    return summaries
+
+
+# Backwards-compatible alias used by cable-centric callers/tests.
 @dataclass
 class LengthSummary:
     """One cable length under a profile, with per-type session counts."""
@@ -113,26 +178,9 @@ class LengthSummary:
 
 
 def list_lengths(repo_root: Path, profile_id: str) -> list[LengthSummary]:
-    """Lengths that exist for a profile, with session counts per type."""
-    profile_dir = repo_root / "measurements" / profile_id
-    summaries: list[LengthSummary] = []
-    if not profile_dir.exists():
-        return summaries
-
-    for length_dir in sorted(profile_dir.iterdir()):
-        if not length_dir.is_dir():
-            continue
-        try:
-            length_mm = parse_length_dir_name(length_dir.name)
-        except ValueError:
-            continue
-        sessions_by_type: dict[str, int] = {}
-        for type_dir in sorted(length_dir.iterdir()):
-            if type_dir.is_dir():
-                count = len(list(type_dir.glob("*/session.yaml")))
-                if count:
-                    sessions_by_type[type_dir.name] = count
-        summaries.append(
-            LengthSummary(cable_length_mm=length_mm, sessions_by_type=sessions_by_type)
-        )
-    return summaries
+    """Length conditions only (cables), with session counts per type."""
+    return [
+        LengthSummary(cable_length_mm=c.cable_length_mm, sessions_by_type=c.sessions_by_type)
+        for c in list_conditions(repo_root, profile_id)
+        if c.cable_length_mm is not None
+    ]

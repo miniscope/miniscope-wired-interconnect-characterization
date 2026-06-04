@@ -10,13 +10,17 @@ from src.acquire.controllers.sessions import run_serdes_capture, save_serdes_ses
 from src.acquire.pages.components import header, png_source, protocol_panel, require_operator
 from src.acquire.plots import render_eye, render_margin
 from src.acquire.state import STATE
+from src.core.session_schemas import parse_condition_dir
 from src.instruments.registry import get_serdes_driver
 from src.instruments.types import EyeDiagram, MarginSweep, ProgressEvent, SerdesResult
 
 
-@ui.page("/measure/serdes/{profile_id}/{length_mm}")
-def serdes_page(profile_id: str, length_mm: float) -> None:
-    header(f"SerDes -- {profile_id} @ {length_mm:g} mm")
+@ui.page("/measure/serdes/{profile_id}/{condition}")
+def serdes_page(profile_id: str, condition: str) -> None:
+    header(f"SerDes -- {profile_id} @ {condition}")
+    # Simulated drivers model loss vs cable length; named conditions
+    # (commutator states) use a short nominal length.
+    sim_length_mm = parse_condition_dir(condition) or 100.0
     protocol_panel("serdes")
 
     device = ui.input(label="SerDes device *").props("outlined").classes("w-96")
@@ -30,7 +34,7 @@ def serdes_page(profile_id: str, length_mm: float) -> None:
     shared: dict = {"events": [], "result": None, "running": False, "lock": threading.Lock()}
 
     def check_link() -> None:
-        driver = get_serdes_driver(simulate=STATE.simulate, cable_length_mm=length_mm)
+        driver = get_serdes_driver(simulate=STATE.simulate, cable_length_mm=sim_length_mm)
         try:
             driver.connect()
             status = driver.link_status()
@@ -73,7 +77,7 @@ def serdes_page(profile_id: str, length_mm: float) -> None:
         go_button.disable()
         try:
             result: SerdesResult = await run.io_bound(
-                run_serdes_capture, length_mm, on_progress, STATE.simulate
+                run_serdes_capture, sim_length_mm, on_progress, STATE.simulate
             )
             shared["result"] = result
             status_label.text = "Capture complete -- review previews, then save."
@@ -99,7 +103,7 @@ def serdes_page(profile_id: str, length_mm: float) -> None:
             ref = save_serdes_session(
                 STATE.repo_root,
                 profile_id,
-                length_mm,
+                condition,
                 result,
                 operator=STATE.operator,
                 notes=notes.value or "",

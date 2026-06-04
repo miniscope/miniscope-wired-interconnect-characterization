@@ -28,11 +28,6 @@ def valid_session_path(fixtures_dir: Path) -> Path:
 
 
 @pytest.fixture
-def valid_cable_path(fixtures_dir: Path) -> Path:
-    return fixtures_dir / "models" / "valid_cable.yaml"
-
-
-@pytest.fixture
 def fixture_models_dir(fixtures_dir: Path) -> Path:
     return fixtures_dir / "models"
 

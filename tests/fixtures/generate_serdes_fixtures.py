@@ -119,11 +119,15 @@ def generate_bad_margin_session(session_dir: Path) -> None:
 def main() -> None:
     serdes_500 = FIXTURES_DIR / "measurements" / "test_cable" / "500mm" / "serdes"
     serdes_1000 = FIXTURES_DIR / "measurements" / "test_cable" / "1000mm" / "serdes"
+    serdes_comm = FIXTURES_DIR / "measurements" / "test_commutator" / "static" / "serdes"
     bad_serdes = FIXTURES_DIR / "measurements_bad" / "test_cable" / "500mm" / "serdes"
 
     # Valid sessions: longer cable -> smaller eye, higher error onset
     generate_session(serdes_500 / "20250401_01", base_open=0.7, base_onset=50.0)
     generate_session(serdes_1000 / "20250402_01", base_open=0.55, base_onset=80.0)
+
+    # Commutator measured through short jumpers: nearly-clean eye
+    generate_session(serdes_comm / "20250503_01", base_open=0.75, base_onset=40.0)
 
     # Bad session: manifest missing a combo (files exist for listed combos)
     missing_combo_dir = bad_serdes / "20250403_01"

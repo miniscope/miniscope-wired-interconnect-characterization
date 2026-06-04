@@ -95,6 +95,21 @@ def main() -> None:
         num_points=21,
     )
 
+    # --- Commutator session: low, fairly flat insertion loss ---
+    generate_s2p(
+        FIXTURES_DIR
+        / "measurements"
+        / "test_commutator"
+        / "static"
+        / "vna"
+        / "20250502_01"
+        / "raw"
+        / "sweep_01.s2p",
+        base_insertion_loss_db=-0.4,
+        freq_slope_db_per_ghz=-0.8,
+        return_loss_db=-20.0,
+    )
+
     # --- Bad s2p format ---
     generate_bad_s2p(bad_vna_sessions / "20250305_01" / "raw" / "bad_file.s2p")
 

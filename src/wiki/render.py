@@ -206,8 +206,45 @@ class WikiRenderer:
                 )
             )
 
+        # Commutator standalone impact
+        impact_df = self._cross_csv("commutator_impact.csv")
+        if impact_df is not None:
+            parts.append("\n== What does a commutator cost? ==\n")
+            parts.append(
+                "A commutator sits in series in the tether, so it adds its own "
+                "resistance (raising the required supply and eating cable "
+                "budget) and its own insertion loss at the link frequency. "
+                "These are standalone numbers -- add them on top of your "
+                "cable's.\n"
+            )
+            parts.append(
+                _wiki_table(
+                    impact_df,
+                    {
+                        "commutator_id": "Commutator",
+                        "miniscope_model": "Miniscope",
+                        "added_resistance_ohm": "Added resistance (ohm)",
+                        "supply_floor_increase_v": "Min supply increase (V)",
+                        "added_attenuation_db": "Added attenuation (dB)",
+                    },
+                )
+            )
+            length_impact_df = self._cross_csv("commutator_length_impact.csv")
+            if length_impact_df is not None:
+                parts.append("\n=== Cable length budget it consumes ===\n")
+                parts.append(
+                    _wiki_table(
+                        length_impact_df,
+                        {
+                            "commutator_id": "Commutator",
+                            "profile_id": "Cable",
+                            "max_length_reduction_mm": "Max length reduction (mm)",
+                        },
+                    )
+                )
+
         # Links to detail pages
-        parts.append("\n== Per-cable details ==\n")
+        parts.append("\n== Per-DUT details ==\n")
         for profile_id in sorted(profile_ids):
             parts.append(f"* [[{self.config.profile_page(profile_id)}|{profile_id}]]")
 
@@ -346,6 +383,131 @@ class WikiRenderer:
         parts.append(f"\n''Back to [[{self.config.main_page}]]''")
         return "\n".join(parts) + "\n"
 
+    # ---------- commutator pages ----------
+
+    def render_commutator_page(self, profile_id: str) -> str:
+        parts: list[str] = [GENERATED_BANNER]
+
+        # Specs from the profile YAML
+        profile_path = self.repo_root / "profiles" / f"{profile_id}.yaml"
+        if profile_path.exists():
+            with open(profile_path) as f:
+                profile = yaml.safe_load(f)
+            parts.append("== Commutator specifications ==\n")
+            spec_rows = [
+                {"field": k.replace("_", " "), "value": v}
+                for k, v in profile.items()
+                if k not in ("schema_version",) and v not in (None, "", [])
+            ]
+            parts.append(
+                _wiki_table(pd.DataFrame(spec_rows), {"field": "Property", "value": "Value"})
+            )
+
+        profile_derived = self.repo_root / "derived" / "profiles" / profile_id
+
+        # Standalone impact (the headline result)
+        impact_df = self._cross_csv("commutator_impact.csv")
+        if impact_df is not None:
+            scoped = impact_df[impact_df["commutator_id"] == profile_id]
+            if not scoped.empty:
+                parts.append("\n== Impact on your link ==\n")
+                parts.append(
+                    "Adding this commutator to a tether costs, on top of the " "cable itself:\n"
+                )
+                parts.append(
+                    _wiki_table(
+                        scoped,
+                        {
+                            "miniscope_model": "Miniscope",
+                            "added_resistance_ohm": "Added resistance (ohm)",
+                            "supply_floor_increase_v": "Min supply increase (V)",
+                            "added_attenuation_db": "Added attenuation (dB)",
+                        },
+                    )
+                )
+        length_impact_df = self._cross_csv("commutator_length_impact.csv")
+        if length_impact_df is not None:
+            scoped = length_impact_df[length_impact_df["commutator_id"] == profile_id]
+            if not scoped.empty:
+                parts.append("\n=== Cable length budget consumed ===\n")
+                parts.append(
+                    _wiki_table(
+                        scoped,
+                        {
+                            "profile_id": "Cable",
+                            "max_length_reduction_mm": "Max length reduction (mm)",
+                        },
+                    )
+                )
+
+        # Measured series resistance
+        resistance_csv = profile_derived / "resistance_by_length.csv"
+        if resistance_csv.exists():
+            parts.append("\n== Series resistance ==\n")
+            df = pd.read_csv(resistance_csv)
+            parts.append(
+                _wiki_table(
+                    df,
+                    {
+                        "condition": "Condition",
+                        "mean_roundtrip_resistance_ohm": "Round-trip ohm (mean)",
+                        "std_roundtrip_resistance_ohm": "Round-trip ohm (std)",
+                        "n_sessions": "Sessions",
+                        "total_measurements": "Measurements",
+                    },
+                )
+            )
+
+        # SerDes through the commutator
+        serdes_csv = profile_derived / "serdes_by_length.csv"
+        if serdes_csv.exists():
+            parts.append("\n== SerDes signal integrity (through the commutator) ==\n")
+            df = pd.read_csv(serdes_csv)
+            parts.append(
+                _wiki_table(
+                    df,
+                    {
+                        "condition": "Condition",
+                        "channel": "Channel",
+                        "rate_gbps": "Rate (Gbps)",
+                        "mean_eye_area_ratio": "Eye area",
+                        "mean_eye_height_mv": "Eye height (mV)",
+                        "mean_eye_width_ps": "Eye width (ps)",
+                        "mean_link_margin_mv": "Margin floor (mV)",
+                        "n_sessions": "Sessions",
+                    },
+                )
+            )
+            for png in sorted(
+                (self.repo_root / "derived" / "sessions" / profile_id).rglob("eye_*.png")
+            ):
+                wiki_name = self._register_image(png)
+                if wiki_name:
+                    session_ref = "/".join(
+                        png.relative_to(self.repo_root / "derived" / "sessions").parts[:-1]
+                    )
+                    parts.append(_image_ref(wiki_name, f"{png.stem} ({session_ref})", width=420))
+
+        # VNA insertion loss
+        vna_csv = profile_derived / "vna_by_length.csv"
+        if vna_csv.exists():
+            parts.append("\n== RF insertion loss (VNA) ==\n")
+            df = pd.read_csv(vna_csv)
+            parts.append(
+                _wiki_table(
+                    df,
+                    {
+                        "condition": "Condition",
+                        "mean_max_insertion_loss_db": "Mean worst insertion loss (dB)",
+                        "worst_max_insertion_loss_db": "Worst insertion loss (dB)",
+                        "n_sessions": "Sessions",
+                    },
+                )
+            )
+
+        parts.append(f"\n''Back to [[{self.config.main_page}]]''")
+        return "\n".join(parts) + "\n"
+
 
 def render_wiki(repo_root: Path) -> dict[str, Path]:
     """
@@ -361,9 +523,20 @@ def render_wiki(repo_root: Path) -> dict[str, Path]:
         sorted(p.stem for p in profiles_dir.glob("*.yaml")) if profiles_dir.exists() else []
     )
 
+    # Cable vs commutator pages differ; dispatch on the profile_type field
+    def _kind(profile_id: str) -> str:
+        try:
+            with open(profiles_dir / f"{profile_id}.yaml") as f:
+                return (yaml.safe_load(f) or {}).get("profile_type", "cable")
+        except Exception:
+            return "cable"
+
     pages: dict[str, str] = {config.main_page: renderer.render_main_page(profile_ids)}
     for profile_id in profile_ids:
-        pages[config.profile_page(profile_id)] = renderer.render_profile_page(profile_id)
+        if _kind(profile_id) == "commutator":
+            pages[config.profile_page(profile_id)] = renderer.render_commutator_page(profile_id)
+        else:
+            pages[config.profile_page(profile_id)] = renderer.render_profile_page(profile_id)
 
     output_dir = repo_root / "derived" / "wiki"
     pages_dir = output_dir / "pages"

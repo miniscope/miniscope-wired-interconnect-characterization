@@ -11,6 +11,8 @@ derived/cross/:
 - quality_scores.csv (+ PNG/rate)  consolidated 0-1 score with works/marginal zones
 - miniscope_quality.csv (+ PNG/scope) quality at each miniscope's own rate,
   tagged measured (eye/link data) or projected_from_vna (no eye hardware)
+- commutator_impact.csv             standalone added R / attenuation per miniscope
+- commutator_length_impact.csv      cable-length budget each commutator costs
 
 These are exactly the tables/plots the wiki pages are rendered from.
 """
@@ -32,7 +34,7 @@ from src.analysis.projection import attenuation_at_hz, nyquist_hz
 from src.analysis.quality_score import QualityInputs, score, zone
 from src.analysis.resistivity import fit_resistivity
 from src.analysis.supply_voltage import max_length_row, supply_voltage_rows
-from src.core.loading import load_model
+from src.core.loading import load_model, load_profile
 from src.core.model_schemas import MiniscopeModel
 
 logger = logging.getLogger(__name__)
@@ -72,10 +74,27 @@ def _load_miniscopes(repo_root: Path) -> list[MiniscopeModel]:
     return miniscopes
 
 
+def _load_profile_kinds(repo_root: Path) -> dict[str, str]:
+    """profile_id -> 'cable' | 'commutator' from profiles/*.yaml."""
+    kinds: dict[str, str] = {}
+    profiles_dir = repo_root / "profiles"
+    if not profiles_dir.exists():
+        return kinds
+    for path in sorted(profiles_dir.glob("*.yaml")):
+        try:
+            profile = load_profile(path)
+        except Exception as e:
+            logger.warning("Failed to load profile %s: %s", path, e)
+            continue
+        kinds[profile.profile_id] = profile.profile_type
+    return kinds
+
+
 def _resistivity_table(consolidated: dict[str, dict]) -> pd.DataFrame:
     rows: list[dict] = []
     for profile_id, data in consolidated.items():
         by_length = data.get("resistance_by_length", [])
+        by_length = [r for r in by_length if r.get("cable_length_mm") is not None]
         fit = fit_resistivity(
             [r["cable_length_mm"] for r in by_length],
             [r["mean_roundtrip_resistance_ohm_per_m"] for r in by_length],
@@ -107,7 +126,11 @@ def _supply_voltage_table(
         # Report at every length the profile has ANY measurement for
         lengths: set[float] = set()
         for key in ["resistance_by_length", "serdes_by_length", "vna_by_length"]:
-            lengths.update(r["cable_length_mm"] for r in data.get(key, []))
+            lengths.update(
+                r["cable_length_mm"]
+                for r in data.get(key, [])
+                if r.get("cable_length_mm") is not None
+            )
 
         for miniscope in miniscopes:
             rows.extend(
@@ -141,6 +164,100 @@ def _max_length_table(
             if row is not None:
                 rows.append(row)
 
+    return pd.DataFrame(rows)
+
+
+def _commutator_measured(data: dict) -> tuple[float | None, dict]:
+    """
+    Pull a commutator's measured standalone numbers from its consolidated
+    rows: (added series resistance in ohm, attenuation_db_by_hz map).
+    """
+    added_resistance = None
+    for row in data.get("resistance_by_length", []):
+        if row.get("mean_roundtrip_resistance_ohm") is not None:
+            added_resistance = row["mean_roundtrip_resistance_ohm"]
+            break
+
+    attenuation_by_hz: dict = {}
+    for row in data.get("vna_by_length", []):
+        if row.get("attenuation_db_by_hz"):
+            attenuation_by_hz = row["attenuation_db_by_hz"]
+            break
+
+    return added_resistance, attenuation_by_hz
+
+
+def _commutator_impact_table(
+    commutators: dict[str, dict],
+    miniscopes: list[MiniscopeModel],
+) -> pd.DataFrame:
+    """
+    STANDALONE commutator impact per miniscope (ADR 0001: no cable x
+    commutator matrix). The commutator sits in series in the link, so:
+
+    - power: its measured series resistance raises the supply floor by
+      I_max * R_comm (and eats the same amount of cable budget);
+    - signal: its insertion loss at the miniscope's Nyquist frequency adds
+      directly to the cable's attenuation.
+    """
+    rows: list[dict] = []
+    for commutator_id, data in sorted(commutators.items()):
+        added_r, attenuation_by_hz = _commutator_measured(data)
+        for miniscope in miniscopes:
+            added_attenuation = None
+            if miniscope.serdes_rate_gbps is not None and attenuation_by_hz:
+                added_attenuation = attenuation_at_hz(
+                    attenuation_by_hz, nyquist_hz(miniscope.serdes_rate_gbps)
+                )
+            delta_v = None
+            if added_r is not None and miniscope.max_current_ma is not None:
+                delta_v = (miniscope.max_current_ma / 1000.0) * added_r
+            if added_r is None and added_attenuation is None:
+                continue
+            rows.append(
+                {
+                    "commutator_id": commutator_id,
+                    "miniscope_model": miniscope.model_id,
+                    "added_resistance_ohm": added_r,
+                    "supply_floor_increase_v": (round(delta_v, 4) if delta_v is not None else None),
+                    "rate_gbps": miniscope.serdes_rate_gbps,
+                    "added_attenuation_db": (
+                        round(added_attenuation, 4) if added_attenuation is not None else None
+                    ),
+                }
+            )
+    return pd.DataFrame(rows)
+
+
+def _commutator_length_impact_table(
+    commutators: dict[str, dict],
+    resistivity_df: pd.DataFrame,
+) -> pd.DataFrame:
+    """
+    How much voltage-limited cable budget a commutator costs, per cable:
+    its series resistance is equivalent to R_comm / rho metres of that
+    cable, so the max usable length shortens by about that much.
+    """
+    rows: list[dict] = []
+    if resistivity_df.empty:
+        return pd.DataFrame(rows)
+
+    for commutator_id, data in sorted(commutators.items()):
+        added_r, _ = _commutator_measured(data)
+        if added_r is None:
+            continue
+        for _, cable in resistivity_df.iterrows():
+            rho = cable["roundtrip_resistivity_ohm_per_m"]
+            if rho is None or rho <= 0:
+                continue
+            rows.append(
+                {
+                    "commutator_id": commutator_id,
+                    "profile_id": cable["profile_id"],
+                    "added_resistance_ohm": added_r,
+                    "max_length_reduction_mm": round(added_r / rho * 1000.0, 1),
+                }
+            )
     return pd.DataFrame(rows)
 
 
@@ -428,9 +545,18 @@ def run_cross_analysis(repo_root: Path) -> dict[str, Path]:
     have run first (reads derived/profiles/).
     """
     config = load_analysis_config(repo_root / "config" / "analysis.yaml")
-    consolidated = _load_consolidated_profiles(repo_root)
-    if not consolidated:
+    all_consolidated = _load_consolidated_profiles(repo_root)
+    if not all_consolidated:
         return {}
+
+    # Split DUT kinds: the cable analyses (resistivity, supply window,
+    # quality vs length) only apply to cables; commutators get their own
+    # standalone-impact outputs below.
+    kinds = _load_profile_kinds(repo_root)
+    consolidated = {
+        pid: d for pid, d in all_consolidated.items() if kinds.get(pid, "cable") == "cable"
+    }
+    commutators = {pid: d for pid, d in all_consolidated.items() if kinds.get(pid) == "commutator"}
 
     output_dir = repo_root / "derived" / "cross"
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -491,5 +617,19 @@ def run_cross_analysis(repo_root: Path) -> dict[str, Path]:
             plot_path = output_dir / f"miniscope_quality_{miniscope_id}.png"
             if _plot_miniscope_quality(miniscope_quality_df, miniscope_id, config, plot_path):
                 outputs[f"miniscope_quality_plot_{miniscope_id}"] = plot_path
+
+    # Commutator standalone impact (no cable x commutator matrix)
+    if commutators:
+        impact_df = _commutator_impact_table(commutators, miniscopes)
+        if not impact_df.empty:
+            path = output_dir / "commutator_impact.csv"
+            impact_df.to_csv(path, index=False)
+            outputs["commutator_impact"] = path
+
+        length_impact_df = _commutator_length_impact_table(commutators, resistivity_df)
+        if not length_impact_df.empty:
+            path = output_dir / "commutator_length_impact.csv"
+            length_impact_df.to_csv(path, index=False)
+            outputs["commutator_length_impact"] = path
 
     return outputs
