@@ -13,6 +13,6 @@ Each curve is one cable type. The score combines eye opening, link margin, and a
 Thin coax drops voltage, so each cable and length has an allowable supply window: the minimum keeps the Miniscope above its regulator dropout at full load; the maximum stays under the regulator's input limit. The dotted line marks the USB 5 V rail for reference -- DAQs can also be powered from an adjustable supply anywhere in the window.
 
 
-== Per-cable details ==
+== Per-DUT details ==
 
 * [[Coax_cable_characterization/coax_spi_sci_40awg|coax_spi_sci_40awg]]
