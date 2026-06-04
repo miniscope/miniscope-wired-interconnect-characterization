@@ -48,6 +48,9 @@ class AnalysisConfig(BaseModel):
 
     quality_score: QualityScoreConfig
     zones: ZonesConfig
+    # Reporting reference for supply-window outputs (the USB 5 V rail).
+    # A user-side choice, deliberately not a miniscope-model property.
+    reference_supply_v: float = Field(gt=0)
     serdes_rates_gbps: list[int]
     vna_reference_frequencies_hz: list[float]
 

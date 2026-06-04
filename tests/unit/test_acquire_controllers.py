@@ -85,9 +85,9 @@ class TestMiniscopeControllers:
         assert fields["poc_dcr_supply_ohm"].python_type == "float"
         assert fields["serdes_rate_gbps"].python_type == "float"
         assert fields["tags"].python_type == "list[str]"
-        # Literal field renders as a select with the schema's choices
-        assert fields["supply_mode"].choices == ["fixed_5v", "adjustable"]
-        assert fields["supply_mode"].default == "fixed_5v"
+        # Supply voltage is user/DAQ-side, never entered on a miniscope
+        assert "supply_mode" not in fields
+        assert "default_supply_v" not in fields
 
     def test_list_miniscopes(self, test_repo: Path):
         models = list_miniscopes(test_repo)
@@ -102,7 +102,6 @@ class TestMiniscopeControllers:
                 "model_id": "new_scope",
                 "min_operating_voltage_v": 3.3,
                 "max_current_ma": 250.0,
-                "supply_mode": "adjustable",
                 "serdes_family": "GMSL2",
                 "serdes_rate_gbps": 3.0,
             },
@@ -115,7 +114,7 @@ class TestMiniscopeControllers:
 
         loaded = load_model(path, model_type="miniscope_models")
         assert loaded.serdes_rate_gbps == 3.0
-        assert loaded.supply_mode == "adjustable"
+        assert loaded.min_operating_voltage_v == 3.3
 
     def test_create_miniscope_invalid(self, test_repo: Path):
         with pytest.raises(ValidationError):

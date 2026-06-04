@@ -38,7 +38,6 @@ class FormField:
     required: bool
     default: Any = None
     description: str = ""
-    choices: list[str] | None = None  # Literal fields render as a select
 
 
 # Fields the app fills automatically rather than asking the user.

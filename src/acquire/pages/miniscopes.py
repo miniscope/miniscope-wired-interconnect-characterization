@@ -21,9 +21,11 @@ def miniscopes_page() -> None:
     ui.markdown(
         "Miniscope models carry the electrical and link parameters that drive "
         "the published guidance: regulator limits, current draw, PoC choke "
-        "DCRs, supply mode, and SERDES rate (the DAQ is folded into the "
-        "Miniscope -- each version pairs with exactly one DAQ). Values come "
-        "from datasheets and bench specs, not measurements."
+        "DCRs, and SERDES rate (the DAQ is folded into the Miniscope -- each "
+        "version pairs with exactly one DAQ). Values come from datasheets and "
+        "bench specs, not measurements. Supply voltage is *not* a model "
+        "property: how a DAQ is powered (USB 5 V or adjustable) is the "
+        "user's choice, and the guidance reports the allowable window."
     )
 
     models = list_miniscopes(STATE.repo_root)
@@ -31,7 +33,6 @@ def miniscopes_page() -> None:
     columns = [
         {"name": "model_id", "label": "Model", "field": "model_id", "align": "left"},
         {"name": "serdes", "label": "SERDES", "field": "serdes", "align": "left"},
-        {"name": "supply", "label": "Supply", "field": "supply", "align": "left"},
         {"name": "regulator", "label": "Regulator (V)", "field": "regulator", "align": "left"},
         {"name": "current", "label": "Current (mA)", "field": "current", "align": "left"},
     ]
@@ -39,7 +40,6 @@ def miniscopes_page() -> None:
         {
             "model_id": m.model_id,
             "serdes": _serdes_cell(m),
-            "supply": f"{m.supply_mode} ({m.default_supply_v:g} V)",
             "regulator": _range_cell(m.min_operating_voltage_v, m.max_operating_voltage_v),
             "current": _range_cell(m.min_current_ma, m.max_current_ma),
         }
@@ -106,13 +106,7 @@ def _new_miniscope_dialog() -> None:
         )
         for f in fields:
             label = f.label + (" *" if f.required else "")
-            if f.choices is not None:
-                inputs[f.name] = (
-                    ui.select(f.choices, label=label, value=f.default)
-                    .props("outlined dense")
-                    .classes("w-full")
-                )
-            elif f.python_type == "float":
+            if f.python_type == "float":
                 inputs[f.name] = ui.number(label=label).props("outlined dense").classes("w-full")
             elif f.python_type == "list[str]":
                 inputs[f.name] = (

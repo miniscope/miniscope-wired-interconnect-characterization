@@ -166,7 +166,8 @@ class WikiRenderer:
             "Thin coax drops voltage, so each cable and length has an allowable "
             "supply window: the minimum keeps the Miniscope above its regulator "
             "dropout at full load; the maximum stays under the regulator's input "
-            "limit. The dotted line is the default supply (typically 5 V USB).\n"
+            "limit. The dotted line marks the USB 5 V rail for reference -- DAQs "
+            "can also be powered from an adjustable supply anywhere in the window.\n"
         )
         for plot in sorted(cross_dir.glob("supply_voltage_*.png")):
             scope = plot.stem.replace("supply_voltage_", "")
@@ -185,21 +186,21 @@ class WikiRenderer:
                         "cable_length_mm": "Length (mm)",
                         "v_supply_min": "Min supply (V)",
                         "v_supply_max": "Max supply (V)",
-                        "default_supply_ok": "OK at default supply?",
+                        "reference_supply_ok": "OK at 5 V (USB)?",
                     },
                 )
             )
 
         max_length_df = self._cross_csv("max_length_summary.csv")
         if max_length_df is not None:
-            parts.append("\n=== Longest usable cable at the default supply ===\n")
+            parts.append("\n=== Longest usable cable on USB (5 V) power ===\n")
             parts.append(
                 _wiki_table(
                     max_length_df,
                     {
                         "miniscope_model": "Miniscope",
                         "profile_id": "Cable",
-                        "default_supply_v": "Default supply (V)",
+                        "reference_supply_v": "Supply (V)",
                         "voltage_limited_max_length_mm": "Max length (mm)",
                     },
                 )

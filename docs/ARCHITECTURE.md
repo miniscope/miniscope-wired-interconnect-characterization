@@ -135,9 +135,12 @@ conflicts between concurrent PRs).
      measures the full path) -> receive-side PoC choke. Floor
      `Vmin + I_max*R_chain`, ceiling `Vmax + I_min*R_chain`; an empty
      window means the (cable, length) is infeasible, and the floor's
-     crossing of the default 5 V supply gives the voltage-limited max
-     length. The miniscope model carries the DAQ-implied parameters (the
-     Miniscope<->DAQ pairing is 1:1, so there is no separate DAQ entity).
+     crossing of the 5 V USB reference supply gives the voltage-limited
+     max length. The miniscope model carries the DAQ-implied parameters
+     (the Miniscope<->DAQ pairing is 1:1, so there is no separate DAQ
+     entity) -- but NOT a supply voltage: how the DAQ is powered (USB 5 V
+     or adjustable) is the user's choice, so the reporting reference lives
+     in `config/analysis.yaml` (`reference_supply_v`).
    - **Quality at the miniscope's own rate**: measured eye/link data for
      rates we capture (GMSL2), or projected from the cable's VNA
      attenuation at the link's Nyquist frequency for rates without eye

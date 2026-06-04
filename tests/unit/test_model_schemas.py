@@ -91,8 +91,6 @@ class TestMiniscopeModel:
         scope = MiniscopeModel(schema_version="1.0", model_id="defaults")
         assert scope.poc_dcr_supply_ohm == 0.0
         assert scope.poc_dcr_receive_ohm == 0.0
-        assert scope.supply_mode == "fixed_5v"
-        assert scope.default_supply_v == 5.0
         assert scope.max_operating_voltage_v is None
         assert scope.min_current_ma is None
         assert scope.serdes_family == ""
@@ -106,20 +104,18 @@ class TestMiniscopeModel:
             min_current_ma=20.0,
             poc_dcr_supply_ohm=0.05,
             poc_dcr_receive_ohm=0.04,
-            supply_mode="adjustable",
-            default_supply_v=12.0,
             serdes_family="GMSL2",
             serdes_rate_gbps=6.0,
         )
         assert scope.max_operating_voltage_v == 5.5
         assert scope.min_current_ma == 20.0
         assert scope.poc_dcr_supply_ohm == 0.05
-        assert scope.supply_mode == "adjustable"
         assert scope.serdes_rate_gbps == 6.0
 
-    def test_invalid_supply_mode_rejected(self):
-        with pytest.raises(ValidationError):
-            MiniscopeModel(schema_version="1.0", model_id="bad", supply_mode="battery")
+    def test_no_supply_voltage_on_model(self):
+        """Supply is a user/DAQ-side choice; the model must not carry one."""
+        assert "supply_mode" not in MiniscopeModel.model_fields
+        assert "default_supply_v" not in MiniscopeModel.model_fields
 
     def test_negative_poc_dcr_rejected(self):
         with pytest.raises(ValidationError):

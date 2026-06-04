@@ -17,9 +17,14 @@ cable contribution. "Choke DCR" per side is the total series resistance of
 that side's PoC network (a datasheet value).
 
 If ``V_supply_min > V_supply_max`` the (cable, length) is **infeasible**
-for that Miniscope -- itself a key published result. For a fixed-5 V (USB)
-supply, the binding test is ``default_supply_v - I_max * R_chain >= Vmin``,
-which yields a maximum usable length at the default supply.
+for that Miniscope -- itself a key published result.
+
+How the DAQ is powered is a USER-side choice (USB 5 V or an adjustable
+input), so no supply voltage lives on the miniscope model. Reporting
+instead uses a single reference supply (``reference_supply_v`` in
+config/analysis.yaml, the USB 5 V rail): the binding test
+``reference_supply_v - I_max * R_chain >= Vmin`` yields a maximum usable
+length at that reference.
 
 This whole module is SERDES-agnostic: it applies to every Miniscope
 regardless of link rate. See ADR 0001 (build step 1).
@@ -67,14 +72,15 @@ class SupplyWindow:
         float | None
     )  # ceiling (over-voltage): Vmax + I_min * R_chain; None if Vmax unknown
     feasible: bool  # window non-empty (True when there is no ceiling)
-    default_supply_v: float
-    default_supply_ok: bool  # default supply sits within [v_supply_min, v_supply_max]
+    reference_supply_v: float
+    reference_supply_ok: bool  # reference supply sits within [v_supply_min, v_supply_max]
 
 
 def supply_window(
     miniscope: MiniscopeModel,
     roundtrip_resistivity_ohm_per_m: float,
     length_m: float,
+    reference_supply_v: float,
 ) -> SupplyWindow | None:
     """
     Compute the supply-voltage window for one length.
@@ -104,10 +110,10 @@ def supply_window(
         v_supply_max = miniscope.max_operating_voltage_v + (i_min_ma / 1000.0) * r_chain
 
     feasible = v_supply_max is None or v_supply_min <= v_supply_max
-    default_supply_ok = (
+    reference_supply_ok = (
         feasible
-        and v_supply_min <= miniscope.default_supply_v
-        and (v_supply_max is None or miniscope.default_supply_v <= v_supply_max)
+        and v_supply_min <= reference_supply_v
+        and (v_supply_max is None or reference_supply_v <= v_supply_max)
     )
 
     return SupplyWindow(
@@ -115,23 +121,24 @@ def supply_window(
         v_supply_min=v_supply_min,
         v_supply_max=v_supply_max,
         feasible=feasible,
-        default_supply_v=miniscope.default_supply_v,
-        default_supply_ok=default_supply_ok,
+        reference_supply_v=reference_supply_v,
+        reference_supply_ok=reference_supply_ok,
     )
 
 
-def max_length_at_default_v(
+def max_length_at_supply_v(
     miniscope: MiniscopeModel,
     roundtrip_resistivity_ohm_per_m: float,
+    supply_v: float,
 ) -> float | None:
     """
-    Maximum cable length (mm) at which the default supply still keeps the
+    Maximum cable length (mm) at which the given supply still keeps the
     regulator above dropout under worst-case (max) current:
 
-        default_supply_v - I_max * R_chain(L) >= Vmin
+        supply_v - I_max * R_chain(L) >= Vmin
 
     Returns 0.0 if even a zero-length cable brownouts (the chokes alone, or
-    a default supply already below the regulator floor). Returns None if the
+    a supply already below the regulator floor). Returns None if the
     resistivity is non-positive or the floor essentials are missing.
     """
     if (
@@ -141,7 +148,7 @@ def max_length_at_default_v(
     ):
         return None
 
-    headroom_v = miniscope.default_supply_v - miniscope.min_operating_voltage_v
+    headroom_v = supply_v - miniscope.min_operating_voltage_v
     if headroom_v <= 0:
         return 0.0
 
@@ -160,17 +167,20 @@ def supply_voltage_rows(
     profile_id: str,
     roundtrip_resistivity_ohm_per_m: float,
     lengths_mm: list[float],
+    reference_supply_v: float,
 ) -> list[dict]:
     """
     Build supply-voltage-window table rows for one (miniscope, profile) pair.
 
     Returns one row per length with the allowable supply window, feasibility,
-    and whether the default (e.g. 5 V USB) supply lands inside it. Returns []
+    and whether the reference (USB 5 V) supply lands inside it. Returns []
     if the miniscope lacks the floor essentials.
     """
     rows: list[dict] = []
     for length_mm in sorted(lengths_mm):
-        window = supply_window(miniscope, roundtrip_resistivity_ohm_per_m, length_mm / 1000.0)
+        window = supply_window(
+            miniscope, roundtrip_resistivity_ohm_per_m, length_mm / 1000.0, reference_supply_v
+        )
         if window is None:
             return []
         rows.append(
@@ -185,9 +195,8 @@ def supply_voltage_rows(
                     None if window.v_supply_max is None else round(window.v_supply_max, 3)
                 ),
                 "feasible": window.feasible,
-                "supply_mode": miniscope.supply_mode,
-                "default_supply_v": miniscope.default_supply_v,
-                "default_supply_ok": window.default_supply_ok,
+                "reference_supply_v": reference_supply_v,
+                "reference_supply_ok": window.reference_supply_ok,
             }
         )
     return rows
@@ -197,18 +206,19 @@ def max_length_row(
     miniscope: MiniscopeModel,
     profile_id: str,
     roundtrip_resistivity_ohm_per_m: float,
+    reference_supply_v: float,
 ) -> dict | None:
     """
     Headline max-usable-length summary for one (miniscope, profile) pair at
-    the default supply. Returns None if it can't be computed.
+    the reference supply. Returns None if it can't be computed.
     """
-    max_len = max_length_at_default_v(miniscope, roundtrip_resistivity_ohm_per_m)
+    max_len = max_length_at_supply_v(miniscope, roundtrip_resistivity_ohm_per_m, reference_supply_v)
     if max_len is None:
         return None
     return {
         "miniscope_model": miniscope.model_id,
         "profile_id": profile_id,
         "roundtrip_resistivity_ohm_per_m": round(roundtrip_resistivity_ohm_per_m, 4),
-        "default_supply_v": miniscope.default_supply_v,
+        "reference_supply_v": reference_supply_v,
         "voltage_limited_max_length_mm": max_len,
     }

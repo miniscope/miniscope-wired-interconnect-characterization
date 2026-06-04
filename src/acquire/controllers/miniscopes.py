@@ -11,7 +11,7 @@ the validated schema and nobody hand-writes model YAML.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Literal, get_args, get_origin
+from typing import Any
 
 import yaml
 
@@ -23,31 +23,19 @@ from src.core.model_schemas import MiniscopeModel
 _AUTO_FIELDS = {"schema_version"}
 
 
-def _strip_optional(annotation: Any) -> Any:
-    """Unwrap X | None to X so Literal/float detection sees the real type."""
-    args = [a for a in get_args(annotation) if a is not type(None)]
-    return args[0] if len(args) == 1 else annotation
-
-
 def miniscope_form_fields() -> list[FormField]:
     """Derive form inputs from the MiniscopeModel schema."""
     fields: list[FormField] = []
     for name, info in MiniscopeModel.model_fields.items():
         if name in _AUTO_FIELDS:
             continue
-
-        annotation = _strip_optional(info.annotation)
-        choices: list[str] | None = None
-        if get_origin(annotation) is Literal:
-            python_type = "str"
-            choices = [str(c) for c in get_args(annotation)]
-        elif "list[str]" in str(info.annotation):
+        annotation = str(info.annotation)
+        if "list[str]" in annotation:
             python_type = "list[str]"
-        elif "float" in str(info.annotation):
+        elif "float" in annotation:
             python_type = "float"
         else:
             python_type = "str"
-
         fields.append(
             FormField(
                 name=name,
@@ -56,7 +44,6 @@ def miniscope_form_fields() -> list[FormField]:
                 required=info.is_required(),
                 default=info.default if info.default is not None else None,
                 description=info.description or "",
-                choices=choices,
             )
         )
     return fields

@@ -10,8 +10,6 @@ cable profiles use extra="forbid" because they are OUR contract.
 
 from __future__ import annotations
 
-from typing import Literal
-
 from pydantic import BaseModel, ConfigDict, Field
 
 
@@ -64,8 +62,11 @@ class MiniscopeModel(BaseHardwareModel):
     Metadata for a Miniscope model, with the DAQ folded in.
 
     A given Miniscope version only ever runs with one DAQ model, so the
-    DAQ's relevant parameters (its supply mode and the supply-side PoC
-    choke) live here rather than in a separate entity. See ADR 0001.
+    DAQ's relevant fixed parameters (the supply-side PoC choke, the link
+    rate) live here rather than in a separate entity. See ADR 0001. The
+    supply VOLTAGE is deliberately NOT here: how the DAQ is powered (USB
+    5 V vs an adjustable input) is a user-side choice, so the reporting
+    reference lives in config/analysis.yaml (``reference_supply_v``).
 
     These fields drive two co-equal published outputs over cable length:
 
@@ -139,17 +140,6 @@ class MiniscopeModel(BaseHardwareModel):
         default=0.0,
         description="Total series DCR of the receive-side (Miniscope) PoC choke network",
         ge=0,
-    )
-
-    # --- supply (DAQ folded in) ---
-    supply_mode: Literal["fixed_5v", "adjustable"] = Field(
-        default="fixed_5v",
-        description="'fixed_5v' = USB-powered 5 V default; 'adjustable' = settable supply",
-    )
-    default_supply_v: float = Field(
-        default=5.0,
-        description="Default supply voltage (the 5 V USB rail unless adjusted)",
-        gt=0,
     )
 
     # --- link / SERDES (implies the DAQ and rate) ---

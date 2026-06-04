@@ -32,9 +32,10 @@ max_current_ma: 300.0
 poc_dcr_supply_ohm: 0.0
 poc_dcr_receive_ohm: 0.0
 
-# Supply (DAQ folded in): the V4 DAQ is USB-powered, 5 V default
-supply_mode: fixed_5v
-default_supply_v: 5.0
+# NOTE: no supply voltage here on purpose -- how the DAQ is powered (USB
+# 5 V vs adjustable input) is the user's choice; the analysis reports the
+# allowable window and uses config/analysis.yaml:reference_supply_v for
+# the "max length on USB power" summary.
 
 # Link: the V4 uses FPD-Link III (slower than GMSL2). Signal-quality guidance
 # for this rate is PROJECTED from the VNA attenuation curve (see ADR 0001).

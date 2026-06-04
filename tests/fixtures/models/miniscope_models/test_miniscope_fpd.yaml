@@ -10,7 +10,5 @@ baseline_current_ma: 150.0
 max_current_ma: 300.0
 poc_dcr_supply_ohm: 0.05
 poc_dcr_receive_ohm: 0.05
-supply_mode: fixed_5v
-default_supply_v: 5.0
 serdes_family: "FPD-Link III"
 serdes_rate_gbps: 1.5

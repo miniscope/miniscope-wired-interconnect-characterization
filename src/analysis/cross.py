@@ -7,7 +7,7 @@ derived/cross/:
 
 - resistivity_summary.csv          one row per profile (fit across lengths)
 - supply_voltage.csv (+ PNG/scope) allowable supply-V window per miniscope x profile x length
-- max_length_summary.csv           voltage-limited max length at the default supply
+- max_length_summary.csv           voltage-limited max length at the reference supply
 - quality_scores.csv (+ PNG/rate)  consolidated 0-1 score with works/marginal zones
 - miniscope_quality.csv (+ PNG/scope) quality at each miniscope's own rate,
   tagged measured (eye/link data) or projected_from_vna (no eye hardware)
@@ -90,6 +90,7 @@ def _supply_voltage_table(
     consolidated: dict[str, dict],
     resistivity_df: pd.DataFrame,
     miniscopes: list[MiniscopeModel],
+    reference_supply_v: float,
 ) -> pd.DataFrame:
     rows: list[dict] = []
     if resistivity_df.empty:
@@ -109,7 +110,9 @@ def _supply_voltage_table(
             lengths.update(r["cable_length_mm"] for r in data.get(key, []))
 
         for miniscope in miniscopes:
-            rows.extend(supply_voltage_rows(miniscope, profile_id, rho, sorted(lengths)))
+            rows.extend(
+                supply_voltage_rows(miniscope, profile_id, rho, sorted(lengths), reference_supply_v)
+            )
 
     return pd.DataFrame(rows)
 
@@ -118,8 +121,9 @@ def _max_length_table(
     consolidated: dict[str, dict],
     resistivity_df: pd.DataFrame,
     miniscopes: list[MiniscopeModel],
+    reference_supply_v: float,
 ) -> pd.DataFrame:
-    """Voltage-limited max usable length at the default supply, per miniscope x profile."""
+    """Voltage-limited max usable length at the reference supply, per miniscope x profile."""
     rows: list[dict] = []
     if resistivity_df.empty:
         return pd.DataFrame(rows)
@@ -133,7 +137,7 @@ def _max_length_table(
         if rho is None:
             continue
         for miniscope in miniscopes:
-            row = max_length_row(miniscope, profile_id, rho)
+            row = max_length_row(miniscope, profile_id, rho, reference_supply_v)
             if row is not None:
                 rows.append(row)
 
@@ -359,9 +363,9 @@ def _plot_supply_voltage(
 
     Per cable: the floor (V_supply_min, solid) is the brownout limit and the
     ceiling (V_supply_max, dashed) the regulator's over-voltage limit; the
-    band between them is the usable window. The default-supply line (e.g.
-    5 V USB) is marked so the voltage-limited max length is read directly off
-    where the floor crosses it.
+    band between them is the usable window. The reference-supply line (the
+    USB 5 V rail, from config/analysis.yaml) is marked so the voltage-limited
+    max length is read directly off where the floor crosses it.
     """
     scope_df = supply_df[supply_df["miniscope_model"] == miniscope_id]
     if scope_df.empty:
@@ -397,9 +401,13 @@ def _plot_supply_voltage(
                 alpha=0.10,
             )
 
-    default_v = float(scope_df["default_supply_v"].iloc[0])
+    reference_v = float(scope_df["reference_supply_v"].iloc[0])
     ax.axhline(
-        default_v, color="#455a64", lw=1.0, ls=":", label=f"default supply ({default_v:g} V)"
+        reference_v,
+        color="#455a64",
+        lw=1.0,
+        ls=":",
+        label=f"reference supply ({reference_v:g} V USB)",
     )
 
     ax.set_xlabel("Cable length (mm)")
@@ -437,7 +445,9 @@ def run_cross_analysis(repo_root: Path) -> dict[str, Path]:
 
     # Supply voltage per miniscope x profile x length
     miniscopes = _load_miniscopes(repo_root)
-    supply_df = _supply_voltage_table(consolidated, resistivity_df, miniscopes)
+    supply_df = _supply_voltage_table(
+        consolidated, resistivity_df, miniscopes, config.reference_supply_v
+    )
     if not supply_df.empty:
         path = output_dir / "supply_voltage.csv"
         supply_df.to_csv(path, index=False)
@@ -448,8 +458,10 @@ def run_cross_analysis(repo_root: Path) -> dict[str, Path]:
             if _plot_supply_voltage(supply_df, miniscope_id, plot_path):
                 outputs[f"supply_voltage_plot_{miniscope_id}"] = plot_path
 
-    # Voltage-limited max usable length at the default supply
-    max_length_df = _max_length_table(consolidated, resistivity_df, miniscopes)
+    # Voltage-limited max usable length at the reference supply
+    max_length_df = _max_length_table(
+        consolidated, resistivity_df, miniscopes, config.reference_supply_v
+    )
     if not max_length_df.empty:
         path = output_dir / "max_length_summary.csv"
         max_length_df.to_csv(path, index=False)
