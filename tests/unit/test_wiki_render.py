@@ -65,13 +65,35 @@ class TestRenderWiki:
         assert "Resistance measurements" in text
         assert f"[[{config.main_page}]]" in text
 
+    def test_commutator_page_content(self, analyzed_repo: Path):
+        outputs = render_wiki(analyzed_repo)
+        config = load_wiki_config(analyzed_repo / "config" / "wiki.yaml")
+        text = outputs[f"page_{config.profile_page('test_commutator')}"].read_text(encoding="utf-8")
+
+        assert "Commutator specifications" in text
+        assert "Impact on your link" in text
+        assert "Series resistance" in text
+        assert "SerDes signal integrity" in text
+        assert "RF insertion loss" in text
+        # Standalone impact, not a cable x commutator matrix
+        assert "Cable length budget" in text
+        assert f"[[{config.main_page}]]" in text
+
+    def test_main_page_commutator_section(self, analyzed_repo: Path):
+        outputs = render_wiki(analyzed_repo)
+        config = load_wiki_config(analyzed_repo / "config" / "wiki.yaml")
+        text = outputs[f"page_{config.main_page}"].read_text(encoding="utf-8")
+
+        assert "What does a commutator cost?" in text
+        assert config.profile_page("test_commutator") in text
+
     def test_upload_manifest(self, analyzed_repo: Path):
         outputs = render_wiki(analyzed_repo)
         config = load_wiki_config(analyzed_repo / "config" / "wiki.yaml")
         with open(outputs["upload_manifest"]) as f:
             manifest = json.load(f)
 
-        assert len(manifest["pages"]) == 2  # main + 1 profile
+        assert len(manifest["pages"]) == 3  # main + cable + commutator
         assert len(manifest["images"]) > 0
         for image in manifest["images"]:
             # Prefix comes from config/wiki.yaml, never hardcoded

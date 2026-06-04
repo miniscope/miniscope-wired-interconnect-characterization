@@ -50,7 +50,8 @@ class SessionRef:
     """Identity + location of a written session."""
 
     profile_id: str
-    cable_length_mm: float
+    condition: str  # '500mm' for cables, 'static' etc. for commutators
+    cable_length_mm: float | None
     measurement_type: str
     session_id: str
     path: Path
@@ -60,7 +61,7 @@ class SessionRef:
         return "/".join(
             [
                 self.profile_id,
-                length_dir_name(self.cable_length_mm),
+                self.condition,
                 self.measurement_type,
                 self.session_id,
             ]
@@ -71,19 +72,29 @@ class SessionWriteError(Exception):
     """Raised when a freshly-written session fails validation."""
 
 
+def _condition_dir(cable_length_mm: float | None, condition: str | None) -> str:
+    """Resolve the condition directory from a length or an explicit state."""
+    if cable_length_mm is not None:
+        return length_dir_name(cable_length_mm)
+    if condition:
+        return condition
+    raise ValueError("Either cable_length_mm or condition is required")
+
+
 def new_session_id(
     repo_root: Path,
     profile_id: str,
-    cable_length_mm: float,
+    cable_length_mm: float | None,
     measurement_type: str,
     when: date_type,
+    condition: str | None = None,
 ) -> str:
-    """Next free YYYYMMDD_NN id for this (profile, length, type) on `when`."""
+    """Next free YYYYMMDD_NN id for this (profile, condition, type) on `when`."""
     type_dir = (
         repo_root
         / "measurements"
         / profile_id
-        / length_dir_name(cable_length_mm)
+        / _condition_dir(cable_length_mm, condition)
         / measurement_type
     )
     stamp = when.strftime("%Y%m%d")
@@ -97,19 +108,18 @@ def new_session_id(
 def _start_session(
     repo_root: Path,
     profile_id: str,
-    cable_length_mm: float,
+    cable_length_mm: float | None,
     measurement_type: str,
     meta: SessionMeta,
+    condition: str | None = None,
 ) -> SessionRef:
     """Allocate the session directory and write session.yaml."""
-    session_id = new_session_id(repo_root, profile_id, cable_length_mm, measurement_type, meta.date)
+    condition_dir = _condition_dir(cable_length_mm, condition)
+    session_id = new_session_id(
+        repo_root, profile_id, cable_length_mm, measurement_type, meta.date, condition=condition
+    )
     session_dir = (
-        repo_root
-        / "measurements"
-        / profile_id
-        / length_dir_name(cable_length_mm)
-        / measurement_type
-        / session_id
+        repo_root / "measurements" / profile_id / condition_dir / measurement_type / session_id
     )
     session_dir.mkdir(parents=True)
 
@@ -117,7 +127,7 @@ def _start_session(
         "schema_version": SESSION_SCHEMA_VERSION,
         "session_id": session_id,
         "profile_id": profile_id,
-        "cable_length_mm": cable_length_mm,
+        "condition": condition_dir,
         "measurement_type": measurement_type,
         "measurement_type_version": _latest_version(repo_root, measurement_type),
         "date": meta.date,
@@ -125,11 +135,14 @@ def _start_session(
         "notes": meta.notes,
         "type_fields": meta.type_fields,
     }
+    if cable_length_mm is not None:
+        record["cable_length_mm"] = cable_length_mm
     with open(session_dir / "session.yaml", "w") as f:
         yaml.safe_dump(record, f, sort_keys=False)
 
     return SessionRef(
         profile_id=profile_id,
+        condition=condition_dir,
         cable_length_mm=cable_length_mm,
         measurement_type=measurement_type,
         session_id=session_id,
@@ -184,15 +197,18 @@ def _finalize_session(repo_root: Path, ref: SessionRef) -> SessionRef:
 def write_resistance_session(
     repo_root: Path,
     profile_id: str,
-    cable_length_mm: float,
+    cable_length_mm: float | None,
     readings: list[ResistanceReading],
     meta: SessionMeta,
+    condition: str | None = None,
 ) -> SessionRef:
     """Write a manual resistance session (resistance.csv)."""
     if not readings:
         raise ValueError("At least one resistance reading is required")
 
-    ref = _start_session(repo_root, profile_id, cable_length_mm, "resistance", meta)
+    ref = _start_session(
+        repo_root, profile_id, cable_length_mm, "resistance", meta, condition=condition
+    )
     with open(ref.path / "resistance.csv", "w", newline="") as f:
         writer = csv.writer(f)
         writer.writerow(["resistance_ohm", "notes"])
@@ -205,12 +221,15 @@ def write_resistance_session(
 def write_serdes_session(
     repo_root: Path,
     profile_id: str,
-    cable_length_mm: float,
+    cable_length_mm: float | None,
     result: SerdesResult,
     meta: SessionMeta,
+    condition: str | None = None,
 ) -> SessionRef:
     """Write a SerDes session (session_manifest.csv + eye NPZs + margin CSVs)."""
-    ref = _start_session(repo_root, profile_id, cable_length_mm, "serdes", meta)
+    ref = _start_session(
+        repo_root, profile_id, cable_length_mm, "serdes", meta, condition=condition
+    )
 
     manifest_rows: list[dict[str, str]] = []
     for eye in result.eyes:
@@ -251,13 +270,14 @@ def write_serdes_session(
 def write_vna_session(
     repo_root: Path,
     profile_id: str,
-    cable_length_mm: float,
+    cable_length_mm: float | None,
     result: VnaSweepResult,
     meta: SessionMeta,
     description: str = "",
+    condition: str | None = None,
 ) -> SessionRef:
     """Write a VNA session (manifest.csv + raw/sweep_01.s2p)."""
-    ref = _start_session(repo_root, profile_id, cable_length_mm, "vna", meta)
+    ref = _start_session(repo_root, profile_id, cable_length_mm, "vna", meta, condition=condition)
 
     filename = "sweep_01.s2p"
     write_s2p(result, ref.path / "raw" / filename)

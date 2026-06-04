@@ -26,7 +26,7 @@ from pathlib import Path
 import pandas as pd
 
 from src.core.loading import load_session
-from src.core.session_schemas import SessionRecord, length_dir_name
+from src.core.session_schemas import SessionRecord
 
 logger = logging.getLogger(__name__)
 
@@ -59,7 +59,7 @@ def _load_summary(repo_root: Path, session: SessionRecord) -> dict | None:
         / "derived"
         / "sessions"
         / session.profile_id
-        / length_dir_name(session.cable_length_mm)
+        / session.condition
         / session.measurement_type
         / session.session_id
         / name
@@ -94,21 +94,47 @@ def _group_sessions_by_type(
     return groups
 
 
+def _condition_sort_key(condition: str) -> tuple[float, str]:
+    """Sort length conditions numerically, named conditions after them."""
+    from src.core.session_schemas import parse_condition_dir
+
+    try:
+        length = parse_condition_dir(condition)
+    except ValueError:
+        length = None
+    return (length if length is not None else float("inf"), condition)
+
+
+def _sorted_conditions(by_condition: dict) -> list[str]:
+    return sorted(by_condition, key=_condition_sort_key)
+
+
+def _combo_sort_key(key: tuple[str, str, int]) -> tuple[tuple[float, str], str, int]:
+    condition, channel, rate = key
+    return (_condition_sort_key(condition), channel, rate)
+
+
 def _consolidate_resistance(entries: list[tuple[SessionRecord, dict]]) -> list[dict]:
-    """One row per length: pooled round-trip resistance stats across sessions."""
-    by_length: dict[float, list[dict]] = defaultdict(list)
+    """One row per condition: pooled round-trip resistance stats across sessions."""
+    by_condition: dict[str, list[tuple[SessionRecord, dict]]] = defaultdict(list)
     for session, summary in entries:
-        by_length[session.cable_length_mm].append(summary)
+        by_condition[session.condition].append((session, summary))
 
     rows: list[dict] = []
-    for length_mm in sorted(by_length):
-        summaries = by_length[length_mm]
+    for condition in _sorted_conditions(by_condition):
+        sessions_summaries = by_condition[condition]
+        summaries = [s for _, s in sessions_summaries]
+        length_mm = sessions_summaries[0][0].cable_length_mm
         per_m = _mean_std_n([s.get("mean_roundtrip_resistance_ohm_per_m") for s in summaries])
+        absolute = _mean_std_n([s.get("mean_resistance_ohm") for s in summaries])
         rows.append(
             {
+                "condition": condition,
                 "cable_length_mm": length_mm,
-                "n_sessions": per_m["n_sessions"],
+                "n_sessions": absolute["n_sessions"],
                 "total_measurements": sum(s.get("num_measurements", 0) for s in summaries),
+                "mean_roundtrip_resistance_ohm": absolute["mean"],
+                "std_roundtrip_resistance_ohm": absolute["std"],
                 "mean_roundtrip_resistance_ohm_per_m": per_m["mean"],
                 "std_roundtrip_resistance_ohm_per_m": per_m["std"],
             }
@@ -117,18 +143,21 @@ def _consolidate_resistance(entries: list[tuple[SessionRecord, dict]]) -> list[d
 
 
 def _consolidate_serdes(entries: list[tuple[SessionRecord, dict]]) -> list[dict]:
-    """One row per (length, channel, rate): pooled eye + margin stats."""
-    by_combo: dict[tuple[float, str, int], list[dict]] = defaultdict(list)
+    """One row per (condition, channel, rate): pooled eye + margin stats."""
+    by_combo: dict[tuple[str, str, int], list[dict]] = defaultdict(list)
+    length_by_condition: dict[str, float | None] = {}
     for session, summary in entries:
+        length_by_condition[session.condition] = session.cable_length_mm
         for combo in summary.get("combos", []):
-            key = (session.cable_length_mm, combo["channel"], int(combo["rate_gbps"]))
+            key = (session.condition, combo["channel"], int(combo["rate_gbps"]))
             by_combo[key].append(combo)
 
     rows: list[dict] = []
-    for length_mm, channel, rate in sorted(by_combo):
-        combos = by_combo[(length_mm, channel, rate)]
+    for condition, channel, rate in sorted(by_combo, key=_combo_sort_key):
+        combos = by_combo[(condition, channel, rate)]
         row: dict = {
-            "cable_length_mm": length_mm,
+            "condition": condition,
+            "cable_length_mm": length_by_condition[condition],
             "channel": channel,
             "rate_gbps": rate,
             "n_sessions": len(combos),
@@ -147,14 +176,16 @@ def _consolidate_serdes(entries: list[tuple[SessionRecord, dict]]) -> list[dict]
 
 
 def _consolidate_vna(entries: list[tuple[SessionRecord, dict]]) -> list[dict]:
-    """One row per length: pooled insertion-loss stats across sessions."""
-    by_length: dict[float, list[dict]] = defaultdict(list)
+    """One row per condition: pooled insertion-loss stats across sessions."""
+    by_condition: dict[str, list[tuple[SessionRecord, dict]]] = defaultdict(list)
     for session, summary in entries:
-        by_length[session.cable_length_mm].append(summary)
+        by_condition[session.condition].append((session, summary))
 
     rows: list[dict] = []
-    for length_mm in sorted(by_length):
-        summaries = by_length[length_mm]
+    for condition in _sorted_conditions(by_condition):
+        sessions_summaries = by_condition[condition]
+        summaries = [s for _, s in sessions_summaries]
+        length_mm = sessions_summaries[0][0].cable_length_mm
         il = _mean_std_n([s.get("mean_max_insertion_loss_db") for s in summaries])
         worst = [
             s.get("worst_max_insertion_loss_db")
@@ -179,6 +210,7 @@ def _consolidate_vna(entries: list[tuple[SessionRecord, dict]]) -> list[dict]:
 
         rows.append(
             {
+                "condition": condition,
                 "cable_length_mm": length_mm,
                 "n_sessions": il["n_sessions"],
                 "mean_max_insertion_loss_db": il["mean"],

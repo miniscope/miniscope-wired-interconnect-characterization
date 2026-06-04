@@ -1,0 +1,12 @@
+schema_version: "1.0"
+session_id: "20250501_01"
+profile_id: test_commutator
+condition: static
+measurement_type: resistance
+measurement_type_version: 1
+date: 2025-05-01
+operator: Test Operator
+notes: "fixture commutator series-resistance session"
+type_fields:
+  measurement_instrument: "Test LCR Meter"
+  measurement_method: lcr_shorted_loop

@@ -99,6 +99,60 @@ class TestWriteResistanceSession:
         )
 
 
+class TestWriteCommutatorSession:
+    def test_static_condition_roundtrip(self, test_repo: Path):
+        """Commutator sessions write under a named condition, no length."""
+        ref = write_resistance_session(
+            test_repo,
+            "test_commutator",
+            None,
+            [ResistanceReading(0.4, "through commutator")],
+            resistance_meta(),
+            condition="static",
+        )
+
+        assert ref.ref == "test_commutator/static/resistance/20260603_01"
+        assert ref.cable_length_mm is None
+
+        result = process_session(ref.path, test_repo)
+        assert result.validation.is_valid, result.validation.errors
+        assert result.error is None
+
+    def test_length_on_commutator_rejected(self, test_repo: Path):
+        """Validation refuses a length condition on a commutator profile."""
+        with pytest.raises(SessionWriteError, match="state condition"):
+            write_resistance_session(
+                test_repo,
+                "test_commutator",
+                500.0,
+                [ResistanceReading(0.4)],
+                resistance_meta(),
+            )
+
+    def test_unknown_commutator_condition_rejected(self, test_repo: Path):
+        with pytest.raises(SessionWriteError, match="Unknown commutator condition"):
+            write_resistance_session(
+                test_repo,
+                "test_commutator",
+                None,
+                [ResistanceReading(0.4)],
+                resistance_meta(),
+                condition="upside_down",
+            )
+
+    def test_named_condition_on_cable_rejected(self, test_repo: Path):
+        """Validation refuses a state condition on a cable profile."""
+        with pytest.raises(SessionWriteError, match="length condition"):
+            write_resistance_session(
+                test_repo,
+                "test_cable",
+                None,
+                [ResistanceReading(1.5)],
+                resistance_meta(),
+                condition="static",
+            )
+
+
 class TestWriteSerdesSession:
     def test_simulated_capture_roundtrip(self, test_repo: Path):
         driver = get_serdes_driver(simulate=True, cable_length_mm=750.0)

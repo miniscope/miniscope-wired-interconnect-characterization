@@ -18,6 +18,7 @@ class TestMiniscopeModel:
             custom_vendor_field="allowed",
         )
         assert scope.model_id == "flex"
+
     def test_power_fields(self):
         scope = MiniscopeModel(
             schema_version="1.0",

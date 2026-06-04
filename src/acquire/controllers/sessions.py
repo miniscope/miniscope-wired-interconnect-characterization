@@ -12,6 +12,7 @@ from collections.abc import Callable
 from datetime import date
 from pathlib import Path
 
+from src.core.session_schemas import length_dir_name, parse_condition_dir
 from src.core.session_writer import (
     SessionMeta,
     SessionRef,
@@ -35,10 +36,21 @@ __all__ = [
 ]
 
 
+def _normalize_condition(condition: float | str) -> tuple[float | None, str]:
+    """
+    Accept either a cable length in mm (number) or a condition directory
+    name ('500mm', 'static'); return (cable_length_mm | None, condition).
+    """
+    if isinstance(condition, int | float):
+        return float(condition), length_dir_name(float(condition))
+    length = parse_condition_dir(condition)
+    return length, condition
+
+
 def record_resistance_session(
     repo_root: Path,
     profile_id: str,
-    cable_length_mm: float,
+    condition: float | str,
     readings: list[tuple[float, str]],
     operator: str,
     notes: str,
@@ -57,7 +69,10 @@ def record_resistance_session(
         type_fields["temperature_c"] = temperature_c
 
     meta = SessionMeta(operator=operator, date=date.today(), notes=notes, type_fields=type_fields)
-    return write_resistance_session(repo_root, profile_id, cable_length_mm, parsed, meta)
+    length_mm, condition_dir = _normalize_condition(condition)
+    return write_resistance_session(
+        repo_root, profile_id, length_mm, parsed, meta, condition=condition_dir
+    )
 
 
 def run_serdes_capture(
@@ -77,7 +92,7 @@ def run_serdes_capture(
 def save_serdes_session(
     repo_root: Path,
     profile_id: str,
-    cable_length_mm: float,
+    condition: float | str,
     result: SerdesResult,
     operator: str,
     notes: str,
@@ -89,7 +104,10 @@ def save_serdes_session(
         notes=notes,
         type_fields={"serdes_device": serdes_device},
     )
-    return write_serdes_session(repo_root, profile_id, cable_length_mm, result, meta)
+    length_mm, condition_dir = _normalize_condition(condition)
+    return write_serdes_session(
+        repo_root, profile_id, length_mm, result, meta, condition=condition_dir
+    )
 
 
 def run_vna_capture(
@@ -113,7 +131,7 @@ def run_vna_capture(
 def save_vna_session(
     repo_root: Path,
     profile_id: str,
-    cable_length_mm: float,
+    condition: float | str,
     result: VnaSweepResult,
     operator: str,
     notes: str,
@@ -130,4 +148,7 @@ def save_vna_session(
             "port_impedance_ohm": result.ref_impedance_ohm,
         },
     )
-    return write_vna_session(repo_root, profile_id, cable_length_mm, result, meta)
+    length_mm, condition_dir = _normalize_condition(condition)
+    return write_vna_session(
+        repo_root, profile_id, length_mm, result, meta, condition=condition_dir
+    )

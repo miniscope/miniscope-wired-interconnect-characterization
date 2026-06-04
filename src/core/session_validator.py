@@ -5,7 +5,11 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from src.core.schemas import FieldType, MeasurementDefinition
-from src.core.session_schemas import SessionRecord, parse_length_dir_name
+from src.core.session_schemas import (
+    COMMUTATOR_CONDITIONS,
+    SessionRecord,
+    parse_condition_dir,
+)
 from src.core.validation import TypeFieldValidator
 
 
@@ -32,7 +36,8 @@ class SessionPathInfo:
     """Identity of a session as derived from its directory path."""
 
     profile_id: str
-    cable_length_mm: float
+    condition: str
+    cable_length_mm: float | None
     measurement_type: str
     session_id: str
 
@@ -40,15 +45,18 @@ class SessionPathInfo:
 def parse_session_path(session_dir: Path) -> SessionPathInfo:
     """
     Derive session identity from the directory layout:
-        measurements/<profile_id>/<length>mm/<measurement_type>/<session_id>/
+        measurements/<profile_id>/<condition>/<measurement_type>/<session_id>/
+    where the condition is a cable length ('500mm') or a commutator state
+    ('static').
     """
     parts = session_dir.resolve().parts
     if len(parts) < 4:
         raise ValueError(f"Session path too shallow to parse: {session_dir}")
-    profile_id, length_dir, measurement_type, session_id = parts[-4:]
+    profile_id, condition_dir, measurement_type, session_id = parts[-4:]
     return SessionPathInfo(
         profile_id=profile_id,
-        cable_length_mm=parse_length_dir_name(length_dir),
+        condition=condition_dir,
+        cable_length_mm=parse_condition_dir(condition_dir),
         measurement_type=measurement_type,
         session_id=session_id,
     )
@@ -74,14 +82,51 @@ def validate_session(
     _validate_required_files(session_dir, definition, result)
 
     if profiles_dir is not None:
-        profile_path = profiles_dir / f"{session.profile_id}.yaml"
-        if not profile_path.exists():
-            result.add_error(f"Cable profile '{session.profile_id}' not found at {profile_path}")
+        _validate_profile_ref(session, profiles_dir, result)
 
     if models_dir is not None:
         _validate_model_refs(session, definition, models_dir, result)
 
     return result
+
+
+def _validate_profile_ref(
+    session: SessionRecord,
+    profiles_dir: Path,
+    result: ValidationResult,
+) -> None:
+    """The profile must exist, and its kind must match the session's condition."""
+    profile_path = profiles_dir / f"{session.profile_id}.yaml"
+    if not profile_path.exists():
+        result.add_error(f"DUT profile '{session.profile_id}' not found at {profile_path}")
+        return
+
+    from src.core.loading import load_profile
+    from src.core.profile_schemas import CableProfile
+
+    try:
+        profile = load_profile(profile_path)
+    except Exception as e:
+        result.add_error(f"DUT profile '{session.profile_id}' failed to load: {e}")
+        return
+
+    if isinstance(profile, CableProfile):
+        if session.cable_length_mm is None:
+            result.add_error(
+                f"Cable profile '{session.profile_id}' requires a length condition, "
+                f"got '{session.condition}'"
+            )
+    else:  # commutator
+        if session.cable_length_mm is not None:
+            result.add_error(
+                f"Commutator profile '{session.profile_id}' takes a state condition "
+                f"(e.g. 'static'), not a length ('{session.condition}')"
+            )
+        elif session.condition not in COMMUTATOR_CONDITIONS:
+            result.add_error(
+                f"Unknown commutator condition '{session.condition}' "
+                f"(known: {sorted(COMMUTATOR_CONDITIONS)})"
+            )
 
 
 def _validate_path_identity(
@@ -100,6 +145,11 @@ def _validate_path_identity(
         result.add_error(
             f"profile_id mismatch: session.yaml says '{session.profile_id}' "
             f"but path says '{info.profile_id}'"
+        )
+    if session.condition != info.condition:
+        result.add_error(
+            f"condition mismatch: session.yaml says '{session.condition}' "
+            f"but path says '{info.condition}'"
         )
     if session.cable_length_mm != info.cable_length_mm:
         result.add_error(

@@ -1,0 +1,12 @@
+schema_version: "1.0"
+profile_type: commutator
+profile_id: test_commutator
+name: "Test Coax Commutator"
+manufacturer: "Test Manufacturer"
+part_number: "TCOM-001"
+channel_count: 1
+max_rotation_rpm: 60
+commutator_type: "passive slip ring"
+notes: "Fixture commutator for tests"
+tags:
+  - test

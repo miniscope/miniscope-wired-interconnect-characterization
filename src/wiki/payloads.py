@@ -10,7 +10,6 @@ from pathlib import Path
 import yaml
 
 from src.core.loading import load_session
-from src.core.session_schemas import length_dir_name
 
 logger = logging.getLogger(__name__)
 
@@ -83,7 +82,7 @@ def _build_payload(repo_root: Path, profile_id: str, profile_path: Path) -> dict
         if summary_name is None:
             continue
 
-        rel = Path(profile_id) / length_dir_name(session.cable_length_mm)
+        rel = Path(profile_id) / session.condition
         rel = rel / session.measurement_type / session.session_id
         summary_path = repo_root / "derived" / "sessions" / rel / summary_name
         summary = None
@@ -97,6 +96,7 @@ def _build_payload(repo_root: Path, profile_id: str, profile_path: Path) -> dict
         payload["characterization"][session.measurement_type].append(
             {
                 "session_ref": str(rel).replace("\\", "/"),
+                "condition": session.condition,
                 "cable_length_mm": session.cable_length_mm,
                 "date": str(session.date),
                 "operator": session.operator,

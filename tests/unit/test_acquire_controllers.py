@@ -11,7 +11,10 @@ from src.acquire.controllers.miniscopes import (
     miniscope_form_fields,
 )
 from src.acquire.controllers.profiles import (
+    commutator_form_fields,
+    create_commutator_profile,
     create_profile,
+    list_conditions,
     list_lengths,
     list_profile_summaries,
     profile_form_fields,
@@ -38,11 +41,16 @@ class TestProfileControllers:
 
     def test_list_profile_summaries(self, test_repo: Path):
         summaries = list_profile_summaries(test_repo)
-        assert len(summaries) == 1
-        s = summaries[0]
-        assert s.profile.profile_id == "test_cable"
-        assert s.n_lengths == 2
-        assert s.n_sessions == 6
+        assert len(summaries) == 2
+        by_id = {s.profile.profile_id: s for s in summaries}
+        cable = by_id["test_cable"]
+        assert cable.profile.profile_type == "cable"
+        assert cable.n_lengths == 2
+        assert cable.n_sessions == 6
+        comm = by_id["test_commutator"]
+        assert comm.profile.profile_type == "commutator"
+        assert comm.n_lengths == 1  # the 'static' condition
+        assert comm.n_sessions == 3
 
     def test_create_profile(self, test_repo: Path):
         profile = create_profile(
@@ -74,6 +82,46 @@ class TestProfileControllers:
 
     def test_list_lengths_unknown_profile(self, test_repo: Path):
         assert list_lengths(test_repo, "nope") == []
+
+    def test_list_conditions_commutator(self, test_repo: Path):
+        conditions = list_conditions(test_repo, "test_commutator")
+        assert [c.condition for c in conditions] == ["static"]
+        static = conditions[0]
+        assert static.cable_length_mm is None
+        assert static.sessions_by_type == {"resistance": 1, "serdes": 1, "vna": 1}
+
+    def test_list_conditions_cable_lengths(self, test_repo: Path):
+        conditions = list_conditions(test_repo, "test_cable")
+        assert {c.condition for c in conditions} == {"500mm", "1000mm"}
+        assert all(c.cable_length_mm is not None for c in conditions)
+
+    def test_commutator_form_fields_track_schema(self):
+        fields = {f.name: f for f in commutator_form_fields()}
+        assert "schema_version" not in fields  # filled automatically
+        assert "profile_type" not in fields  # set by the controller
+        assert fields["profile_id"].required
+        assert fields["channel_count"].python_type == "float"  # number input
+        assert fields["max_rotation_rpm"].python_type == "float"
+
+    def test_create_commutator_profile(self, test_repo: Path):
+        profile = create_commutator_profile(
+            test_repo,
+            {"profile_id": "new_comm", "name": "New Commutator", "channel_count": 2},
+        )
+        assert profile.profile_type == "commutator"
+        path = test_repo / "profiles" / "new_comm.yaml"
+        assert path.exists()
+        # Round-trips through the dispatching loader
+        from src.core.loading import load_profile
+        from src.core.profile_schemas import CommutatorProfile
+
+        loaded = load_profile(path)
+        assert isinstance(loaded, CommutatorProfile)
+        assert loaded.channel_count == 2
+
+    def test_create_commutator_duplicate(self, test_repo: Path):
+        with pytest.raises(FileExistsError):
+            create_commutator_profile(test_repo, {"profile_id": "test_commutator", "name": "dup"})
 
 
 class TestMiniscopeControllers:

@@ -11,8 +11,9 @@ class TestFullPipeline:
         """Run the complete pipeline on the fixture measurement tree."""
         summary = run_full_pipeline(test_repo)
 
-        # Should have processed 6 sessions (2 resistance + 2 serdes + 2 vna)
-        assert len(summary["processed"]) == 6
+        # 9 sessions: cable (2 resistance + 2 serdes + 2 vna) +
+        # commutator (1 of each, under the 'static' condition)
+        assert len(summary["processed"]) == 9
         for p in summary["processed"]:
             assert p["valid"], f"{p['session_ref']} failed validation"
             assert p["error"] is None, f"{p['session_ref']} had error: {p['error']}"
@@ -22,16 +23,21 @@ class TestFullPipeline:
             assert type_name in summary["aggregated"]
             assert "error" not in summary["aggregated"][type_name]
 
-        # Should have consolidated per-profile metrics
+        # Should have consolidated per-profile metrics (both DUT kinds)
         assert "test_cable_consolidated_json" in summary["consolidated"]
+        assert "test_commutator_consolidated_json" in summary["consolidated"]
 
         # Should have run cross-cutting analysis
         assert "quality_scores" in summary["cross"]
         assert "resistivity_summary" in summary["cross"]
         assert "supply_voltage_table" in summary["cross"]
 
+        # Should have run the commutator standalone-impact analysis
+        assert "commutator_impact" in summary["cross"]
+
         # Should have generated a wiki payload per profile
         assert "test_cable" in summary["wiki_payloads"]
+        assert "test_commutator" in summary["wiki_payloads"]
 
         payload_path = Path(summary["wiki_payloads"]["test_cable"])
         assert payload_path.exists()

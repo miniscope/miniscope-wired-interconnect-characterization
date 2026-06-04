@@ -171,7 +171,7 @@ class ProcessVNA(BaseProcessor):
             "vna_summary_json": summary_path,
         }
 
-    def _compute_file_metrics(self, ts: TouchstoneData, cable_length_mm: float) -> dict:
+    def _compute_file_metrics(self, ts: TouchstoneData, cable_length_mm: float | None) -> dict:
         """Compute scalar metrics for one .s2p file."""
         metrics: dict = {}
 
@@ -183,7 +183,9 @@ class ProcessVNA(BaseProcessor):
             round(impedance, 2) if impedance is not None else None
         )
 
-        cable_length_m = cable_length_mm / 1000.0
+        # Per-metre normalization only applies to cables; commutators have
+        # no length, their absolute insertion loss IS the result.
+        cable_length_m = cable_length_mm / 1000.0 if cable_length_mm is not None else 0.0
 
         for freq_hz, label in zip(
             self.METRIC_FREQUENCIES_HZ, self.METRIC_FREQ_LABELS, strict=False
@@ -201,6 +203,7 @@ class ProcessVNA(BaseProcessor):
             "session_id": session.session_id,
             "profile_id": session.profile_id,
             "cable_length_mm": session.cable_length_mm,
+            "condition": session.condition,
             "measurement_type": session.measurement_type,
             "date": str(session.date),
             "operator": session.operator,

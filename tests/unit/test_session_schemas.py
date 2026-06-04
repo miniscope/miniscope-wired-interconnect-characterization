@@ -9,6 +9,7 @@ from pydantic import ValidationError
 from src.core.session_schemas import (
     SessionRecord,
     length_dir_name,
+    parse_condition_dir,
     parse_length_dir_name,
 )
 
@@ -74,6 +75,44 @@ class TestSessionRecord:
     def test_extra_fields_forbidden(self):
         with pytest.raises(ValidationError):
             SessionRecord.model_validate(make_session_kwargs(unknown_field="bad"))
+
+
+class TestSessionCondition:
+    def test_condition_derived_from_length(self):
+        record = SessionRecord.model_validate(make_session_kwargs())
+        assert record.condition == "500mm"
+
+    def test_explicit_matching_condition_ok(self):
+        record = SessionRecord.model_validate(make_session_kwargs(condition="500mm"))
+        assert record.condition == "500mm"
+
+    def test_condition_length_mismatch_rejected(self):
+        with pytest.raises(ValidationError, match="does not match"):
+            SessionRecord.model_validate(make_session_kwargs(condition="1000mm"))
+
+    def test_named_condition_without_length(self):
+        """Commutator sessions: a state condition, no cable length."""
+        record = SessionRecord.model_validate(
+            make_session_kwargs(cable_length_mm=None, condition="static")
+        )
+        assert record.cable_length_mm is None
+        assert record.condition == "static"
+
+    def test_no_length_and_no_condition_rejected(self):
+        with pytest.raises(ValidationError, match="condition is required"):
+            SessionRecord.model_validate(make_session_kwargs(cable_length_mm=None))
+
+
+class TestParseConditionDir:
+    def test_length_condition(self):
+        assert parse_condition_dir("500mm") == 500.0
+
+    def test_named_condition(self):
+        assert parse_condition_dir("static") is None
+
+    def test_invalid_condition(self):
+        with pytest.raises(ValueError):
+            parse_condition_dir("Not A Condition")
 
 
 class TestLengthDirName:

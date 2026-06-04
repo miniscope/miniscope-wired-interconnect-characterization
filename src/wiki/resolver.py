@@ -12,7 +12,7 @@ from typing import Any
 import yaml
 
 from src.core.schemas import FieldType, MeasurementDefinition
-from src.core.session_schemas import SessionRecord, length_dir_name
+from src.core.session_schemas import SessionRecord
 from src.wiki.base import BaseWikiClient
 
 logger = logging.getLogger(__name__)
@@ -90,7 +90,7 @@ def session_ref(session: SessionRecord) -> str:
     return "/".join(
         [
             session.profile_id,
-            length_dir_name(session.cable_length_mm),
+            session.condition,
             session.measurement_type,
             session.session_id,
         ]

@@ -51,8 +51,16 @@ class TestParseSessionPath:
         assert info.measurement_type == "resistance"
         assert info.session_id == "20250115_01"
 
-    def test_parse_bad_length_dir(self, tmp_path: Path):
-        session_dir = tmp_path / "profile" / "notalength" / "resistance" / "20250101_01"
+    def test_parse_named_condition(self, tmp_path: Path):
+        """Non-length dirs are named conditions (commutator states)."""
+        session_dir = tmp_path / "profile" / "static" / "resistance" / "20250101_01"
+        session_dir.mkdir(parents=True)
+        info = parse_session_path(session_dir)
+        assert info.condition == "static"
+        assert info.cable_length_mm is None
+
+    def test_parse_invalid_condition_dir(self, tmp_path: Path):
+        session_dir = tmp_path / "profile" / "Not-A-Condition" / "resistance" / "20250101_01"
         session_dir.mkdir(parents=True)
         with pytest.raises(ValueError):
             parse_session_path(session_dir)
@@ -190,7 +198,7 @@ class TestValidateSession:
             resistance_session_dir, session, definition, profiles_dir=empty_profiles
         )
         assert not result.is_valid
-        assert any("Cable profile" in e for e in result.errors)
+        assert any("DUT profile" in e for e in result.errors)
 
     @pytest.fixture
     def model_ref_definition(self):

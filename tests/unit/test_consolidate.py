@@ -104,6 +104,30 @@ class TestConsolidateProfile:
         assert len(consolidated["serdes_by_length"]) == 8
         assert len(consolidated["vna_by_length"]) == 1
 
+    def test_commutator_consolidation(self, processed_repo: Path):
+        """Commutator sessions pool under the 'static' condition, no length."""
+        outputs = consolidate_profile(processed_repo, "test_commutator")
+
+        with open(outputs["test_commutator_consolidated_json"]) as f:
+            consolidated = json.load(f)
+
+        res = consolidated["resistance_by_length"]
+        assert len(res) == 1
+        assert res[0]["condition"] == "static"
+        assert res[0]["cable_length_mm"] is None
+        # Absolute series resistance is the commutator result (~0.35 ohm)
+        assert 0.3 < res[0]["mean_roundtrip_resistance_ohm"] < 0.4
+        # No per-metre value without a length
+        assert res[0]["mean_roundtrip_resistance_ohm_per_m"] is None
+
+        vna = consolidated["vna_by_length"][0]
+        assert vna["condition"] == "static"
+        assert vna["attenuation_db_by_hz"]
+
+        serdes = consolidated["serdes_by_length"]
+        assert len(serdes) == 4  # 1 condition x 4 channel/rate combos
+        assert all(r["condition"] == "static" for r in serdes)
+
     def test_unprocessed_profile_empty(self, test_repo: Path):
         """Without processing, there are no summaries to consolidate."""
         outputs = consolidate_profile(test_repo, "test_cable")
