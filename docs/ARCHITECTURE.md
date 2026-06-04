@@ -218,6 +218,15 @@ pick the new type up from the definition.
 - Miniscope electrical values are placeholders -- `models/miniscope_models/`
   (regulator limits, currents, PoC choke DCRs, FPD-Link III rate). Models
   are entered/viewed via the acquisition app's `/miniscopes` page.
+- Wiki page layout/wording for the link-guidance outputs -- the current
+  render (`src/wiki/render.py`) is deliberately minimal-but-working; page
+  structure, wording, and what leads vs links is an open publishing
+  decision.
+- Commutator rotation conditions -- only `static` exists
+  (`src/core/session_schemas.py:COMMUTATOR_CONDITIONS`). Rotation states
+  (e.g. `rotating_10rpm`) and a motorized-rotation driver get added there
+  when that bench work starts; the condition-based layout already has a
+  home for them.
 
 Resolved since the original design:
 
