@@ -30,10 +30,6 @@ class TestVNASummary:
 
         return SessionContext(session_dir=vna_session_dir, derived_dir=derived_dir, record=session)
 
-    def test_name_property(self):
-        aggregator = VNASummary()
-        assert aggregator.name == "vna_summary"
-
     def test_aggregate_single(self, processed_session, definition, tmp_path: Path):
         aggregator = VNASummary()
         output_dir = tmp_path / "aggregated"

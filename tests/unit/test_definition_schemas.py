@@ -33,14 +33,6 @@ class TestFieldSpec:
         )
         assert spec.enum_values == ["a", "b"]
 
-    def test_model_ref_field(self):
-        spec = FieldSpec(
-            name="cable",
-            field_type=FieldType.MODEL_REF,
-            model_ref_type="miniscope_models",
-        )
-        assert spec.model_ref_type == "miniscope_models"
-
     def test_extra_fields_forbidden(self):
         with pytest.raises(ValidationError):
             FieldSpec(name="x", field_type=FieldType.STRING, bogus="nope")

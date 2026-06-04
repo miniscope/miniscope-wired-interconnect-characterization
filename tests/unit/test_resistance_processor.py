@@ -20,9 +20,6 @@ class TestNormalizeResistance:
     def definition(self):
         return load_definition(Path("measurement_types/resistance/v1/definition.yaml"))
 
-    def test_name_property(self, processor: NormalizeResistance):
-        assert processor.name == "normalize_resistance"
-
     def test_process_valid(
         self,
         processor: NormalizeResistance,

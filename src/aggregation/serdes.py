@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import json
-import logging
 from pathlib import Path
 
 import matplotlib
@@ -12,8 +10,6 @@ import matplotlib.pyplot as plt
 
 from src.aggregation.base import BaseAggregator, SessionContext
 from src.core.schemas import MeasurementDefinition
-
-logger = logging.getLogger(__name__)
 
 
 class SerdesSummary(BaseAggregator):
@@ -27,10 +23,6 @@ class SerdesSummary(BaseAggregator):
 
     def __init__(self, derived_dir: Path | None = None) -> None:
         self._derived_dir = derived_dir
-
-    @property
-    def name(self) -> str:
-        return "serdes_summary"
 
     def aggregate(
         self,
@@ -73,15 +65,7 @@ class SerdesSummary(BaseAggregator):
     def _build_combo_table(self, sessions: list[SessionContext]) -> pd.DataFrame:
         """One row per (session, channel, rate) from each serdes_summary.json."""
         rows: list[dict] = []
-        for ctx in sessions:
-            summary_path = ctx.derived_dir / "serdes_summary.json"
-            if not summary_path.exists():
-                logger.warning("No processed SerDes summary for %s, skipping", ctx.label)
-                continue
-
-            with open(summary_path) as f:
-                summary = json.load(f)
-
+        for summary in self.load_summaries(sessions, "serdes"):
             for combo in summary.get("combos", []):
                 rows.append(
                     {

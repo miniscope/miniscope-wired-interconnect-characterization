@@ -1,6 +1,5 @@
 """Integration test: full pipeline end-to-end."""
 
-import json
 from pathlib import Path
 
 from src.pipeline import run_full_pipeline
@@ -35,21 +34,9 @@ class TestFullPipeline:
         # Should have run the commutator standalone-impact analysis
         assert "commutator_impact" in summary["cross"]
 
-        # Should have generated a wiki payload per profile
-        assert "test_cable" in summary["wiki_payloads"]
-        assert "test_commutator" in summary["wiki_payloads"]
-
-        payload_path = Path(summary["wiki_payloads"]["test_cable"])
-        assert payload_path.exists()
-        with open(payload_path) as f:
-            payload = json.load(f)
-        assert payload["profile_id"] == "test_cable"
-        assert len(payload["characterization"]["resistance"]) == 2
-        assert len(payload["characterization"]["serdes"]) == 2
-        assert len(payload["characterization"]["vna"]) == 2
-        for entries in payload["characterization"].values():
-            for entry in entries:
-                assert entry["summary"] is not None
+        # Should have rendered wiki pages
+        assert summary["wiki_rendered"]
+        assert "error" not in summary["wiki_rendered"]
 
     def test_stale_derived_outputs_pruned(self, test_repo: Path):
         """Outputs for sessions/profiles that no longer exist are removed."""

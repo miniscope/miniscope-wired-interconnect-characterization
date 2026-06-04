@@ -61,7 +61,6 @@ class SerdesResult:
 
     eyes: list[EyeDiagram] = field(default_factory=list)
     margins: list[MarginSweep] = field(default_factory=list)
-    instrument_info: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass

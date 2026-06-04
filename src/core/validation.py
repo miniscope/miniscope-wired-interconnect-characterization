@@ -33,7 +33,6 @@ class TypeFieldValidator:
         FieldType.LIST_STRING: list,
         FieldType.LIST_FLOAT: list,
         FieldType.ENUM: str,
-        FieldType.MODEL_REF: str,
     }
 
     def __init__(self, definition: MeasurementDefinition) -> None:

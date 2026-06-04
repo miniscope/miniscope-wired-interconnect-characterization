@@ -31,7 +31,6 @@ class FieldType(str, Enum):
     LIST_STRING = "list[string]"
     LIST_FLOAT = "list[float]"
     ENUM = "enum"
-    MODEL_REF = "model_ref"
 
 
 class FieldSpec(BaseModel):
@@ -45,7 +44,6 @@ class FieldSpec(BaseModel):
     description: str = ""
     default: Any = None
     enum_values: list[str] | None = None
-    model_ref_type: str | None = None
 
     @model_validator(mode="after")
     def enum_values_required_for_enum(self) -> FieldSpec:

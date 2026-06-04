@@ -46,6 +46,15 @@ ZONE_COLORS = {
 }
 
 
+def _shade_quality_zones(ax, config: AnalysisConfig) -> None:
+    """Shade the works/marginal/not-recommended quality bands behind a 0-1 plot."""
+    ax.axhspan(config.zones.works, 1.0, color=ZONE_COLORS["works"], alpha=0.10)
+    ax.axhspan(config.zones.marginal, config.zones.works, color=ZONE_COLORS["marginal"], alpha=0.10)
+    ax.axhspan(0.0, config.zones.marginal, color=ZONE_COLORS["not_recommended"], alpha=0.10)
+    ax.axhline(config.zones.works, color=ZONE_COLORS["works"], lw=0.8, ls="--")
+    ax.axhline(config.zones.marginal, color=ZONE_COLORS["marginal"], lw=0.8, ls="--")
+
+
 def _load_consolidated_profiles(repo_root: Path) -> dict[str, dict]:
     """Load every derived/profiles/<id>/consolidated.json."""
     profiles: dict[str, dict] = {}
@@ -397,13 +406,7 @@ def _plot_miniscope_quality(
         return False
 
     fig, ax = plt.subplots(figsize=(8, 5))
-
-    # Shaded recommendation zones behind the curves
-    ax.axhspan(config.zones.works, 1.0, color=ZONE_COLORS["works"], alpha=0.10)
-    ax.axhspan(config.zones.marginal, config.zones.works, color=ZONE_COLORS["marginal"], alpha=0.10)
-    ax.axhspan(0.0, config.zones.marginal, color=ZONE_COLORS["not_recommended"], alpha=0.10)
-    ax.axhline(config.zones.works, color=ZONE_COLORS["works"], lw=0.8, ls="--")
-    ax.axhline(config.zones.marginal, color=ZONE_COLORS["marginal"], lw=0.8, ls="--")
+    _shade_quality_zones(ax, config)
 
     projected = bool((scope_df["source"] == "projected_from_vna").any())
     for profile_id, group in scope_df.groupby("profile_id"):
@@ -441,13 +444,7 @@ def _plot_quality_vs_length(
         return False
 
     fig, ax = plt.subplots(figsize=(8, 5))
-
-    # Shaded recommendation zones behind the curves
-    ax.axhspan(config.zones.works, 1.0, color=ZONE_COLORS["works"], alpha=0.10)
-    ax.axhspan(config.zones.marginal, config.zones.works, color=ZONE_COLORS["marginal"], alpha=0.10)
-    ax.axhspan(0.0, config.zones.marginal, color=ZONE_COLORS["not_recommended"], alpha=0.10)
-    ax.axhline(config.zones.works, color=ZONE_COLORS["works"], lw=0.8, ls="--")
-    ax.axhline(config.zones.marginal, color=ZONE_COLORS["marginal"], lw=0.8, ls="--")
+    _shade_quality_zones(ax, config)
 
     for profile_id, group in rate_df.groupby("profile_id"):
         group = group.sort_values("cable_length_mm")

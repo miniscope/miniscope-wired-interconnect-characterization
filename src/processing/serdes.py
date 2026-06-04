@@ -12,9 +12,10 @@ import matplotlib.pyplot as plt
 
 from src.core.schemas import MeasurementDefinition
 from src.core.session_schemas import SessionRecord
-from src.processing.base import BaseProcessor
+from src.processing.base import BaseProcessor, session_header
 from src.processing.eye import (
     extract_eye_opening,
+    eye_figure,
     eye_opening_physical,
     link_margin_metrics,
 )
@@ -38,10 +39,6 @@ class ProcessSerdes(BaseProcessor):
 
     def __init__(self, models_dir: Path | None = None) -> None:
         self._models_dir = models_dir
-
-    @property
-    def name(self) -> str:
-        return "process_serdes"
 
     def process(
         self,
@@ -107,22 +104,13 @@ class ProcessSerdes(BaseProcessor):
     ) -> None:
         """Render the eye-diagram histogram as a PNG (log color scale)."""
         data = np.load(npz_path)
-        counts = data["error_counts"].astype(float)
-        v_range = data["voltage_range_mv"]
-        t_range = data["time_range_ps"]
-
-        fig, ax = plt.subplots(figsize=(4.5, 3.5))
-        im = ax.imshow(
-            np.log1p(counts),
-            origin="lower",
-            aspect="auto",
-            extent=(t_range[0], t_range[1], v_range[0], v_range[1]),
-            cmap="inferno",
+        fig = eye_figure(
+            data["error_counts"],
+            data["voltage_range_mv"],
+            data["time_range_ps"],
+            channel,
+            rate_gbps,
         )
-        ax.set_xlabel("Time (ps)")
-        ax.set_ylabel("Voltage (mV)")
-        ax.set_title(f"Eye: {channel} @ {rate_gbps} Gbps")
-        fig.colorbar(im, ax=ax, label="log(1 + errors)")
         fig.tight_layout()
         fig.savefig(output_path, dpi=150)
         plt.close(fig)
@@ -141,13 +129,7 @@ class ProcessSerdes(BaseProcessor):
 
     def _compute_summary(self, rows: list[dict], session: SessionRecord) -> dict:
         summary: dict = {
-            "session_id": session.session_id,
-            "profile_id": session.profile_id,
-            "cable_length_mm": session.cable_length_mm,
-            "condition": session.condition,
-            "measurement_type": session.measurement_type,
-            "date": str(session.date),
-            "operator": session.operator,
+            **session_header(session),
             "num_combos": len(rows),
             "combos": [
                 {

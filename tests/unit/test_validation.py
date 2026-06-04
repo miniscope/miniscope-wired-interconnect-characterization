@@ -20,7 +20,7 @@ class TestTypeFieldValidator:
         validator = TypeFieldValidator(full_definition)
         errors = validator.validate(
             {
-                "miniscope_model": "some_cable",
+                "operator_note": "some_cable",
                 "method": "method_a",
                 "temperature_c": 22.5,
             }
@@ -30,13 +30,13 @@ class TestTypeFieldValidator:
     def test_missing_required(self, full_definition: MeasurementDefinition):
         validator = TypeFieldValidator(full_definition)
         errors = validator.validate({"method": "method_a"})
-        assert any("miniscope_model" in e for e in errors)
+        assert any("operator_note" in e for e in errors)
 
     def test_unknown_field(self, full_definition: MeasurementDefinition):
         validator = TypeFieldValidator(full_definition)
         errors = validator.validate(
             {
-                "miniscope_model": "x",
+                "operator_note": "x",
                 "method": "method_a",
                 "unknown_field": "bad",
             }
@@ -47,7 +47,7 @@ class TestTypeFieldValidator:
         validator = TypeFieldValidator(full_definition)
         errors = validator.validate(
             {
-                "miniscope_model": "x",
+                "operator_note": "x",
                 "method": "invalid_method",
             }
         )
@@ -57,7 +57,7 @@ class TestTypeFieldValidator:
         validator = TypeFieldValidator(full_definition)
         errors = validator.validate(
             {
-                "miniscope_model": "x",
+                "operator_note": "x",
                 "method": "method_a",
                 "temperature_c": "not_a_float",
             }
@@ -69,7 +69,7 @@ class TestTypeFieldValidator:
         validator = TypeFieldValidator(full_definition)
         errors = validator.validate(
             {
-                "miniscope_model": "x",
+                "operator_note": "x",
                 "method": "method_a",
             }
         )
@@ -80,7 +80,7 @@ class TestTypeFieldValidator:
         validator = TypeFieldValidator(full_definition)
         errors = validator.validate(
             {
-                "miniscope_model": "x",
+                "operator_note": "x",
                 "method": "method_a",
                 "temperature_c": 25,
             }

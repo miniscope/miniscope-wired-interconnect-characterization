@@ -7,7 +7,7 @@ import pandas as pd
 
 from src.core.schemas import MeasurementDefinition
 from src.core.session_schemas import SessionRecord
-from src.processing.base import BaseProcessor
+from src.processing.base import BaseProcessor, copy_type_fields, session_header
 
 
 class NormalizeResistance(BaseProcessor):
@@ -23,10 +23,6 @@ class NormalizeResistance(BaseProcessor):
 
     def __init__(self, models_dir: Path | None = None) -> None:
         self._models_dir = models_dir
-
-    @property
-    def name(self) -> str:
-        return "normalize_resistance"
 
     def process(
         self,
@@ -78,16 +74,7 @@ class NormalizeResistance(BaseProcessor):
 
     def _compute_summary(self, df: pd.DataFrame, session: SessionRecord) -> dict:
         """Compute summary statistics and attach session metadata."""
-        summary: dict = {
-            "session_id": session.session_id,
-            "profile_id": session.profile_id,
-            "cable_length_mm": session.cable_length_mm,
-            "condition": session.condition,
-            "measurement_type": session.measurement_type,
-            "date": str(session.date),
-            "operator": session.operator,
-            "num_measurements": len(df),
-        }
+        summary: dict = {**session_header(session), "num_measurements": len(df)}
 
         for col in ["resistance_ohm", "roundtrip_resistance_ohm_per_m"]:
             if col in df.columns and not df[col].isna().all():
@@ -98,9 +85,7 @@ class NormalizeResistance(BaseProcessor):
                 summary[f"max_{col}"] = round(float(series.max()), 6)
                 summary[f"median_{col}"] = round(float(series.median()), 6)
 
-        type_fields = session.type_fields
-        for key in ["measurement_method", "measurement_instrument", "temperature_c"]:
-            if key in type_fields:
-                summary[key] = type_fields[key]
-
+        copy_type_fields(
+            summary, session, ["measurement_method", "measurement_instrument", "temperature_c"]
+        )
         return summary

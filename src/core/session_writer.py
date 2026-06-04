@@ -170,7 +170,6 @@ def _finalize_session(repo_root: Path, ref: SessionRef) -> SessionRef:
         ref.path,
         session,
         definition,
-        models_dir=repo_root / "models",
         profiles_dir=repo_root / "profiles",
     )
     for filename, validator_fn, needs_session_dir in _CSV_VALIDATORS.get(

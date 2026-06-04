@@ -32,7 +32,6 @@ def cmd_validate(args: argparse.Namespace) -> int:
         session_dir,
         session,
         definition,
-        models_dir=repo_root / "models",
         profiles_dir=repo_root / "profiles",
     )
 
@@ -90,7 +89,6 @@ def cmd_validate_all(args: argparse.Namespace) -> int:
             session_dir,
             session,
             definition,
-            models_dir=repo_root / "models",
             profiles_dir=repo_root / "profiles",
         )
         if result.is_valid:
@@ -192,19 +190,6 @@ def cmd_cross(args: argparse.Namespace) -> int:
     return 0
 
 
-def cmd_generate_payloads(args: argparse.Namespace) -> int:
-    """Generate wiki payloads."""
-    from src.wiki.payloads import generate_wiki_payloads
-
-    repo_root = Path(args.repo_root)
-    outputs = generate_wiki_payloads(repo_root)
-
-    print(f"Generated {len(outputs)} wiki payloads:")
-    for profile_id, path in outputs.items():
-        print(f"  {profile_id}: {path}")
-    return 0
-
-
 def cmd_render_wiki(args: argparse.Namespace) -> int:
     """Render wiki pages + image manifest into derived/wiki/."""
     from src.wiki.render import render_wiki
@@ -261,7 +246,7 @@ def cmd_run_all(args: argparse.Namespace) -> int:
 
     print(f"Processed {len(processed)} sessions ({failures} failures)")
     print(f"Aggregated {len(summary['aggregated'])} types")
-    print(f"Generated {len(summary['wiki_payloads'])} wiki payloads")
+    print(f"Rendered {len(summary['wiki_rendered'])} wiki outputs")
 
     if args.json:
         print(json.dumps(summary, indent=2))
@@ -307,9 +292,6 @@ def app() -> None:
         "cross", help="Run cross-cutting analysis (resistivity, supply voltage, quality)"
     )
 
-    # generate-payloads
-    subparsers.add_parser("generate-payloads", help="Generate wiki payloads")
-
     # render-wiki
     subparsers.add_parser("render-wiki", help="Render wiki pages into derived/wiki/")
 
@@ -346,7 +328,6 @@ def app() -> None:
         "aggregate": cmd_aggregate,
         "consolidate": cmd_consolidate,
         "cross": cmd_cross,
-        "generate-payloads": cmd_generate_payloads,
         "render-wiki": cmd_render_wiki,
         "publish-wiki": cmd_publish_wiki,
         "run-all": cmd_run_all,

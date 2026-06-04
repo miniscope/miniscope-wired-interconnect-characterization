@@ -35,10 +35,6 @@ class TestResistanceSummary:
     def processed_session(self, resistance_session_dir: Path, tmp_path: Path) -> SessionContext:
         return process_fixture_session(resistance_session_dir, tmp_path / "derived")
 
-    def test_name_property(self):
-        aggregator = ResistanceSummary()
-        assert aggregator.name == "resistance_summary"
-
     def test_aggregate_single(self, processed_session, definition, tmp_path: Path):
         aggregator = ResistanceSummary()
         output_dir = tmp_path / "aggregated"

@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 import csv
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from src.core.schemas import FieldType, MeasurementDefinition
+from src.core.schemas import MeasurementDefinition
 from src.core.session_schemas import (
     COMMUTATOR_CONDITIONS,
     SessionRecord,
@@ -66,14 +67,13 @@ def validate_session(
     session_dir: Path,
     session: SessionRecord,
     definition: MeasurementDefinition,
-    models_dir: Path | None = None,
     profiles_dir: Path | None = None,
 ) -> ValidationResult:
     """
     Validate a session folder against its measurement type definition.
 
-    Checks path<->yaml identity, type_fields, required files, the profile
-    reference, and any model references.
+    Checks path<->yaml identity, type_fields, required files, and the
+    profile reference.
     """
     result = ValidationResult()
 
@@ -83,9 +83,6 @@ def validate_session(
 
     if profiles_dir is not None:
         _validate_profile_ref(session, profiles_dir, result)
-
-    if models_dir is not None:
-        _validate_model_refs(session, definition, models_dir, result)
 
     return result
 
@@ -196,28 +193,58 @@ def _validate_required_files(
             )
 
 
-def _validate_model_refs(
-    session: SessionRecord,
-    definition: MeasurementDefinition,
-    models_dir: Path,
+def _validate_data_csv(
+    csv_path: Path,
     result: ValidationResult,
+    *,
+    required_columns: list[str],
+    check_row: Callable[[int, dict], int],
+    forbid_length_column: bool = False,
+    max_errors: int = 10,
 ) -> None:
-    """For each model_ref field with a value, check that a matching YAML exists."""
-    for field_spec in definition.fields:
-        if field_spec.field_type != FieldType.MODEL_REF:
-            continue
-        if field_spec.model_ref_type is None:
-            continue
+    """
+    Shared scaffold for the per-type data-CSV validators.
 
-        value = session.type_fields.get(field_spec.name)
-        if value is None:
-            continue
+    Handles opening the file, the empty-file and required-column checks, the
+    forbidden cable_length_mm column, the capped per-row loop, and the
+    header-only warning. Each validator supplies only its required columns
+    and a ``check_row(line_number, row)`` callback that adds its own errors
+    and returns how many it added (so the loop can enforce the error cap).
+    """
+    try:
+        with open(csv_path, newline="") as f:
+            reader = csv.DictReader(f)
+            if reader.fieldnames is None:
+                result.add_error(f"CSV file is empty: {csv_path.name}")
+                return
 
-        model_path = models_dir / field_spec.model_ref_type / f"{value}.yaml"
-        if not model_path.exists():
-            result.add_warning(
-                f"Model reference '{field_spec.name}={value}' not found at {model_path}"
-            )
+            headers = [h.strip() for h in reader.fieldnames]
+            for col in required_columns:
+                if col not in headers:
+                    result.add_error(f"CSV missing required column: '{col}'")
+            if forbid_length_column and "cable_length_mm" in headers:
+                result.add_error(
+                    "CSV must not contain 'cable_length_mm': length comes from "
+                    "the session folder"
+                )
+
+            if not result.is_valid:
+                return
+
+            row_count = 0
+            error_count = 0
+            for i, row in enumerate(reader, start=2):
+                row_count += 1
+                if error_count >= max_errors:
+                    result.add_error(f"... and more errors (stopped after {max_errors})")
+                    break
+                error_count += check_row(i, row)
+
+            if row_count == 0:
+                result.add_warning("CSV has no data rows (header only)")
+
+    except FileNotFoundError:
+        result.add_error(f"CSV file not found: {csv_path}")
 
 
 def validate_resistance_csv(
@@ -233,51 +260,26 @@ def validate_resistance_csv(
     NOT a column. Values are round-trip loop resistance (one end shorted)
     and must be positive.
     """
-    try:
-        with open(csv_path, newline="") as f:
-            reader = csv.DictReader(f)
-            if reader.fieldnames is None:
-                result.add_error(f"CSV file is empty: {csv_path.name}")
-                return
 
-            headers = [h.strip() for h in reader.fieldnames]
+    def check_row(i: int, row: dict) -> int:
+        r_val = row.get("resistance_ohm", "").strip()
+        try:
+            r = float(r_val)
+            if r <= 0:
+                result.add_error(f"Row {i}: resistance_ohm must be positive, got {r}")
+                return 1
+        except ValueError:
+            result.add_error(f"Row {i}: resistance_ohm is not numeric: '{r_val}'")
+            return 1
+        return 0
 
-            if "resistance_ohm" not in headers:
-                result.add_error("CSV missing required column: 'resistance_ohm'")
-            if "cable_length_mm" in headers:
-                result.add_error(
-                    "CSV must not contain 'cable_length_mm': length comes from "
-                    "the session folder"
-                )
-
-            if not result.is_valid:
-                return
-
-            row_count = 0
-            error_count = 0
-            max_errors = 10
-
-            for i, row in enumerate(reader, start=2):
-                row_count += 1
-                if error_count >= max_errors:
-                    result.add_error(f"... and more errors (stopped after {max_errors})")
-                    break
-
-                r_val = row.get("resistance_ohm", "").strip()
-                try:
-                    r = float(r_val)
-                    if r <= 0:
-                        result.add_error(f"Row {i}: resistance_ohm must be positive, got {r}")
-                        error_count += 1
-                except ValueError:
-                    result.add_error(f"Row {i}: resistance_ohm is not numeric: '{r_val}'")
-                    error_count += 1
-
-            if row_count == 0:
-                result.add_warning("CSV has no data rows (header only)")
-
-    except FileNotFoundError:
-        result.add_error(f"CSV file not found: {csv_path}")
+    _validate_data_csv(
+        csv_path,
+        result,
+        required_columns=["resistance_ohm"],
+        check_row=check_row,
+        forbid_length_column=True,
+    )
 
 
 def validate_serdes_session(
@@ -411,63 +413,40 @@ def validate_margin_csv(
     Required columns: tx_amplitude_mv, error_count.
     Amplitudes must be positive; error counts must be non-negative integers.
     """
-    try:
-        with open(csv_path, newline="") as f:
-            reader = csv.DictReader(f)
-            if reader.fieldnames is None:
-                result.add_error(f"CSV file is empty: {csv_path.name}")
-                return
 
-            headers = [h.strip() for h in reader.fieldnames]
-            for required_col in ["tx_amplitude_mv", "error_count"]:
-                if required_col not in headers:
-                    result.add_error(f"{csv_path.name}: missing required column: '{required_col}'")
-            if not result.is_valid:
-                return
+    def check_row(i: int, row: dict) -> int:
+        errors = 0
+        amp_val = row.get("tx_amplitude_mv", "").strip()
+        try:
+            amp = float(amp_val)
+            if amp <= 0:
+                result.add_error(
+                    f"{csv_path.name} row {i}: tx_amplitude_mv must be positive, got {amp}"
+                )
+                errors += 1
+        except ValueError:
+            result.add_error(
+                f"{csv_path.name} row {i}: tx_amplitude_mv is not numeric: '{amp_val}'"
+            )
+            errors += 1
 
-            row_count = 0
-            error_count = 0
-            max_errors = 10
+        err_val = row.get("error_count", "").strip()
+        try:
+            err = float(err_val)
+            if err < 0:
+                result.add_error(f"{csv_path.name} row {i}: error_count must be >= 0, got {err}")
+                errors += 1
+        except ValueError:
+            result.add_error(f"{csv_path.name} row {i}: error_count is not numeric: '{err_val}'")
+            errors += 1
+        return errors
 
-            for i, row in enumerate(reader, start=2):
-                row_count += 1
-                if error_count >= max_errors:
-                    result.add_error(f"... and more errors (stopped after {max_errors})")
-                    break
-
-                amp_val = row.get("tx_amplitude_mv", "").strip()
-                try:
-                    amp = float(amp_val)
-                    if amp <= 0:
-                        result.add_error(
-                            f"{csv_path.name} row {i}: tx_amplitude_mv must be positive, got {amp}"
-                        )
-                        error_count += 1
-                except ValueError:
-                    result.add_error(
-                        f"{csv_path.name} row {i}: tx_amplitude_mv is not numeric: '{amp_val}'"
-                    )
-                    error_count += 1
-
-                err_val = row.get("error_count", "").strip()
-                try:
-                    err = float(err_val)
-                    if err < 0:
-                        result.add_error(
-                            f"{csv_path.name} row {i}: error_count must be >= 0, got {err}"
-                        )
-                        error_count += 1
-                except ValueError:
-                    result.add_error(
-                        f"{csv_path.name} row {i}: error_count is not numeric: '{err_val}'"
-                    )
-                    error_count += 1
-
-            if row_count == 0:
-                result.add_warning(f"{csv_path.name} has no data rows (header only)")
-
-    except FileNotFoundError:
-        result.add_error(f"CSV file not found: {csv_path}")
+    _validate_data_csv(
+        csv_path,
+        result,
+        required_columns=["tx_amplitude_mv", "error_count"],
+        check_row=check_row,
+    )
 
 
 def validate_vna_manifest_csv(
@@ -483,51 +462,26 @@ def validate_vna_manifest_csv(
     Cable length is structural (it comes from the session folder).
     Each filename must reference an existing .s2p file in raw/.
     """
-    try:
-        with open(csv_path, newline="") as f:
-            reader = csv.DictReader(f)
-            if reader.fieldnames is None:
-                result.add_error(f"CSV file is empty: {csv_path.name}")
-                return
 
-            headers = [h.strip() for h in reader.fieldnames]
+    def check_row(i: int, row: dict) -> int:
+        filename = row.get("filename", "").strip()
+        if not filename:
+            result.add_error(f"Row {i}: filename is empty")
+            return 1
+        if session_dir is not None:
+            s2p_path = session_dir / "raw" / filename
+            if not s2p_path.exists():
+                result.add_error(f"Row {i}: referenced file not found: raw/{filename}")
+                return 1
+        return 0
 
-            if "filename" not in headers:
-                result.add_error("CSV missing required column: 'filename'")
-            if "cable_length_mm" in headers:
-                result.add_error(
-                    "CSV must not contain 'cable_length_mm': length comes from "
-                    "the session folder"
-                )
-
-            if not result.is_valid:
-                return
-
-            row_count = 0
-            error_count = 0
-            max_errors = 10
-
-            for i, row in enumerate(reader, start=2):
-                row_count += 1
-                if error_count >= max_errors:
-                    result.add_error(f"... and more errors (stopped after {max_errors})")
-                    break
-
-                filename = row.get("filename", "").strip()
-                if not filename:
-                    result.add_error(f"Row {i}: filename is empty")
-                    error_count += 1
-                elif session_dir is not None:
-                    s2p_path = session_dir / "raw" / filename
-                    if not s2p_path.exists():
-                        result.add_error(f"Row {i}: referenced file not found: raw/{filename}")
-                        error_count += 1
-
-            if row_count == 0:
-                result.add_warning("CSV has no data rows (header only)")
-
-    except FileNotFoundError:
-        result.add_error(f"CSV file not found: {csv_path}")
+    _validate_data_csv(
+        csv_path,
+        result,
+        required_columns=["filename"],
+        check_row=check_row,
+        forbid_length_column=True,
+    )
 
 
 def validate_s2p_file(

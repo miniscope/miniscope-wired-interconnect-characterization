@@ -22,9 +22,6 @@ class TestProcessVNA:
     def definition(self):
         return load_definition(Path("measurement_types/vna/v1/definition.yaml"))
 
-    def test_name_property(self, processor: ProcessVNA):
-        assert processor.name == "process_vna"
-
     def test_process_valid(self, processor, definition, vna_session_dir: Path, tmp_path: Path):
         session = load_session(vna_session_dir / "session.yaml")
         output_dir = tmp_path / "output"

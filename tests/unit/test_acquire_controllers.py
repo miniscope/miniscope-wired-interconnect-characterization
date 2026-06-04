@@ -15,7 +15,6 @@ from src.acquire.controllers.profiles import (
     create_commutator_profile,
     create_profile,
     list_conditions,
-    list_lengths,
     list_profile_summaries,
     profile_form_fields,
 )
@@ -73,15 +72,15 @@ class TestProfileControllers:
         with pytest.raises(FileExistsError):
             create_profile(test_repo, {"profile_id": "test_cable", "name": "dup"})
 
-    def test_list_lengths(self, test_repo: Path):
-        lengths = list_lengths(test_repo, "test_cable")
-        assert [length.cable_length_mm for length in lengths] == [1000.0, 500.0]
-        by_length = {length.cable_length_mm: length.sessions_by_type for length in lengths}
+    def test_list_conditions_cable(self, test_repo: Path):
+        conditions = list_conditions(test_repo, "test_cable")
+        assert [c.cable_length_mm for c in conditions] == [1000.0, 500.0]
+        by_length = {c.cable_length_mm: c.sessions_by_type for c in conditions}
         assert by_length[500.0] == {"resistance": 2, "serdes": 1}
         assert by_length[1000.0] == {"serdes": 1, "vna": 2}
 
-    def test_list_lengths_unknown_profile(self, test_repo: Path):
-        assert list_lengths(test_repo, "nope") == []
+    def test_list_conditions_unknown_profile(self, test_repo: Path):
+        assert list_conditions(test_repo, "nope") == []
 
     def test_list_conditions_commutator(self, test_repo: Path):
         conditions = list_conditions(test_repo, "test_commutator")

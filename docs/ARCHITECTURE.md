@@ -206,8 +206,8 @@ To add a measurement type `foo`:
 7. Fixtures (`tests/fixtures/generate_foo_fixtures.py`) + tests mirroring
    the serdes ones.
 
-Nothing else changes: discovery, validation wiring, CI, and wiki payloads
-pick the new type up from the definition.
+Nothing else changes: discovery, validation wiring, and CI pick the new
+type up from the definition.
 
 ## Open decisions (tracked, not forgotten)
 

@@ -15,38 +15,14 @@ from typing import Any
 
 import yaml
 
-from src.acquire.controllers.profiles import FormField
+from src.acquire.controllers.profiles import FormField, form_fields_for
 from src.core.loading import load_model
 from src.core.model_schemas import MiniscopeModel
-
-# Fields the app fills automatically rather than asking the user.
-_AUTO_FIELDS = {"schema_version"}
 
 
 def miniscope_form_fields() -> list[FormField]:
     """Derive form inputs from the MiniscopeModel schema."""
-    fields: list[FormField] = []
-    for name, info in MiniscopeModel.model_fields.items():
-        if name in _AUTO_FIELDS:
-            continue
-        annotation = str(info.annotation)
-        if "list[str]" in annotation:
-            python_type = "list[str]"
-        elif "float" in annotation:
-            python_type = "float"
-        else:
-            python_type = "str"
-        fields.append(
-            FormField(
-                name=name,
-                label=name.replace("_", " ").capitalize(),
-                python_type=python_type,
-                required=info.is_required(),
-                default=info.default if info.default is not None else None,
-                description=info.description or "",
-            )
-        )
-    return fields
+    return form_fields_for(MiniscopeModel, auto_fields={"schema_version"})
 
 
 def miniscope_models_dir(repo_root: Path) -> Path:

@@ -27,6 +27,7 @@ import pandas as pd
 
 from src.core.loading import load_session
 from src.core.session_schemas import SessionRecord
+from src.processing.base import summary_filename
 
 logger = logging.getLogger(__name__)
 
@@ -45,15 +46,6 @@ def _mean_std_n(values: list[float]) -> dict:
 
 def _load_summary(repo_root: Path, session: SessionRecord) -> dict | None:
     """Load the processed summary JSON for a session, if processing has run."""
-    summary_names = {
-        "resistance": "resistance_summary.json",
-        "serdes": "serdes_summary.json",
-        "vna": "vna_summary.json",
-    }
-    name = summary_names.get(session.measurement_type)
-    if name is None:
-        return None
-
     summary_path = (
         repo_root
         / "derived"
@@ -62,7 +54,7 @@ def _load_summary(repo_root: Path, session: SessionRecord) -> dict | None:
         / session.condition
         / session.measurement_type
         / session.session_id
-        / name
+        / summary_filename(session.measurement_type)
     )
     if not summary_path.exists():
         logger.warning("No processed summary for %s, skipping", summary_path.parent)
