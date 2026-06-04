@@ -2,11 +2,11 @@ name: full_test_type
 version: 1
 description: A fully-specified experiment type for testing
 fields:
-  - name: cable_model
+  - name: miniscope_model
     field_type: model_ref
-    model_ref_type: cable_models
+    model_ref_type: miniscope_models
     required: true
-    description: Cable reference
+    description: Miniscope reference
   - name: method
     field_type: enum
     required: true

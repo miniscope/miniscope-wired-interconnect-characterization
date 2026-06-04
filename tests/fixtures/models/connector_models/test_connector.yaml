@@ -1,7 +1,0 @@
-schema_version: "1.0"
-model_id: test_connector
-manufacturer: "Test Connectors Inc"
-part_number: "TCONN-01"
-description: "Fixture connector model for tests"
-connector_family: test_family
-pin_count: 2

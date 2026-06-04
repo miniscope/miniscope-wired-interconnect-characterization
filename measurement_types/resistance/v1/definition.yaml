@@ -27,12 +27,6 @@ fields:
     default: 25.0
     description: Ambient temperature during measurement in Celsius
 
-  - name: connector_model
-    field_type: model_ref
-    model_ref_type: connector_models
-    required: false
-    description: Reference to the connector model on the cable assembly, if relevant
-
 files:
   - name: resistance_csv
     filename_pattern: "resistance.csv"

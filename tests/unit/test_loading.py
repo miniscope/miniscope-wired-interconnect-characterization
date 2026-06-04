@@ -27,6 +27,7 @@ class TestLoadModel:
         assert isinstance(model, MiniscopeModel)
         assert model.min_operating_voltage_v == 3.3
 
-    def test_power_profiles_no_longer_supported(self, valid_cable_path: Path):
+    def test_power_profiles_no_longer_supported(self, fixture_models_dir: Path):
+        path = fixture_models_dir / "miniscope_models" / "test_miniscope.yaml"
         with pytest.raises(ValueError, match="Unknown model type"):
-            load_model(valid_cable_path, model_type="power_profiles")
+            load_model(path, model_type="power_profiles")

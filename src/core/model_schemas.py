@@ -1,11 +1,16 @@
 """
 Schemas for hardware model metadata (models/<type>/<id>.yaml).
 
-These describe equipment the measurements reference -- miniscopes,
-connectors, commutators -- as opposed to the cables under test, which
-have their own stricter schema (src/core/profile_schemas.py). Hardware
-models use extra="allow" so vendors' extra fields don't break loading;
-cable profiles use extra="forbid" because they are OUR contract.
+These describe equipment the measurements reference, as opposed to the
+DUTs under test (cables, commutators), which have their own stricter
+profile schemas (src/core/profile_schemas.py). Hardware models use
+extra="allow" so vendors' extra fields don't break loading; profiles use
+extra="forbid" because they are OUR contract.
+
+The only hardware model is the Miniscope (with its DAQ folded in, see
+ADR 0001). Earlier cable/connector/commutator model classes were retired:
+cables and commutators are measured DUTs with profiles, and connectors
+are not characterized.
 """
 
 from __future__ import annotations
@@ -24,37 +29,6 @@ class BaseHardwareModel(BaseModel):
     part_number: str = ""
     description: str = ""
     tags: list[str] = Field(default_factory=list)
-
-
-class CableModel(BaseHardwareModel):
-    """Metadata for a cable model."""
-
-    conductor_count: int = Field(ge=1)
-    wire_gauge_awg: float | None = None
-    length_mm: float | None = None
-    shield_type: str = ""
-    impedance_ohm: float | None = None
-    connector_type_a: str = ""
-    connector_type_b: str = ""
-    cable_type: str = ""
-
-
-class ConnectorModel(BaseHardwareModel):
-    """Metadata for a connector model."""
-
-    connector_family: str = ""
-    pin_count: int = Field(ge=1, default=1)
-    mating_cycles_rated: int | None = None
-    contact_resistance_mohm: float | None = None
-
-
-class CommutatorModel(BaseHardwareModel):
-    """Metadata for a commutator/rotary joint model."""
-
-    channel_count: int = Field(ge=1, default=1)
-    max_rotation_rpm: float | None = None
-    insertion_loss_db: float | None = None
-    commutator_type: str = ""
 
 
 class MiniscopeModel(BaseHardwareModel):

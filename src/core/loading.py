@@ -13,20 +13,13 @@ from pathlib import Path
 
 import yaml
 
-from src.core.model_schemas import (
-    BaseHardwareModel,
-    CableModel,
-    CommutatorModel,
-    ConnectorModel,
-    MiniscopeModel,
-)
+from src.core.model_schemas import BaseHardwareModel, MiniscopeModel
 from src.core.profile_schemas import CableProfile
 from src.core.session_schemas import SessionRecord
 
+# The Miniscope (DAQ folded in) is the only hardware model; cables and
+# commutators are measured DUTs with profiles instead (see ADR 0001).
 _MODEL_TYPE_MAP: dict[str, type[BaseHardwareModel]] = {
-    "cable_models": CableModel,
-    "connector_models": ConnectorModel,
-    "commutator_models": CommutatorModel,
     "miniscope_models": MiniscopeModel,
 }
 
