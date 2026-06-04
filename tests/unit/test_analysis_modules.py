@@ -5,9 +5,15 @@ from pathlib import Path
 import pytest
 
 from src.analysis.config import load_analysis_config
+from src.analysis.projection import attenuation_at_hz, nyquist_hz
 from src.analysis.quality_score import QualityInputs, score, zone
 from src.analysis.resistivity import fit_resistivity
-from src.analysis.supply_voltage import required_supply_v, supply_voltage_rows
+from src.analysis.supply_voltage import (
+    max_length_at_supply_v,
+    required_supply_v,
+    supply_voltage_rows,
+    supply_window,
+)
 from src.core.model_schemas import MiniscopeModel
 
 REPO_CONFIG = Path("config/analysis.yaml")
@@ -23,6 +29,9 @@ class TestAnalysisConfig:
         assert config.zones.works > config.zones.marginal
         assert set(config.serdes_rates_gbps) == {3, 6}
         assert config.quality_score.weights.eye_area > 0
+        # Supply is a user/DAQ-side choice: the reporting reference lives
+        # here, not on any miniscope model
+        assert config.reference_supply_v == 5.0
 
 
 class TestFitResistivity:
@@ -56,30 +65,106 @@ class TestFitResistivity:
 
 
 class TestSupplyVoltage:
+    REFERENCE_V = 5.0  # the USB rail; an analysis convention, not a model field
+
+    def _scope(self, **overrides) -> MiniscopeModel:
+        params = dict(
+            schema_version="1.0",
+            model_id="test_scope",
+            min_operating_voltage_v=3.3,
+            max_operating_voltage_v=5.5,
+            min_current_ma=20.0,
+            baseline_current_ma=150.0,
+            max_current_ma=300.0,
+            poc_dcr_supply_ohm=0.05,
+            poc_dcr_receive_ohm=0.05,
+        )
+        params.update(overrides)
+        return MiniscopeModel(**params)
+
     def test_required_supply_v(self):
         # 3.3 V min + 300 mA * 2 ohm/m * 1 m = 3.9 V; round-trip rho, no x2
         v = required_supply_v(3.3, 300.0, 2.0, 1.0)
         assert v == pytest.approx(3.9)
 
-    def test_rows(self):
-        scope = MiniscopeModel(
-            schema_version="1.0",
-            model_id="test_scope",
-            min_operating_voltage_v=3.3,
-            baseline_current_ma=150.0,
-            max_current_ma=300.0,
+    def test_window_floor_and_ceiling(self):
+        # R_chain = 0.05 + 2.0*1.0 + 0.05 = 2.1 ohm
+        # floor   = 3.3 + 0.300*2.1 = 3.93 V ; ceiling = 5.5 + 0.020*2.1 = 5.542 V
+        w = supply_window(self._scope(), 2.0, 1.0, self.REFERENCE_V)
+        assert w is not None
+        assert w.r_chain_ohm == pytest.approx(2.1)
+        assert w.v_supply_min == pytest.approx(3.93)
+        assert w.v_supply_max == pytest.approx(5.542)
+        assert w.feasible is True
+        assert w.reference_supply_ok is True  # 3.93 <= 5.0 <= 5.542
+
+    def test_window_infeasible_when_floor_exceeds_ceiling(self):
+        # Huge current + tiny Vmax headroom -> empty window
+        scope = self._scope(max_operating_voltage_v=3.4, max_current_ma=2000.0)
+        w = supply_window(scope, 5.0, 2.0, self.REFERENCE_V)
+        assert w.feasible is False
+        assert w.reference_supply_ok is False
+
+    def test_window_no_ceiling_when_vmax_missing(self):
+        scope = self._scope(max_operating_voltage_v=None)
+        w = supply_window(scope, 2.0, 1.0, self.REFERENCE_V)
+        assert w.v_supply_max is None
+        assert w.feasible is True  # floor-only
+
+    def test_rows_columns_and_growth(self):
+        rows = supply_voltage_rows(
+            self._scope(), "test_cable", 2.0, [1000.0, 500.0], self.REFERENCE_V
         )
-        rows = supply_voltage_rows(scope, "test_cable", 2.0, [1000.0, 500.0])
         assert len(rows) == 2
         assert rows[0]["cable_length_mm"] == 500.0  # sorted
-        row_1m = rows[1]
-        assert row_1m["min_supply_v_baseline"] == pytest.approx(3.6)
-        assert row_1m["min_supply_v_max_load"] == pytest.approx(3.9)
-        assert row_1m["min_supply_v_max_load"] > row_1m["min_supply_v_baseline"]
+        assert rows[1]["v_supply_min"] > rows[0]["v_supply_min"]  # longer -> more droop
+        row = rows[1]
+        assert row["r_chain_ohm"] == pytest.approx(2.1)
+        assert row["v_supply_min"] == pytest.approx(3.93)
+        assert row["feasible"] is True
+        assert row["reference_supply_v"] == self.REFERENCE_V
+        assert row["reference_supply_ok"] is True
+
+    def test_max_length_at_reference(self):
+        # headroom = 5.0 - 3.3 = 1.7 V ; R_chain budget = 1.7/0.3 = 5.6667 ohm
+        # cable budget = 5.6667 - 0.1 = 5.5667 ohm ; length = 5.5667/2.0 m = 2.7833 m
+        length_mm = max_length_at_supply_v(self._scope(), 2.0, self.REFERENCE_V)
+        assert length_mm == pytest.approx(2783.3, abs=0.5)
+
+    def test_max_length_zero_when_supply_below_dropout(self):
+        assert max_length_at_supply_v(self._scope(), 2.0, 3.0) == 0.0  # < 3.3 V dropout
 
     def test_missing_power_fields_returns_empty(self):
         scope = MiniscopeModel(schema_version="1.0", model_id="no_power")
-        assert supply_voltage_rows(scope, "test_cable", 2.0, [500.0]) == []
+        assert supply_voltage_rows(scope, "test_cable", 2.0, [500.0], self.REFERENCE_V) == []
+        assert supply_window(scope, 2.0, 1.0, self.REFERENCE_V) is None
+        assert max_length_at_supply_v(scope, 2.0, self.REFERENCE_V) is None
+
+
+class TestProjection:
+    def test_nyquist(self):
+        assert nyquist_hz(1.5) == pytest.approx(750e6)
+        assert nyquist_hz(6.0) == pytest.approx(3e9)
+
+    def test_interpolates_between_points(self):
+        att = {"100000000": 1.0, "1000000000": 4.0}  # 1 dB @ 100 MHz, 4 dB @ 1 GHz
+        # Linear midpoint at 550 MHz
+        assert attenuation_at_hz(att, 550e6) == pytest.approx(2.5)
+
+    def test_exact_point(self):
+        att = {"750000000": 3.2, "1000000000": 4.0}
+        assert attenuation_at_hz(att, 750e6) == pytest.approx(3.2)
+
+    def test_never_extrapolates(self):
+        att = {"100000000": 1.0, "1000000000": 4.0}
+        assert attenuation_at_hz(att, 3e9) is None  # above the sweep
+        assert attenuation_at_hz(att, 1e6) is None  # below the sweep
+
+    def test_empty_map(self):
+        assert attenuation_at_hz({}, 750e6) is None
+
+    def test_numeric_keys_accepted(self):
+        assert attenuation_at_hz({1e8: 1.0, 1e9: 4.0}, 1e9) == pytest.approx(4.0)
 
 
 class TestQualityScore:

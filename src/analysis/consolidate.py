@@ -161,6 +161,22 @@ def _consolidate_vna(entries: list[tuple[SessionRecord, dict]]) -> list[dict]:
             for s in summaries
             if s.get("worst_max_insertion_loss_db") is not None
         ]
+
+        # Pool attenuation-at-reference-frequency maps across sessions: mean
+        # per frequency over the sessions that covered it. Quality projection
+        # interpolates this at a link rate's Nyquist frequency.
+        attenuation_by_hz: dict[str, float] = {}
+        freq_keys = sorted(
+            {k for s in summaries for k in s.get("attenuation_db_by_hz", {})}, key=float
+        )
+        for key in freq_keys:
+            values = [
+                s["attenuation_db_by_hz"][key]
+                for s in summaries
+                if key in s.get("attenuation_db_by_hz", {})
+            ]
+            attenuation_by_hz[key] = round(statistics.fmean(values), 4)
+
         rows.append(
             {
                 "cable_length_mm": length_mm,
@@ -168,6 +184,7 @@ def _consolidate_vna(entries: list[tuple[SessionRecord, dict]]) -> list[dict]:
                 "mean_max_insertion_loss_db": il["mean"],
                 "std_max_insertion_loss_db": il["std"],
                 "worst_max_insertion_loss_db": min(worst) if worst else None,
+                "attenuation_db_by_hz": attenuation_by_hz,
             }
         )
     return rows
@@ -202,7 +219,10 @@ def consolidate_profile(repo_root: Path, profile_id: str) -> dict[str, Path]:
         consolidated[output_name] = rows
         if rows:
             csv_path = output_dir / f"{output_name}.csv"
-            pd.DataFrame(rows).to_csv(csv_path, index=False)
+            df = pd.DataFrame(rows)
+            # Nested (dict-valued) fields live in consolidated.json only
+            nested = [c for c in df.columns if df[c].map(lambda v: isinstance(v, dict)).any()]
+            df.drop(columns=nested).to_csv(csv_path, index=False)
             outputs[f"{profile_id}_{output_name}"] = csv_path
 
     json_path = output_dir / "consolidated.json"

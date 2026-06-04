@@ -6,8 +6,11 @@ miniscope power models, and produces the repo's headline outputs in
 derived/cross/:
 
 - resistivity_summary.csv          one row per profile (fit across lengths)
-- supply_voltage.csv (+ PNG/scope) required supply V per miniscope x profile x length
+- supply_voltage.csv (+ PNG/scope) allowable supply-V window per miniscope x profile x length
+- max_length_summary.csv           voltage-limited max length at the reference supply
 - quality_scores.csv (+ PNG/rate)  consolidated 0-1 score with works/marginal zones
+- miniscope_quality.csv (+ PNG/scope) quality at each miniscope's own rate,
+  tagged measured (eye/link data) or projected_from_vna (no eye hardware)
 
 These are exactly the tables/plots the wiki pages are rendered from.
 """
@@ -25,9 +28,10 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
 from src.analysis.config import AnalysisConfig, load_analysis_config
+from src.analysis.projection import attenuation_at_hz, nyquist_hz
 from src.analysis.quality_score import QualityInputs, score, zone
 from src.analysis.resistivity import fit_resistivity
-from src.analysis.supply_voltage import supply_voltage_rows
+from src.analysis.supply_voltage import max_length_row, supply_voltage_rows
 from src.core.loading import load_model
 from src.core.model_schemas import MiniscopeModel
 
@@ -86,6 +90,7 @@ def _supply_voltage_table(
     consolidated: dict[str, dict],
     resistivity_df: pd.DataFrame,
     miniscopes: list[MiniscopeModel],
+    reference_supply_v: float,
 ) -> pd.DataFrame:
     rows: list[dict] = []
     if resistivity_df.empty:
@@ -105,7 +110,36 @@ def _supply_voltage_table(
             lengths.update(r["cable_length_mm"] for r in data.get(key, []))
 
         for miniscope in miniscopes:
-            rows.extend(supply_voltage_rows(miniscope, profile_id, rho, sorted(lengths)))
+            rows.extend(
+                supply_voltage_rows(miniscope, profile_id, rho, sorted(lengths), reference_supply_v)
+            )
+
+    return pd.DataFrame(rows)
+
+
+def _max_length_table(
+    consolidated: dict[str, dict],
+    resistivity_df: pd.DataFrame,
+    miniscopes: list[MiniscopeModel],
+    reference_supply_v: float,
+) -> pd.DataFrame:
+    """Voltage-limited max usable length at the reference supply, per miniscope x profile."""
+    rows: list[dict] = []
+    if resistivity_df.empty:
+        return pd.DataFrame(rows)
+
+    resistivity_by_profile = resistivity_df.set_index("profile_id")[
+        "roundtrip_resistivity_ohm_per_m"
+    ].to_dict()
+
+    for profile_id in consolidated:
+        rho = resistivity_by_profile.get(profile_id)
+        if rho is None:
+            continue
+        for miniscope in miniscopes:
+            row = max_length_row(miniscope, profile_id, rho, reference_supply_v)
+            if row is not None:
+                rows.append(row)
 
     return pd.DataFrame(rows)
 
@@ -165,6 +199,120 @@ def _quality_table(consolidated: dict[str, dict], config: AnalysisConfig) -> pd.
     return pd.DataFrame(rows)
 
 
+def _miniscope_quality_table(
+    consolidated: dict[str, dict],
+    quality_df: pd.DataFrame,
+    miniscopes: list[MiniscopeModel],
+    config: AnalysisConfig,
+) -> pd.DataFrame:
+    """
+    Quality-vs-length per miniscope, at THAT miniscope's link rate (ADR 0001
+    steps 2-3). Two co-equal sources, always tagged:
+
+    - "measured": the miniscope's rate has eye/link data (GMSL2 rates) --
+      rows come straight from the per-rate quality table.
+    - "projected_from_vna": no eye hardware at that rate (FPD-Link III) --
+      the score is computed from the cable's VNA attenuation interpolated at
+      the link's Nyquist fundamental (rate/2), and only within the measured
+      sweep span (never extrapolated).
+    """
+    rows: list[dict] = []
+    measured_rates: set[float] = (
+        set(quality_df["rate_gbps"].astype(float)) if not quality_df.empty else set()
+    )
+
+    for miniscope in miniscopes:
+        rate = miniscope.serdes_rate_gbps
+        if rate is None:
+            continue
+
+        if rate in measured_rates:
+            for _, qrow in quality_df[quality_df["rate_gbps"].astype(float) == rate].iterrows():
+                rows.append(
+                    {
+                        "miniscope_model": miniscope.model_id,
+                        "profile_id": qrow["profile_id"],
+                        "cable_length_mm": qrow["cable_length_mm"],
+                        "rate_gbps": rate,
+                        "quality_score": qrow["quality_score"],
+                        "zone": qrow["zone"],
+                        "source": "measured",
+                        "attenuation_db": qrow.get("attenuation_db"),
+                    }
+                )
+            continue
+
+        # No eye data at this rate: project from VNA attenuation at Nyquist
+        target_hz = nyquist_hz(rate)
+        for profile_id, data in consolidated.items():
+            for vna_row in data.get("vna_by_length", []):
+                attenuation = attenuation_at_hz(vna_row.get("attenuation_db_by_hz", {}), target_hz)
+                if attenuation is None:
+                    continue
+                score_value = score(QualityInputs(attenuation_db=attenuation), config)
+                if score_value is None:
+                    continue
+                rows.append(
+                    {
+                        "miniscope_model": miniscope.model_id,
+                        "profile_id": profile_id,
+                        "cable_length_mm": vna_row["cable_length_mm"],
+                        "rate_gbps": rate,
+                        "quality_score": score_value,
+                        "zone": zone(score_value, config),
+                        "source": "projected_from_vna",
+                        "attenuation_db": round(attenuation, 4),
+                    }
+                )
+
+    return pd.DataFrame(rows)
+
+
+def _plot_miniscope_quality(
+    miniscope_quality_df: pd.DataFrame,
+    miniscope_id: str,
+    config: AnalysisConfig,
+    output_path: Path,
+) -> bool:
+    """Quality vs length for one miniscope at its rate, tagged measured/projected."""
+    scope_df = miniscope_quality_df[miniscope_quality_df["miniscope_model"] == miniscope_id]
+    if scope_df.empty:
+        return False
+
+    fig, ax = plt.subplots(figsize=(8, 5))
+
+    # Shaded recommendation zones behind the curves
+    ax.axhspan(config.zones.works, 1.0, color=ZONE_COLORS["works"], alpha=0.10)
+    ax.axhspan(config.zones.marginal, config.zones.works, color=ZONE_COLORS["marginal"], alpha=0.10)
+    ax.axhspan(0.0, config.zones.marginal, color=ZONE_COLORS["not_recommended"], alpha=0.10)
+    ax.axhline(config.zones.works, color=ZONE_COLORS["works"], lw=0.8, ls="--")
+    ax.axhline(config.zones.marginal, color=ZONE_COLORS["marginal"], lw=0.8, ls="--")
+
+    projected = bool((scope_df["source"] == "projected_from_vna").any())
+    for profile_id, group in scope_df.groupby("profile_id"):
+        group = group.sort_values("cable_length_mm")
+        ax.plot(
+            group["cable_length_mm"],
+            group["quality_score"],
+            marker="o",
+            ls="--" if projected else "-",
+            label=profile_id,
+        )
+
+    rate = float(scope_df["rate_gbps"].iloc[0])
+    tag = "PROJECTED from VNA attenuation" if projected else "measured"
+    ax.set_xlabel("Cable length (mm)")
+    ax.set_ylabel("Quality score (0-1)")
+    ax.set_ylim(0, 1.05)
+    ax.set_title(f"{miniscope_id}: cable quality vs length at {rate:g} Gbps ({tag})")
+    ax.grid(True, alpha=0.3)
+    ax.legend(fontsize=8)
+    fig.tight_layout()
+    fig.savefig(output_path, dpi=150)
+    plt.close(fig)
+    return True
+
+
 def _plot_quality_vs_length(
     quality_df: pd.DataFrame,
     rate: int,
@@ -210,32 +358,62 @@ def _plot_supply_voltage(
     miniscope_id: str,
     output_path: Path,
 ) -> bool:
+    """
+    Allowable supply-voltage window vs cable length for one miniscope.
+
+    Per cable: the floor (V_supply_min, solid) is the brownout limit and the
+    ceiling (V_supply_max, dashed) the regulator's over-voltage limit; the
+    band between them is the usable window. The reference-supply line (the
+    USB 5 V rail, from config/analysis.yaml) is marked so the voltage-limited
+    max length is read directly off where the floor crosses it.
+    """
     scope_df = supply_df[supply_df["miniscope_model"] == miniscope_id]
     if scope_df.empty:
         return False
 
     fig, ax = plt.subplots(figsize=(8, 5))
+    has_ceiling = False
     for profile_id, group in scope_df.groupby("profile_id"):
         group = group.sort_values("cable_length_mm")
         line = ax.plot(
             group["cable_length_mm"],
-            group["min_supply_v_max_load"],
+            group["v_supply_min"],
             marker="o",
-            label=f"{profile_id} (max load)",
+            label=f"{profile_id} (min supply)",
         )[0]
-        ax.plot(
-            group["cable_length_mm"],
-            group["min_supply_v_baseline"],
-            marker="o",
-            ls="--",
-            color=line.get_color(),
-            alpha=0.6,
-            label=f"{profile_id} (baseline)",
-        )
+        ceiling = group["v_supply_max"]
+        if ceiling.notna().any():
+            has_ceiling = True
+            ax.plot(
+                group["cable_length_mm"],
+                ceiling,
+                marker="o",
+                ls="--",
+                color=line.get_color(),
+                alpha=0.6,
+                label=f"{profile_id} (max supply)",
+            )
+            ax.fill_between(
+                group["cable_length_mm"],
+                group["v_supply_min"],
+                ceiling,
+                color=line.get_color(),
+                alpha=0.10,
+            )
+
+    reference_v = float(scope_df["reference_supply_v"].iloc[0])
+    ax.axhline(
+        reference_v,
+        color="#455a64",
+        lw=1.0,
+        ls=":",
+        label=f"reference supply ({reference_v:g} V USB)",
+    )
 
     ax.set_xlabel("Cable length (mm)")
-    ax.set_ylabel("Minimum supply voltage (V)")
-    ax.set_title(f"Required supply voltage vs cable length ({miniscope_id})")
+    ax.set_ylabel("Supply voltage (V)")
+    band = " window" if has_ceiling else " floor"
+    ax.set_title(f"Allowable supply-voltage{band} vs cable length ({miniscope_id})")
     ax.grid(True, alpha=0.3)
     ax.legend(fontsize=8)
     fig.tight_layout()
@@ -267,7 +445,9 @@ def run_cross_analysis(repo_root: Path) -> dict[str, Path]:
 
     # Supply voltage per miniscope x profile x length
     miniscopes = _load_miniscopes(repo_root)
-    supply_df = _supply_voltage_table(consolidated, resistivity_df, miniscopes)
+    supply_df = _supply_voltage_table(
+        consolidated, resistivity_df, miniscopes, config.reference_supply_v
+    )
     if not supply_df.empty:
         path = output_dir / "supply_voltage.csv"
         supply_df.to_csv(path, index=False)
@@ -277,6 +457,15 @@ def run_cross_analysis(repo_root: Path) -> dict[str, Path]:
             plot_path = output_dir / f"supply_voltage_{miniscope_id}.png"
             if _plot_supply_voltage(supply_df, miniscope_id, plot_path):
                 outputs[f"supply_voltage_plot_{miniscope_id}"] = plot_path
+
+    # Voltage-limited max usable length at the reference supply
+    max_length_df = _max_length_table(
+        consolidated, resistivity_df, miniscopes, config.reference_supply_v
+    )
+    if not max_length_df.empty:
+        path = output_dir / "max_length_summary.csv"
+        max_length_df.to_csv(path, index=False)
+        outputs["max_length_summary"] = path
 
     # Quality scores per profile x length x rate
     quality_df = _quality_table(consolidated, config)
@@ -289,5 +478,18 @@ def run_cross_analysis(repo_root: Path) -> dict[str, Path]:
             plot_path = output_dir / f"quality_vs_length_{rate}g.png"
             if _plot_quality_vs_length(quality_df, rate, config, plot_path):
                 outputs[f"quality_vs_length_plot_{rate}g"] = plot_path
+
+    # Quality per miniscope, at the miniscope's own rate (measured or
+    # projected from VNA). Co-equal with the supply-voltage outputs above.
+    miniscope_quality_df = _miniscope_quality_table(consolidated, quality_df, miniscopes, config)
+    if not miniscope_quality_df.empty:
+        path = output_dir / "miniscope_quality.csv"
+        miniscope_quality_df.to_csv(path, index=False)
+        outputs["miniscope_quality"] = path
+
+        for miniscope_id in miniscope_quality_df["miniscope_model"].unique():
+            plot_path = output_dir / f"miniscope_quality_{miniscope_id}.png"
+            if _plot_miniscope_quality(miniscope_quality_df, miniscope_id, config, plot_path):
+                outputs[f"miniscope_quality_plot_{miniscope_id}"] = plot_path
 
     return outputs

@@ -130,17 +130,50 @@ class WikiRenderer:
                 )
             )
 
+        # Per-miniscope quality at the miniscope's own link rate
+        miniscope_quality_df = self._cross_csv("miniscope_quality.csv")
+        if miniscope_quality_df is not None:
+            parts.append("\n== Which cable works with my Miniscope? ==\n")
+            parts.append(
+                "Each Miniscope runs its link at one rate, so these curves show "
+                "cable quality at that rate. Curves marked ''projected'' are "
+                "derived from the cable's measured attenuation rather than a "
+                "direct eye measurement.\n"
+            )
+            for plot in sorted(cross_dir.glob("miniscope_quality_*.png")):
+                scope = plot.stem.replace("miniscope_quality_", "")
+                wiki_name = self._register_image(plot)
+                if wiki_name:
+                    parts.append(_image_ref(wiki_name, f"Cable quality vs length ({scope})"))
+            parts.append(
+                _wiki_table(
+                    miniscope_quality_df,
+                    {
+                        "miniscope_model": "Miniscope",
+                        "profile_id": "Cable",
+                        "cable_length_mm": "Length (mm)",
+                        "rate_gbps": "Rate (Gbps)",
+                        "quality_score": "Score",
+                        "zone": "Recommendation",
+                        "source": "Source",
+                    },
+                )
+            )
+
         # Supply voltage guidance
         parts.append("\n== What supply voltage do I need? ==\n")
         parts.append(
-            "Thin coax drops voltage. Power your Miniscope with at least the "
-            "max-load voltage below for your cable and length.\n"
+            "Thin coax drops voltage, so each cable and length has an allowable "
+            "supply window: the minimum keeps the Miniscope above its regulator "
+            "dropout at full load; the maximum stays under the regulator's input "
+            "limit. The dotted line marks the USB 5 V rail for reference -- DAQs "
+            "can also be powered from an adjustable supply anywhere in the window.\n"
         )
         for plot in sorted(cross_dir.glob("supply_voltage_*.png")):
             scope = plot.stem.replace("supply_voltage_", "")
             wiki_name = self._register_image(plot)
             if wiki_name:
-                parts.append(_image_ref(wiki_name, f"Required supply voltage ({scope})"))
+                parts.append(_image_ref(wiki_name, f"Allowable supply voltage ({scope})"))
 
         supply_df = self._cross_csv("supply_voltage.csv")
         if supply_df is not None:
@@ -151,8 +184,24 @@ class WikiRenderer:
                         "miniscope_model": "Miniscope",
                         "profile_id": "Cable",
                         "cable_length_mm": "Length (mm)",
-                        "min_supply_v_baseline": "Min supply (baseline)",
-                        "min_supply_v_max_load": "Min supply (max load)",
+                        "v_supply_min": "Min supply (V)",
+                        "v_supply_max": "Max supply (V)",
+                        "reference_supply_ok": "OK at 5 V (USB)?",
+                    },
+                )
+            )
+
+        max_length_df = self._cross_csv("max_length_summary.csv")
+        if max_length_df is not None:
+            parts.append("\n=== Longest usable cable on USB (5 V) power ===\n")
+            parts.append(
+                _wiki_table(
+                    max_length_df,
+                    {
+                        "miniscope_model": "Miniscope",
+                        "profile_id": "Cable",
+                        "reference_supply_v": "Supply (V)",
+                        "voltage_limited_max_length_mm": "Max length (mm)",
                     },
                 )
             )

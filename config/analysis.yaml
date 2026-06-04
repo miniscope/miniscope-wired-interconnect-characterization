@@ -26,6 +26,13 @@ zones:
   works: 0.8
   marginal: 0.5
 
+# Reference supply voltage for reporting (the USB 5 V rail). How a DAQ is
+# powered is a user-side choice -- DAQs can also take an adjustable input --
+# so this is an analysis/reporting convention, NOT a property of any
+# miniscope model. It sets the marked line on the supply-window plots and
+# the "max usable length at the reference supply" summary.
+reference_supply_v: 5.0
+
 # SerDes data rates characterized (Gbps).
 serdes_rates_gbps: [3, 6]
 

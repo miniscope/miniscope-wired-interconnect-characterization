@@ -30,7 +30,7 @@ class ProfileSummary:
 
 @dataclass
 class FormField:
-    """One input in the auto-generated create-profile form."""
+    """One input in a schema-derived form (profiles, miniscope models)."""
 
     name: str
     label: str

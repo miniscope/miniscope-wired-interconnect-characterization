@@ -23,6 +23,7 @@ class TestAppBuild:
 
         routes = {r.path for r in nicegui_app.routes}
         assert "/" in routes
+        assert "/miniscopes" in routes
         assert "/profile/{profile_id}" in routes
         assert "/measure/resistance/{profile_id}/{length_mm}" in routes
         assert "/measure/serdes/{profile_id}/{length_mm}" in routes

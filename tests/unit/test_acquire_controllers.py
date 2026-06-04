@@ -5,6 +5,11 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
+from src.acquire.controllers.miniscopes import (
+    create_miniscope,
+    list_miniscopes,
+    miniscope_form_fields,
+)
 from src.acquire.controllers.profiles import (
     create_profile,
     list_lengths,
@@ -69,6 +74,58 @@ class TestProfileControllers:
 
     def test_list_lengths_unknown_profile(self, test_repo: Path):
         assert list_lengths(test_repo, "nope") == []
+
+
+class TestMiniscopeControllers:
+    def test_form_fields_track_schema(self):
+        fields = {f.name: f for f in miniscope_form_fields()}
+        assert "schema_version" not in fields  # filled automatically
+        assert fields["model_id"].required
+        assert fields["min_operating_voltage_v"].python_type == "float"
+        assert fields["poc_dcr_supply_ohm"].python_type == "float"
+        assert fields["serdes_rate_gbps"].python_type == "float"
+        assert fields["tags"].python_type == "list[str]"
+        # Supply voltage is user/DAQ-side, never entered on a miniscope
+        assert "supply_mode" not in fields
+        assert "default_supply_v" not in fields
+
+    def test_list_miniscopes(self, test_repo: Path):
+        models = list_miniscopes(test_repo)
+        assert [m.model_id for m in models] == ["test_miniscope", "test_miniscope_fpd"]
+        assert models[0].serdes_family == "GMSL2"
+        assert models[1].serdes_family == "FPD-Link III"
+
+    def test_create_miniscope(self, test_repo: Path):
+        model = create_miniscope(
+            test_repo,
+            {
+                "model_id": "new_scope",
+                "min_operating_voltage_v": 3.3,
+                "max_current_ma": 250.0,
+                "serdes_family": "GMSL2",
+                "serdes_rate_gbps": 3.0,
+            },
+        )
+        assert model.model_id == "new_scope"
+        path = test_repo / "models" / "miniscope_models" / "new_scope.yaml"
+        assert path.exists()
+        # Round-trips through the loader used by the analysis pipeline
+        from src.core.loading import load_model
+
+        loaded = load_model(path, model_type="miniscope_models")
+        assert loaded.serdes_rate_gbps == 3.0
+        assert loaded.min_operating_voltage_v == 3.3
+
+    def test_create_miniscope_invalid(self, test_repo: Path):
+        with pytest.raises(ValidationError):
+            create_miniscope(test_repo, {"model_id": "bad", "min_operating_voltage_v": -1.0})
+
+    def test_create_miniscope_duplicate(self, test_repo: Path):
+        with pytest.raises(FileExistsError):
+            create_miniscope(test_repo, {"model_id": "test_miniscope"})
+
+    def test_list_miniscopes_missing_dir(self, tmp_path: Path):
+        assert list_miniscopes(tmp_path) == []
 
 
 class TestProtocols:
