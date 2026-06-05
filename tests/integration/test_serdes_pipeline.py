@@ -23,12 +23,12 @@ class TestSerdesPipelineIntegration:
         assert "serdes_summary_json" in result.outputs
 
         df = pd.read_csv(result.outputs["serdes_metrics_csv"])
-        assert len(df) == 4  # 2 channels x 2 rates
+        assert len(df) == 3  # fwd_3g, fwd_6g, rev_187m
 
         with open(result.outputs["serdes_summary_json"]) as f:
             summary = json.load(f)
         assert summary["profile_id"] == "test_cable"
-        assert summary["num_combos"] == 4
+        assert summary["num_lanes"] == 3
 
     def test_invalid_serdes_sessions_fail(self, tmp_path: Path):
         repo = build_test_repo(tmp_path, bad_measurements=True)
@@ -52,4 +52,4 @@ class TestSerdesPipelineIntegration:
         assert "serdes_margin_vs_length_plot" in outputs
 
         df = pd.read_csv(outputs["serdes_metrics_table"])
-        assert len(df) == 8  # 2 sessions x 4 combos
+        assert len(df) == 6  # 2 sessions x 3 lanes

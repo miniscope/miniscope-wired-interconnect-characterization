@@ -100,15 +100,15 @@ class TestCrossAnalysis:
         outputs = run_cross_analysis(analyzed_repo)
         df = pd.read_csv(outputs["quality_scores"])
 
-        # 1 profile x 2 lengths x 2 rates
-        assert len(df) == 4
+        # 1 profile x 2 lengths x 3 lanes (fwd 3G/6G + reverse 187.5M)
+        assert len(df) == 6
         assert (df["quality_score"] >= 0).all()
         assert (df["quality_score"] <= 1).all()
         assert set(df["zone"]).issubset({"works", "marginal", "not_recommended"})
 
         # Fixtures degrade with rate: 6 Gbps never scores above 3 Gbps
         pivot = df.pivot_table(index="cable_length_mm", columns="rate_gbps", values="quality_score")
-        assert (pivot[6] <= pivot[3]).all()
+        assert (pivot[6.0] <= pivot[3.0]).all()
 
     def test_commutator_impact(self, analyzed_repo: Path):
         outputs = run_cross_analysis(analyzed_repo)

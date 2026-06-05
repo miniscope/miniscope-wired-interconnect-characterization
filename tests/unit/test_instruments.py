@@ -5,7 +5,14 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from src.instruments import ProgressEvent, SerdesChannel, SerdesRate
+from src.instruments import (
+    DEFAULT_LANES,
+    FORWARD_3G,
+    FORWARD_6G,
+    REVERSE_187M,
+    ProgressEvent,
+    SerdesRate,
+)
 from src.instruments.lcr.driver import validate_reading
 from src.instruments.registry import HARDWARE_ENV_VAR, get_serdes_driver, get_vna_driver
 from src.instruments.serdes.driver import SerdesConfig
@@ -27,67 +34,62 @@ class TestSimulatedSerdesDriver:
         assert status["connected"] is True
         assert status["simulated"] is True
 
-    def test_capture_eye_shape(self, driver):
-        config = SerdesConfig(eye_voltage_bins=32, eye_time_bins=48)
-        eye = driver.capture_eye(SerdesChannel.FORWARD, SerdesRate.GBPS_3, config)
-        assert eye.error_counts.shape == (32, 48)
-        assert eye.error_counts.dtype == np.int64
-        assert eye.voltage_range_mv[1] > eye.voltage_range_mv[0]
+    def test_capture_eye_grid(self, driver):
+        config = SerdesConfig(eye_bins=16)
+        eye = driver.capture_eye(FORWARD_3G, config)
+        # One row per (phase, vth, polarity); parallel arrays of equal length.
+        n = len(eye.phase)
+        assert n > 0
+        assert len(eye.vth) == len(eye.polarity) == len(eye.hits) == len(eye.errors) == n
+        assert eye.phase.dtype == np.int64
+        assert eye.phase.max() <= 127
+        assert eye.vth.max() <= 63
+        assert set(np.unique(eye.polarity)).issubset({0, 1})
 
     def test_eye_has_open_center(self, driver):
-        eye = driver.capture_eye(SerdesChannel.FORWARD, SerdesRate.GBPS_3, SerdesConfig())
-        v, t = eye.error_counts.shape
-        assert eye.error_counts[v // 2, t // 2] == 0
+        eye = driver.capture_eye(FORWARD_3G, SerdesConfig(eye_bins=16))
+        # The smallest vth at mid phase should be error-free (eye center).
+        center = (np.abs(eye.phase - 64) < 8) & (eye.vth == eye.vth.min())
+        assert (eye.errors[center] == 0).any()
 
     def test_deterministic_with_seed(self):
-        a = SimulatedSerdesDriver(seed=7).capture_eye(
-            SerdesChannel.FORWARD, SerdesRate.GBPS_3, SerdesConfig()
-        )
-        b = SimulatedSerdesDriver(seed=7).capture_eye(
-            SerdesChannel.FORWARD, SerdesRate.GBPS_3, SerdesConfig()
-        )
-        np.testing.assert_array_equal(a.error_counts, b.error_counts)
+        cfg = SerdesConfig(eye_bins=16)
+        a = SimulatedSerdesDriver(seed=7).capture_eye(FORWARD_3G, cfg)
+        b = SimulatedSerdesDriver(seed=7).capture_eye(FORWARD_3G, cfg)
+        np.testing.assert_array_equal(a.errors, b.errors)
 
     def test_six_gbps_worse_than_three(self, driver):
-        config = SerdesConfig()
-        eye3 = driver.capture_eye(SerdesChannel.FORWARD, SerdesRate.GBPS_3, config)
-        eye6 = driver.capture_eye(SerdesChannel.FORWARD, SerdesRate.GBPS_6, config)
-        # More zero (open) cells at 3 Gbps
-        assert (eye3.error_counts == 0).sum() > (eye6.error_counts == 0).sum()
+        cfg = SerdesConfig(eye_bins=16)
+        eye3 = driver.capture_eye(FORWARD_3G, cfg)
+        eye6 = driver.capture_eye(FORWARD_6G, cfg)
+        # More zero-error (open) cells at 3 Gbps
+        assert (eye3.errors == 0).sum() > (eye6.errors == 0).sum()
 
     def test_margin_sweep_structure(self, driver):
-        config = SerdesConfig()
-        sweep = driver.sweep_margin(SerdesChannel.FORWARD, SerdesRate.GBPS_3, config)
+        sweep = driver.sweep_margin(FORWARD_3G, SerdesConfig())
 
         amps = [p.tx_amplitude_mv for p in sweep.points]
-        assert amps == sorted(amps)
-        assert min(amps) >= config.margin_min_mv
-        assert max(amps) <= config.margin_max_mv
-
-        # Coarse + fine: some adjacent points 1 mV apart, the sweep spans the range
-        diffs = np.diff(amps)
-        assert (np.abs(diffs - config.margin_fine_step_mv) < 1e-9).any()
-
-        # Errors at low amplitude, none at high amplitude
-        assert sweep.points[0].error_count > 0
-        assert sweep.points[-1].error_count == 0
+        # Sweep descends from the start amplitude.
+        assert amps == sorted(amps, reverse=True)
+        # Raw fields are present.
+        assert all(
+            p.status in {"ok", "errors", "lost_lock", "ser_unreachable"} for p in sweep.points
+        )
+        # Errors appear at the low-amplitude end, none at the high-amplitude start.
+        assert sweep.points[0].errors == 0
+        assert sweep.points[-1].errors > 0
 
     def test_run_full_sequence(self, driver):
         events: list[ProgressEvent] = []
-        result = driver.run_full_sequence(progress=events.append)
+        result = driver.run_full_sequence(config=SerdesConfig(eye_bins=16), progress=events.append)
 
-        assert len(result.eyes) == 4
-        assert len(result.margins) == 4
-        combos = {(e.channel, e.rate) for e in result.eyes}
-        assert combos == {
-            (SerdesChannel.FORWARD, SerdesRate.GBPS_3),
-            (SerdesChannel.FORWARD, SerdesRate.GBPS_6),
-            (SerdesChannel.BACK, SerdesRate.GBPS_3),
-            (SerdesChannel.BACK, SerdesRate.GBPS_6),
-        }
+        assert len(result.eyes) == 3
+        assert len(result.margins) == 3
+        assert {e.lane for e in result.eyes} == set(DEFAULT_LANES)
+        assert REVERSE_187M.rate is SerdesRate.MBPS_187
 
-        # Progress: 8 events (eye + margin per combo), monotone, ends at 1.0
-        assert len(events) == 8
+        # Progress: 6 events (eye + margin per lane), monotone, ends at 1.0
+        assert len(events) == 6
         fractions = [e.fraction for e in events]
         assert fractions == sorted(fractions)
         assert fractions[-1] == pytest.approx(1.0)
@@ -190,12 +192,38 @@ class TestRegistry:
         assert isinstance(get_serdes_driver(transport=NullI2C()), RealSerdesDriver)
         assert isinstance(get_vna_driver(), RealPicoVnaDriver)
 
-    def test_real_drivers_not_implemented_yet(self):
+    def test_real_serdes_connect_rejects_wrong_ids(self):
+        # NullI2C returns 0x00 for every register, so connect() must fail the
+        # device-ID handshake rather than silently proceed.
         from src.instruments.serdes.i2c import NullI2C
+        from src.instruments.serdes.real import RealSerdesDriver
 
-        driver = get_serdes_driver(simulate=False, transport=NullI2C())
-        with pytest.raises(NotImplementedError):
+        driver = RealSerdesDriver(transport=NullI2C())
+        with pytest.raises(RuntimeError):
             driver.connect()
+
+
+class TestRealSerdesDemo:
+    """The real driver's ported algorithms run end to end against DemoBridge."""
+
+    def test_demo_roundtrip(self):
+        from src.instruments.serdes.real import RealSerdesDriver
+
+        driver = RealSerdesDriver(demo=True)
+        driver.connect()
+        assert driver.link_status()["demo"] is True
+
+        result = driver.run_full_sequence(config=SerdesConfig(eye_bins=8))
+        driver.close()
+
+        assert {e.lane for e in result.eyes} == set(DEFAULT_LANES)
+        for eye in result.eyes:
+            # A real, open eye: some zero-error cells and some closed ones.
+            assert (eye.errors == 0).any()
+            assert (eye.errors > 0).any()
+        for sweep in result.margins:
+            assert sweep.points  # the sweep produced points
+            assert sweep.points[0].errors == 0  # clean at the high-amplitude start
 
 
 class TestValidateReading:

@@ -34,16 +34,15 @@ class TestProcessSerdes:
         assert outputs["serdes_metrics_csv"].exists()
         assert outputs["serdes_summary_json"].exists()
 
-    def test_metrics_csv_has_all_combos(
+    def test_metrics_csv_has_all_lanes(
         self, processor, definition, serdes_session_dir: Path, tmp_path: Path
     ):
         session = load_session(serdes_session_dir / "session.yaml")
         outputs = processor.process(serdes_session_dir, session, definition, tmp_path / "output")
 
         df = pd.read_csv(outputs["serdes_metrics_csv"])
-        assert len(df) == 4
-        combos = set(zip(df["channel"], df["rate_gbps"], strict=False))
-        assert combos == {("forward", 3), ("forward", 6), ("back", 3), ("back", 6)}
+        assert len(df) == 3
+        assert set(df["lane_id"]) == {"fwd_3g", "fwd_6g", "rev_187m"}
 
     def test_metrics_columns(self, processor, definition, serdes_session_dir: Path, tmp_path: Path):
         session = load_session(serdes_session_dir / "session.yaml")
@@ -51,11 +50,13 @@ class TestProcessSerdes:
 
         df = pd.read_csv(outputs["serdes_metrics_csv"])
         for col in [
-            "eye_height_ratio",
-            "eye_width_ratio",
+            "lane_id",
+            "channel",
+            "rate_gbps",
             "eye_area_ratio",
+            "zero_error_fraction",
             "eye_height_mv",
-            "eye_width_ps",
+            "eye_width_ui",
             "link_margin_mv",
             "error_onset_mv",
             "num_margin_points",
@@ -73,8 +74,8 @@ class TestProcessSerdes:
         session = load_session(serdes_session_dir / "session.yaml")
         outputs = processor.process(serdes_session_dir, session, definition, tmp_path / "output")
 
-        df = pd.read_csv(outputs["serdes_metrics_csv"]).set_index(["channel", "rate_gbps"])
-        assert df.loc[("forward", 6), "eye_area_ratio"] < df.loc[("forward", 3), "eye_area_ratio"]
+        df = pd.read_csv(outputs["serdes_metrics_csv"]).set_index("lane_id")
+        assert df.loc["fwd_6g", "eye_area_ratio"] < df.loc["fwd_3g", "eye_area_ratio"]
 
     def test_summary_json(self, processor, definition, serdes_session_dir: Path, tmp_path: Path):
         session = load_session(serdes_session_dir / "session.yaml")
@@ -86,8 +87,8 @@ class TestProcessSerdes:
         assert summary["session_id"] == "20250401_01"
         assert summary["profile_id"] == "test_cable"
         assert summary["cable_length_mm"] == 500.0
-        assert summary["num_combos"] == 4
-        assert len(summary["combos"]) == 4
+        assert summary["num_lanes"] == 3
+        assert len(summary["combos"]) == 3
         assert "worst_eye_area_ratio" in summary
         assert "worst_link_margin_mv" in summary
         assert summary["serdes_device"] == "Test GMSL2 eval kit"

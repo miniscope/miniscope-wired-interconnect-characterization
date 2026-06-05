@@ -21,7 +21,6 @@ from datetime import date as date_type
 from pathlib import Path
 from typing import Any
 
-import numpy as np
 import yaml
 
 from src.core.loading import load_session
@@ -225,41 +224,48 @@ def write_serdes_session(
     meta: SessionMeta,
     condition: str | None = None,
 ) -> SessionRef:
-    """Write a SerDes session (session_manifest.csv + eye NPZs + margin CSVs)."""
+    """Write a SerDes session (session_manifest.csv + per-lane eye + margin CSVs)."""
     ref = _start_session(
         repo_root, profile_id, cable_length_mm, "serdes", meta, condition=condition
     )
 
+    margins_by_lane = {sweep.lane: sweep for sweep in result.margins}
+
     manifest_rows: list[dict[str, str]] = []
     for eye in result.eyes:
-        filename = f"eye_{eye.channel.value}_{eye.rate.value}g.npz"
-        np.savez(
-            ref.path / filename,
-            error_counts=eye.error_counts,
-            voltage_range_mv=np.array(eye.voltage_range_mv, dtype=float),
-            time_range_ps=np.array(eye.time_range_ps, dtype=float),
-        )
+        lane = eye.lane
+        eye_csv = f"eye_{lane.lane_id}.csv"
+        with open(ref.path / eye_csv, "w", newline="") as f:
+            writer = csv.writer(f)
+            writer.writerow(["phase", "vth", "polarity", "hits", "errors"])
+            for ph, vt, pol, hit, err in zip(
+                eye.phase, eye.vth, eye.polarity, eye.hits, eye.errors, strict=True
+            ):
+                writer.writerow([int(ph), int(vt), int(pol), int(hit), int(err)])
+
+        margin_csv = f"margin_{lane.lane_id}.csv"
+        sweep = margins_by_lane.get(lane)
+        with open(ref.path / margin_csv, "w", newline="") as f:
+            writer = csv.writer(f)
+            writer.writerow(["tx_amp_mv", "code", "rep", "locked", "errors", "status"])
+            for p in sweep.points if sweep else []:
+                writer.writerow(
+                    [p.tx_amplitude_mv, p.code, p.rep, int(p.locked), p.errors, p.status]
+                )
+
         manifest_rows.append(
             {
-                "channel": eye.channel.value,
-                "rate_gbps": str(eye.rate.value),
-                "eye_npz": filename,
+                "lane_id": lane.lane_id,
+                "channel": lane.channel.value,
+                "rate_gbps": f"{lane.rate.gbps:g}",
+                "eye_csv": eye_csv,
+                "margin_csv": margin_csv,
             }
         )
 
-    for sweep in result.margins:
-        filename = f"margin_{sweep.channel.value}_{sweep.rate.value}g.csv"
-        with open(ref.path / filename, "w", newline="") as f:
-            writer = csv.writer(f)
-            writer.writerow(["tx_amplitude_mv", "error_count"])
-            for point in sweep.points:
-                writer.writerow([point.tx_amplitude_mv, point.error_count])
-        for row in manifest_rows:
-            if row["channel"] == sweep.channel.value and row["rate_gbps"] == str(sweep.rate.value):
-                row["margin_csv"] = filename
-
     with open(ref.path / "session_manifest.csv", "w", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=["channel", "rate_gbps", "eye_npz", "margin_csv"])
+        fieldnames = ["lane_id", "channel", "rate_gbps", "eye_csv", "margin_csv"]
+        writer = csv.DictWriter(f, fieldnames=fieldnames)
         writer.writeheader()
         writer.writerows(manifest_rows)
 

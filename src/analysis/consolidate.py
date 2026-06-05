@@ -101,7 +101,7 @@ def _sorted_conditions(by_condition: dict) -> list[str]:
     return sorted(by_condition, key=_condition_sort_key)
 
 
-def _combo_sort_key(key: tuple[str, str, int]) -> tuple[tuple[float, str], str, int]:
+def _combo_sort_key(key: tuple[str, str, float]) -> tuple[tuple[float, str], str, float]:
     condition, channel, rate = key
     return (_condition_sort_key(condition), channel, rate)
 
@@ -136,12 +136,12 @@ def _consolidate_resistance(entries: list[tuple[SessionRecord, dict]]) -> list[d
 
 def _consolidate_serdes(entries: list[tuple[SessionRecord, dict]]) -> list[dict]:
     """One row per (condition, channel, rate): pooled eye + margin stats."""
-    by_combo: dict[tuple[str, str, int], list[dict]] = defaultdict(list)
+    by_combo: dict[tuple[str, str, float], list[dict]] = defaultdict(list)
     length_by_condition: dict[str, float | None] = {}
     for session, summary in entries:
         length_by_condition[session.condition] = session.cable_length_mm
         for combo in summary.get("combos", []):
-            key = (session.condition, combo["channel"], int(combo["rate_gbps"]))
+            key = (session.condition, combo["channel"], float(combo["rate_gbps"]))
             by_combo[key].append(combo)
 
     rows: list[dict] = []
@@ -156,8 +156,9 @@ def _consolidate_serdes(entries: list[tuple[SessionRecord, dict]]) -> list[dict]
         }
         for metric in [
             "eye_area_ratio",
+            "zero_error_fraction",
             "eye_height_mv",
-            "eye_width_ps",
+            "eye_width_ui",
             "link_margin_mv",
         ]:
             stats = _mean_std_n([c.get(metric) for c in combos])

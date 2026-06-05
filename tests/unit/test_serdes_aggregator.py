@@ -61,8 +61,8 @@ class TestSerdesSummary:
         outputs = aggregator.aggregate(processed_sessions, definition, tmp_path / "aggregated")
 
         df = pd.read_csv(outputs["serdes_metrics_table"])
-        # 2 sessions * 4 combos
-        assert len(df) == 8
+        # 2 sessions * 3 lanes
+        assert len(df) == 6
         assert set(df["cable_length_mm"]) == {500.0, 1000.0}
         assert "eye_area_ratio" in df.columns
         assert "link_margin_mv" in df.columns
@@ -73,7 +73,7 @@ class TestSerdesSummary:
         outputs = aggregator.aggregate(processed_sessions, definition, tmp_path / "aggregated")
 
         df = pd.read_csv(outputs["serdes_metrics_table"])
-        combo = df[(df["channel"] == "forward") & (df["rate_gbps"] == 3)]
+        combo = df[df["lane_id"] == "fwd_3g"]
         by_length = combo.set_index("cable_length_mm")["eye_area_ratio"]
         assert by_length[1000.0] < by_length[500.0]
 

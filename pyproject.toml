@@ -26,6 +26,8 @@ optional = true
 
 [tool.poetry.group.acquire.dependencies]
 nicegui = "^2"
+# Serial link to the Raspberry Pi Pico GMSL2 bridge (real SerDes driver).
+pyserial = "^3.5"
 
 # Wiki publishing (CI publish job only):
 #   poetry install --with publish
@@ -44,8 +46,10 @@ mwclient = "^0.11"
 #                     # the library path -- see src/instruments/vna/real.py
 # Develop with no hardware via RealPicoVnaDriver(demo=True).
 #
-# SerDes: the I2C adapter library is DEFERRED until Federico's GMSL2 scripts
-# land in src/instruments/serdes/real.py.
+# SerDes: the real driver (src/instruments/serdes/real.py) drives a MAX96717/
+# MAX96716A GMSL2 pair over a Raspberry Pi Pico serial bridge (firmware/
+# gmsl2-bridge/). Its only extra dependency is `pyserial`, in the acquire
+# group above. Develop with no hardware via RealSerdesDriver(demo=True).
 
 [tool.poetry.scripts]
 miniscope-char = "src.cli.main:app"

@@ -64,8 +64,8 @@ class TestConsolidateProfile:
         outputs = consolidate_profile(processed_repo, "test_cable")
 
         df = pd.read_csv(outputs["test_cable_serdes_by_length"])
-        # 2 lengths x 4 combos
-        assert len(df) == 8
+        # 2 lengths x 3 lanes
+        assert len(df) == 6
         assert set(df["cable_length_mm"]) == {500.0, 1000.0}
         assert (df["n_sessions"] == 1).all()
         assert df["mean_eye_area_ratio"].notna().all()
@@ -101,7 +101,7 @@ class TestConsolidateProfile:
 
         assert consolidated["profile_id"] == "test_cable"
         assert len(consolidated["resistance_by_length"]) == 1
-        assert len(consolidated["serdes_by_length"]) == 8
+        assert len(consolidated["serdes_by_length"]) == 6
         assert len(consolidated["vna_by_length"]) == 1
 
     def test_commutator_consolidation(self, processed_repo: Path):
@@ -125,7 +125,7 @@ class TestConsolidateProfile:
         assert vna["attenuation_db_by_hz"]
 
         serdes = consolidated["serdes_by_length"]
-        assert len(serdes) == 4  # 1 condition x 4 channel/rate combos
+        assert len(serdes) == 3  # 1 condition x 3 lanes
         assert all(r["condition"] == "static" for r in serdes)
 
     def test_unprocessed_profile_empty(self, test_repo: Path):

@@ -2,19 +2,20 @@ name: serdes
 version: 1
 description: >
   GMSL2 serializer/deserializer (SerDes) signal-integrity characterization.
-  For each of the forward channel (high-bandwidth video/data) and back
-  channel (slower bidirectional control), at both 3 Gbps and 6 Gbps, the
-  acquisition captures an eye diagram (2D error-count histogram over
-  time x voltage) and a link-margin sweep (bit error count vs TX amplitude,
-  coarse 10 mV steps with fine 1 mV steps near the error onset). The cable
-  profile and length come from the session's location in the
-  measurements/ tree.
+  Covers three lanes: the forward link (serializer -> deserializer) at 3 Gbps
+  and 6 Gbps, and the fixed low-rate (~187.5 Mbps) reverse control channel.
+  For each lane the acquisition captures the deserializer's eye-on-monitor
+  (EOM) grid (raw hit/error counts over phase x voltage x polarity) and a
+  link-margin sweep (decode errors vs TX amplitude). Raw instrument output is
+  stored as-is; physical eye openings and link-margin floors are derived in
+  processing. The cable profile and length come from the session's location in
+  the measurements/ tree.
 
 fields:
   - name: serdes_device
     field_type: string
     required: true
-    description: SerDes pair used (e.g. "MAX9295A/MAX9296A GMSL2 eval kit")
+    description: SerDes pair used (e.g. "MAX96717/MAX96716A GMSL2 dev kit")
 
   - name: temperature_c
     field_type: float
@@ -28,32 +29,33 @@ files:
     file_format: csv
     required: true
     description: >
-      CSV with columns: channel (forward|back), rate_gbps (3|6),
-      eye_npz, margin_csv. Must contain exactly one row per
-      channel x rate combo (4 rows total).
+      CSV with columns: lane_id (fwd_3g|fwd_6g|rev_187m), channel
+      (forward|reverse), rate_gbps, eye_csv, margin_csv. Exactly one row per
+      lane (3 rows total).
 
-  - name: eye_diagram_files
-    filename_pattern: "eye_*.npz"
-    file_format: npz
+  - name: eye_grid_files
+    filename_pattern: "eye_*.csv"
+    file_format: csv
     required: true
     description: >
-      One NPZ per channel/rate combo with keys: error_counts (2D int array,
-      axis 0 = voltage bins, axis 1 = time bins), voltage_range_mv (2,),
-      time_range_ps (2,).
+      One raw eye-monitor grid CSV per lane with columns: phase (0-127),
+      vth (0-63), polarity (0|1), hits, errors (-1 flags a measurement
+      timeout). One row per measured (phase, vth, polarity) point.
 
   - name: link_margin_files
     filename_pattern: "margin_*.csv"
     file_format: csv
     required: true
     description: >
-      One CSV per channel/rate combo with columns: tx_amplitude_mv,
-      error_count. Final per-point values only (the acquisition script may
-      average internal repeats); variability comes from repeated sessions.
+      One raw link-margin CSV per lane with columns: tx_amp_mv, code, rep,
+      locked, errors (-1 if lock was lost), status (ok|errors|lost_lock|
+      ser_unreachable). Final per-point values; variability comes from
+      repeated sessions.
 
 processing_steps:
   - name: process_serdes
     processor: src.processing.serdes.ProcessSerdes
-    description: Compute eye-opening and link-margin metrics per channel/rate combo
+    description: Compute eye-opening and link-margin metrics per lane
     outputs: ["serdes_metrics_csv", "serdes_summary_json"]
 
 aggregation:

@@ -4,37 +4,30 @@ import json
 from pathlib import Path
 
 import matplotlib
-import numpy as np
 import pandas as pd
-
-matplotlib.use("Agg")
-import matplotlib.pyplot as plt
 
 from src.core.schemas import MeasurementDefinition
 from src.core.session_schemas import SessionRecord
 from src.processing.base import BaseProcessor, session_header
-from src.processing.eye import (
-    extract_eye_opening,
-    eye_figure,
-    eye_opening_physical,
-    link_margin_metrics,
-)
+from src.processing.eye import extract_eye_opening, eye_figure, link_margin_metrics
 
-# Every serdes session must cover exactly these channel x rate combos.
-SERDES_CHANNELS = ("forward", "back")
-SERDES_RATES_GBPS = (3, 6)
-EXPECTED_COMBOS = {(c, r) for c in SERDES_CHANNELS for r in SERDES_RATES_GBPS}
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
+
+# Every serdes session covers exactly these three lanes: the forward link at
+# 3 and 6 Gbps plus the fixed low-rate reverse control channel.
+EXPECTED_LANES = frozenset({"fwd_3g", "fwd_6g", "rev_187m"})
 
 
 class ProcessSerdes(BaseProcessor):
     """
     Processes a GMSL2 SerDes characterization session.
 
-    Reads session_manifest.csv, and for each {forward,back} x {3,6 Gbps}
-    combo computes eye-opening metrics from the eye-diagram NPZ and
-    link-margin metrics from the TX-amplitude sweep CSV.
+    Reads session_manifest.csv and, for each lane, computes eye-opening metrics
+    from the raw eye-monitor grid CSV and link-margin metrics from the raw
+    TX-amplitude sweep CSV.
 
-    Writes serdes_metrics.csv (one row per combo) + serdes_summary.json.
+    Writes serdes_metrics.csv (one row per lane) + serdes_summary.json.
     """
 
     def __init__(self, models_dir: Path | None = None) -> None:
@@ -54,18 +47,17 @@ class ProcessSerdes(BaseProcessor):
 
         rows: list[dict] = []
         for _, mrow in manifest.iterrows():
+            lane_id = str(mrow["lane_id"]).strip()
             channel = str(mrow["channel"]).strip()
-            rate_gbps = int(mrow["rate_gbps"])
+            rate_gbps = float(mrow["rate_gbps"])
+            metrics: dict = {"lane_id": lane_id, "channel": channel, "rate_gbps": rate_gbps}
 
-            metrics: dict = {"channel": channel, "rate_gbps": rate_gbps}
+            eye_csv = str(mrow["eye_csv"]).strip()
+            metrics["eye_csv"] = eye_csv
+            metrics.update(self._eye_metrics(session_dir / eye_csv))
 
-            eye_npz = str(mrow["eye_npz"]).strip()
-            metrics["eye_npz"] = eye_npz
-            metrics.update(self._eye_metrics(session_dir / eye_npz))
-
-            # Render a PNG of the eye for the wiki / quick inspection
-            eye_png = output_dir / f"{Path(eye_npz).stem}.png"
-            self._render_eye_png(session_dir / eye_npz, channel, rate_gbps, eye_png)
+            eye_png = output_dir / f"{Path(eye_csv).stem}.png"
+            self._render_eye_png(session_dir / eye_csv, channel, lane_id, eye_png)
             metrics["eye_png"] = eye_png.name
 
             margin_csv = str(mrow["margin_csv"]).strip()
@@ -88,41 +80,43 @@ class ProcessSerdes(BaseProcessor):
             "serdes_summary_json": summary_path,
         }
 
-    def _eye_metrics(self, npz_path: Path) -> dict:
-        """Eye-opening metrics (bins, ratios, and physical units) for one combo."""
-        data = np.load(npz_path)
-        eye = data["error_counts"]
-
-        metrics = extract_eye_opening(eye)
-        metrics.update(
-            eye_opening_physical(metrics, data["voltage_range_mv"], data["time_range_ps"])
+    def _eye_metrics(self, eye_csv_path: Path) -> dict:
+        """Eye-opening metrics for one lane's raw EOM grid."""
+        df = pd.read_csv(eye_csv_path)
+        df.columns = df.columns.str.strip()
+        return extract_eye_opening(
+            df["phase"].to_numpy(),
+            df["vth"].to_numpy(),
+            df["polarity"].to_numpy(),
+            df["errors"].to_numpy(),
+            df["hits"].to_numpy(),
         )
-        return metrics
 
     def _render_eye_png(
-        self, npz_path: Path, channel: str, rate_gbps: int, output_path: Path
+        self, eye_csv_path: Path, channel: str, lane_id: str, output_path: Path
     ) -> None:
-        """Render the eye-diagram histogram as a PNG (log color scale)."""
-        data = np.load(npz_path)
+        df = pd.read_csv(eye_csv_path)
+        df.columns = df.columns.str.strip()
         fig = eye_figure(
-            data["error_counts"],
-            data["voltage_range_mv"],
-            data["time_range_ps"],
+            df["phase"].to_numpy(),
+            df["vth"].to_numpy(),
+            df["polarity"].to_numpy(),
+            df["errors"].to_numpy(),
+            df["hits"].to_numpy(),
             channel,
-            rate_gbps,
+            lane_id,
         )
         fig.tight_layout()
         fig.savefig(output_path, dpi=150)
         plt.close(fig)
 
     def _margin_metrics(self, csv_path: Path) -> dict:
-        """Link-margin metrics for one combo's TX-amplitude sweep."""
+        """Link-margin metrics for one lane's TX-amplitude sweep."""
         df = pd.read_csv(csv_path)
         df.columns = df.columns.str.strip()
-
         metrics = link_margin_metrics(
-            df["tx_amplitude_mv"].to_numpy(),
-            df["error_count"].to_numpy(),
+            df["tx_amp_mv"].to_numpy(),
+            df["errors"].to_numpy(),
         )
         metrics["num_margin_points"] = len(df)
         return metrics
@@ -130,18 +124,18 @@ class ProcessSerdes(BaseProcessor):
     def _compute_summary(self, rows: list[dict], session: SessionRecord) -> dict:
         summary: dict = {
             **session_header(session),
-            "num_combos": len(rows),
+            "num_lanes": len(rows),
             "combos": [
                 {
                     k: row.get(k)
                     for k in [
+                        "lane_id",
                         "channel",
                         "rate_gbps",
-                        "eye_height_ratio",
-                        "eye_width_ratio",
                         "eye_area_ratio",
+                        "zero_error_fraction",
                         "eye_height_mv",
-                        "eye_width_ps",
+                        "eye_width_ui",
                         "link_margin_mv",
                         "error_onset_mv",
                     ]
@@ -150,10 +144,10 @@ class ProcessSerdes(BaseProcessor):
             ],
         }
 
-        # Convenience: worst-case values across combos (the binding constraint
-        # for "will this cable work"). Note link_margin_mv is the lowest
-        # error-free TX amplitude, so LOWER is better and the worst combo is
-        # the one with the HIGHEST floor.
+        # Convenience: worst-case values across lanes (the binding constraint
+        # for "will this cable work"). link_margin_mv is the lowest error-free
+        # TX amplitude, so LOWER is better and the worst lane has the HIGHEST
+        # floor.
         areas = [r["eye_area_ratio"] for r in rows if r.get("eye_area_ratio") is not None]
         margins = [r["link_margin_mv"] for r in rows if r.get("link_margin_mv") is not None]
         if areas:

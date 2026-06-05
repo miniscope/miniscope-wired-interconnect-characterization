@@ -221,8 +221,8 @@ class TestSessionControllers:
     def test_serdes_capture_and_save(self, test_repo: Path):
         events: list[ProgressEvent] = []
         result = run_serdes_capture(750.0, progress=events.append, simulate=True)
-        assert len(result.eyes) == 4
-        assert len(events) == 8
+        assert len(result.eyes) == 3
+        assert len(events) == 6
 
         ref = save_serdes_session(
             test_repo,
