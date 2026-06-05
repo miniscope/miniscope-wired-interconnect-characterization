@@ -2,13 +2,12 @@
 
 from pathlib import Path
 
-import numpy as np
 import pytest
 
 from src.core.session_validator import (
     ValidationResult,
+    validate_eye_csv,
     validate_margin_csv,
-    validate_serdes_npz,
     validate_serdes_session,
 )
 
@@ -29,24 +28,23 @@ class TestValidateSerdesSession:
         validate_serdes_session(serdes_session_dir, result)
         assert result.is_valid, result.errors
 
-    def test_missing_combo(self, bad_serdes_dir: Path):
+    def test_missing_lane(self, bad_serdes_dir: Path):
         result = ValidationResult()
         validate_serdes_session(bad_serdes_dir / "20250403_01", result)
         assert not result.is_valid
-        assert any("missing combo" in e for e in result.errors)
-        assert any("back, 6" in e for e in result.errors)
+        assert any("missing lane" in e and "rev_187m" in e for e in result.errors)
 
-    def test_bad_npz_keys(self, bad_serdes_dir: Path):
+    def test_bad_eye_columns(self, bad_serdes_dir: Path):
         result = ValidationResult()
         validate_serdes_session(bad_serdes_dir / "20250404_01", result)
         assert not result.is_valid
-        assert any("voltage_range_mv" in e for e in result.errors)
+        assert any("errors" in e for e in result.errors)
 
     def test_bad_margin_columns(self, bad_serdes_dir: Path):
         result = ValidationResult()
         validate_serdes_session(bad_serdes_dir / "20250405_01", result)
         assert not result.is_valid
-        assert any("tx_amplitude_mv" in e for e in result.errors)
+        assert any("tx_amp_mv" in e for e in result.errors)
 
     def test_missing_manifest(self, tmp_path: Path):
         result = ValidationResult()
@@ -54,63 +52,52 @@ class TestValidateSerdesSession:
         assert not result.is_valid
 
 
-class TestValidateSerdesNpz:
+class TestValidateEyeCsv:
     def test_valid(self, serdes_session_dir: Path):
         result = ValidationResult()
-        validate_serdes_npz(serdes_session_dir / "eye_forward_3g.npz", result)
-        assert result.is_valid
+        validate_eye_csv(serdes_session_dir / "eye_fwd_3g.csv", result)
+        assert result.is_valid, result.errors
 
-    def test_wrong_ndim(self, tmp_path: Path):
-        path = tmp_path / "bad.npz"
-        np.savez(
-            path,
-            error_counts=np.zeros(8, dtype=np.int64),
-            voltage_range_mv=np.array([-1.0, 1.0]),
-            time_range_ps=np.array([0.0, 1.0]),
-        )
+    def test_out_of_range_phase(self, tmp_path: Path):
+        path = tmp_path / "eye.csv"
+        path.write_text("phase,vth,polarity,hits,errors\n200,0,0,32768,0\n")
         result = ValidationResult()
-        validate_serdes_npz(path, result)
+        validate_eye_csv(path, result)
         assert not result.is_valid
-        assert any("2D" in e for e in result.errors)
+        assert any("phase" in e for e in result.errors)
 
-    def test_bad_range_shape(self, tmp_path: Path):
-        path = tmp_path / "bad.npz"
-        np.savez(
-            path,
-            error_counts=np.zeros((8, 8), dtype=np.int64),
-            voltage_range_mv=np.array([1.0]),
-            time_range_ps=np.array([0.0, 1.0]),
-        )
+    def test_missing_column(self, tmp_path: Path):
+        path = tmp_path / "eye.csv"
+        path.write_text("phase,vth,polarity,hits\n0,0,0,32768\n")
         result = ValidationResult()
-        validate_serdes_npz(path, result)
+        validate_eye_csv(path, result)
         assert not result.is_valid
-        assert any("shape (2,)" in e for e in result.errors)
 
 
 class TestValidateMarginCsv:
     def test_valid(self, serdes_session_dir: Path):
         result = ValidationResult()
-        validate_margin_csv(serdes_session_dir / "margin_forward_3g.csv", result)
-        assert result.is_valid
+        validate_margin_csv(serdes_session_dir / "margin_fwd_3g.csv", result)
+        assert result.is_valid, result.errors
 
     def test_negative_amplitude(self, tmp_path: Path):
         csv_path = tmp_path / "margin.csv"
-        csv_path.write_text("tx_amplitude_mv,error_count\n-10,0\n")
+        csv_path.write_text("tx_amp_mv,code,rep,locked,errors,status\n-10,0,0,1,0,ok\n")
         result = ValidationResult()
         validate_margin_csv(csv_path, result)
         assert not result.is_valid
 
-    def test_negative_error_count(self, tmp_path: Path):
+    def test_lost_lock_allowed(self, tmp_path: Path):
+        # errors == -1 (lock lost) is a valid raw value, not a validation error.
         csv_path = tmp_path / "margin.csv"
-        csv_path.write_text("tx_amplitude_mv,error_count\n100,-1\n")
+        csv_path.write_text("tx_amp_mv,code,rep,locked,errors,status\n100,10,0,0,-1,lost_lock\n")
+        result = ValidationResult()
+        validate_margin_csv(csv_path, result)
+        assert result.is_valid, result.errors
+
+    def test_missing_column(self, tmp_path: Path):
+        csv_path = tmp_path / "margin.csv"
+        csv_path.write_text("amplitude,errors\n100,0\n")
         result = ValidationResult()
         validate_margin_csv(csv_path, result)
         assert not result.is_valid
-
-    def test_empty_rows_warn(self, tmp_path: Path):
-        csv_path = tmp_path / "margin.csv"
-        csv_path.write_text("tx_amplitude_mv,error_count\n")
-        result = ValidationResult()
-        validate_margin_csv(csv_path, result)
-        assert result.is_valid
-        assert any("no data rows" in w for w in result.warnings)

@@ -281,9 +281,9 @@ def _quality_table(consolidated: dict[str, dict], config: AnalysisConfig) -> pd.
         vna_by_length = {r["cable_length_mm"]: r for r in data.get("vna_by_length", [])}
 
         # Group serdes rows by (length, rate), take worst case across channels
-        by_length_rate: dict[tuple[float, int], list[dict]] = {}
+        by_length_rate: dict[tuple[float, float], list[dict]] = {}
         for r in serdes_rows:
-            key = (r["cable_length_mm"], int(r["rate_gbps"]))
+            key = (r["cable_length_mm"], float(r["rate_gbps"]))
             by_length_rate.setdefault(key, []).append(r)
 
         for (length_mm, rate), combos in sorted(by_length_rate.items()):

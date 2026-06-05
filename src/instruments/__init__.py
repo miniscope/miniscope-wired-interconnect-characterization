@@ -11,11 +11,16 @@ always the simulator.
 """
 
 from src.instruments.types import (
+    DEFAULT_LANES,
+    FORWARD_3G,
+    FORWARD_6G,
+    REVERSE_187M,
     EyeDiagram,
     MarginPoint,
     MarginSweep,
     ProgressEvent,
     SerdesChannel,
+    SerdesLane,
     SerdesRate,
     SerdesResult,
     VnaSweepResult,
@@ -31,6 +36,10 @@ class InstrumentNotConnected(InstrumentError):
 
 
 __all__ = [
+    "DEFAULT_LANES",
+    "FORWARD_3G",
+    "FORWARD_6G",
+    "REVERSE_187M",
     "EyeDiagram",
     "InstrumentError",
     "InstrumentNotConnected",
@@ -38,6 +47,7 @@ __all__ = [
     "MarginSweep",
     "ProgressEvent",
     "SerdesChannel",
+    "SerdesLane",
     "SerdesRate",
     "SerdesResult",
     "VnaSweepResult",

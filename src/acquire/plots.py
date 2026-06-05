@@ -28,26 +28,28 @@ def _fig_to_png(fig) -> bytes:
 
 
 def render_eye(eye: EyeDiagram) -> bytes:
-    """Heatmap of the eye diagram's error counts (log scale)."""
+    """Heatmap of the eye-monitor grid (error ratio, UI x mV)."""
     fig = eye_figure(
-        eye.error_counts,
-        eye.voltage_range_mv,
-        eye.time_range_ps,
-        eye.channel.value,
-        eye.rate.value,
+        eye.phase,
+        eye.vth,
+        eye.polarity,
+        eye.errors,
+        eye.hits,
+        eye.lane.channel.value,
+        eye.lane.lane_id,
     )
     return _fig_to_png(fig)
 
 
 def render_margin(sweep: MarginSweep) -> bytes:
-    """Link-margin curve: error count vs TX amplitude."""
+    """Link-margin curve: error count vs TX amplitude (lost-lock steps clamped)."""
     fig, ax = plt.subplots(figsize=(4.5, 3.5))
     amps = [p.tx_amplitude_mv for p in sweep.points]
-    errors = [p.error_count for p in sweep.points]
+    errors = [p.errors if p.errors >= 0 else 256 for p in sweep.points]
     ax.plot(amps, errors, marker=".", ms=4)
     ax.set_xlabel("TX amplitude (mV)")
     ax.set_ylabel("Error count")
-    ax.set_title(f"Link margin: {sweep.channel.value} @ {sweep.rate.value} Gbps")
+    ax.set_title(f"Link margin: {sweep.lane.channel.value} @ {sweep.lane.rate.label}")
     ax.grid(True, alpha=0.3)
     return _fig_to_png(fig)
 

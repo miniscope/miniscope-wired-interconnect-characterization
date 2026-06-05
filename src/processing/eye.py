@@ -1,14 +1,17 @@
 """
-Pure math for SerDes eye diagrams and link-margin sweeps.
+Pure math for SerDes eye-monitor grids and link-margin sweeps.
 
-An eye diagram here is a 2D histogram of error counts over
-(voltage bins x time bins): zero-error cells form the open "eye" in the
-middle. A link-margin sweep is a 1D series of (tx_amplitude_mv,
-error_count) points: the link margin is the smallest TX amplitude that
-still transmits without errors.
+The eye is stored as the deserializer's raw eye-on-monitor (EOM) grid: one row
+per measured (phase, vth, polarity) point with hit + error counts. This module
+turns that grid into physical eye openings and a quality scalar, and turns a
+link-margin sweep (tx amplitude vs decode errors) into a link-margin floor.
 
-These functions are deliberately free of file I/O so they can be reused
-by the processor, the acquisition app's live previews, and tests.
+Register codes map to physical axes with fixed deserializer constants:
+  - phase 0..127 spans UI_FULL_SCALE unit intervals (horizontal)
+  - vth   0..63  per polarity spans V_FULL_SCALE_MV millivolts (one half)
+
+These functions are deliberately free of file I/O so they can be reused by the
+processor, the acquisition app's live previews, and tests.
 """
 
 from __future__ import annotations
@@ -19,117 +22,151 @@ import numpy as np
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
+# Deserializer eye-monitor full-scale extents (MAX96716A EOM).
+V_FULL_SCALE_MV = 315.0  # one polarity half spans +/- this in mV
+UI_FULL_SCALE = 2.0  # the 128 phase codes span ~2 unit intervals
+MAX_VTH = 64
+MAX_PHASE = 128
 
-def eye_figure(
-    error_counts: np.ndarray,
-    voltage_range_mv: np.ndarray,
-    time_range_ps: np.ndarray,
-    channel: str,
-    rate: str | int | float,
-):
+# Cells with an error ratio at/under this are treated as inside the open eye.
+BER_THRESHOLD = 1e-3
+_CLOSED = 2.0  # sentinel ratio for missing grid cells (always > threshold)
+
+
+def _error_ratio(errors: np.ndarray, hits: np.ndarray) -> np.ndarray:
+    """Per-point error ratio; timeouts (errors < 0) are fully closed (1.0)."""
+    errors = np.asarray(errors, dtype=float)
+    hits = np.asarray(hits, dtype=float)
+    ratio = np.where(hits > 0, errors / np.maximum(hits, 1.0), 1.0)
+    return np.where(errors < 0, 1.0, ratio)
+
+
+def reconstruct_grids(
+    phase: np.ndarray,
+    vth: np.ndarray,
+    polarity: np.ndarray,
+    errors: np.ndarray,
+    hits: np.ndarray,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
-    Heatmap figure of an eye diagram's error counts (log color scale).
-
-    Returns a matplotlib Figure (no file I/O): the pipeline saves it to a
-    PNG, the live preview encodes it to bytes. Shared so the saved diagram
-    and the in-app preview never drift apart.
+    Rebuild (positive_half, negative_half, phase_codes) error-ratio grids of
+    shape (n_vth, n_phase) from the flat EOM rows. Missing cells are _CLOSED.
     """
-    counts = np.asarray(error_counts, dtype=float)
-    fig, ax = plt.subplots(figsize=(4.5, 3.5))
-    im = ax.imshow(
-        np.log1p(counts),
-        origin="lower",
-        aspect="auto",
-        extent=(time_range_ps[0], time_range_ps[1], voltage_range_mv[0], voltage_range_mv[1]),
-        cmap="inferno",
-    )
-    ax.set_xlabel("Time (ps)")
-    ax.set_ylabel("Voltage (mV)")
-    ax.set_title(f"Eye: {channel} @ {rate} Gbps")
-    fig.colorbar(im, ax=ax, label="log(1 + errors)")
-    return fig
+    phase = np.asarray(phase, dtype=int)
+    vth = np.asarray(vth, dtype=int)
+    polarity = np.asarray(polarity, dtype=int)
+    ratio = _error_ratio(errors, hits)
+
+    phase_codes = np.unique(phase)
+    vth_codes = np.unique(vth)
+    p_index = {c: i for i, c in enumerate(phase_codes)}
+    v_index = {c: i for i, c in enumerate(vth_codes)}
+
+    pos = np.full((len(vth_codes), len(phase_codes)), _CLOSED)
+    neg = np.full((len(vth_codes), len(phase_codes)), _CLOSED)
+    for ph, vt, pol, r in zip(phase, vth, polarity, ratio, strict=True):
+        grid = pos if pol == 1 else neg
+        grid[v_index[vt], p_index[ph]] = r
+    return pos, neg, phase_codes
 
 
-def _longest_zero_run(arr: np.ndarray) -> tuple[int, int]:
-    """
-    Find the longest contiguous run of zeros in a 1D array.
-
-    Returns (start_index, length). If no zeros found, returns (0, 0).
-    """
-    if len(arr) == 0:
-        return (0, 0)
-
-    is_zero = arr == 0
-    best_start = 0
-    best_len = 0
-    current_start = 0
-    current_len = 0
-
-    for i, z in enumerate(is_zero):
-        if z:
-            if current_len == 0:
-                current_start = i
-            current_len += 1
-            if current_len > best_len:
-                best_start = current_start
-                best_len = current_len
-        else:
-            current_len = 0
-
-    return (best_start, best_len)
+def _longest_open_run(row: np.ndarray, threshold: float) -> np.ndarray:
+    """Indices of the longest contiguous open (<= threshold) run in a 1D row."""
+    open_idx = np.where(row <= threshold)[0]
+    if len(open_idx) == 0:
+        return open_idx
+    gaps = np.where(np.diff(open_idx) > 1)[0]
+    runs = np.split(open_idx, gaps + 1) if len(gaps) else [open_idx]
+    return max(runs, key=len)
 
 
-def extract_eye_opening(eye_2d: np.ndarray) -> dict[str, float]:
-    """
-    Extract eye opening metrics from a 2D error-count histogram
-    (axis 0 = voltage bins, axis 1 = time bins).
-
-    Uses center-scan: scan the center time-column for eye height and the
-    center voltage-row for eye width.
-
-    Returns dict with: eye_height_bins, eye_width_bins,
-    eye_height_ratio, eye_width_ratio, eye_area_ratio.
-
-    TODO (deferred decision): additional eye metrics under consideration --
-    timing jitter from the time-marginal distribution, Q-factor, and a
-    BER-contour-based opening. Add here once the real SerDes data shows
-    which are informative.
-    """
-    v_bins, t_bins = eye_2d.shape
-
-    center_col = eye_2d[:, t_bins // 2]
-    _, height_bins = _longest_zero_run(center_col)
-
-    center_row = eye_2d[v_bins // 2, :]
-    _, width_bins = _longest_zero_run(center_row)
-
-    height_ratio = height_bins / v_bins if v_bins > 0 else 0.0
-    width_ratio = width_bins / t_bins if t_bins > 0 else 0.0
-
-    return {
-        "eye_height_bins": int(height_bins),
-        "eye_width_bins": int(width_bins),
-        "eye_height_ratio": round(float(height_ratio), 6),
-        "eye_width_ratio": round(float(width_ratio), 6),
-        "eye_area_ratio": round(float(height_ratio * width_ratio), 6),
-    }
-
-
-def eye_opening_physical(
-    metrics: dict[str, float],
-    voltage_range_mv: np.ndarray,
-    time_range_ps: np.ndarray,
+def extract_eye_opening(
+    phase: np.ndarray,
+    vth: np.ndarray,
+    polarity: np.ndarray,
+    errors: np.ndarray,
+    hits: np.ndarray,
+    threshold: float = BER_THRESHOLD,
 ) -> dict[str, float]:
     """
-    Convert bin-based eye metrics to physical units using the axis ranges
-    stored alongside the histogram.
+    Eye-opening metrics from the raw EOM grid.
+
+    Returns:
+    - eye_area_ratio:      fraction of measured cells inside the open eye
+    - zero_error_fraction: fraction of measured cells with exactly zero errors
+    - eye_height_mv:       vertical opening at the eye center (pos + neg)
+    - eye_width_ui:        horizontal opening at the center voltage row
     """
-    v_span = float(voltage_range_mv[1] - voltage_range_mv[0])
-    t_span = float(time_range_ps[1] - time_range_ps[0])
+    errors_arr = np.asarray(errors)
+    valid = errors_arr >= 0
+    n_valid = int(valid.sum())
+    ratio = _error_ratio(errors, hits)
+
+    area_ratio = float((valid & (ratio <= threshold)).sum() / n_valid) if n_valid else 0.0
+    zero_error = float((valid & (errors_arr == 0)).sum() / n_valid) if n_valid else 0.0
+
+    pos, neg, phase_codes = reconstruct_grids(phase, vth, polarity, errors, hits)
+    n_vth, n_phase = pos.shape
+
+    eye_width_ui = 0.0
+    eye_height_mv = 0.0
+    if n_phase and n_vth:
+        # Center voltage row is the smallest vth code (closest to the eye axis);
+        # use whichever half resolves the wider opening there.
+        center_pos = _longest_open_run(pos[0, :], threshold)
+        center_neg = _longest_open_run(neg[0, :], threshold)
+        center = center_pos if len(center_pos) >= len(center_neg) else center_neg
+        if len(center):
+            eye_width_ui = len(center) / n_phase * UI_FULL_SCALE
+            col = int(np.median(center))
+            vp = int(np.sum(pos[:, col] <= threshold)) * V_FULL_SCALE_MV / n_vth
+            vn = int(np.sum(neg[:, col] <= threshold)) * V_FULL_SCALE_MV / n_vth
+            eye_height_mv = vp + vn
+
     return {
-        "eye_height_mv": round(metrics["eye_height_ratio"] * v_span, 3),
-        "eye_width_ps": round(metrics["eye_width_ratio"] * t_span, 3),
+        "eye_area_ratio": round(area_ratio, 6),
+        "zero_error_fraction": round(zero_error, 6),
+        "eye_height_mv": round(eye_height_mv, 3),
+        "eye_width_ui": round(eye_width_ui, 6),
     }
+
+
+def eye_figure(
+    phase: np.ndarray,
+    vth: np.ndarray,
+    polarity: np.ndarray,
+    errors: np.ndarray,
+    hits: np.ndarray,
+    channel: str,
+    rate: str,
+):
+    """
+    Heatmap figure of the eye (error ratio, ADI-style axes: UI x mV).
+
+    Returns a matplotlib Figure (no file I/O): the pipeline saves it to a PNG,
+    the live preview encodes it to bytes. Shared so the saved diagram and the
+    in-app preview never drift apart.
+    """
+    pos, neg, _ = reconstruct_grids(phase, vth, polarity, errors, hits)
+    # Positive half on top (flipped), negative half on the bottom.
+    eye = np.vstack([np.flipud(pos), neg])
+    eye = np.where(eye >= _CLOSED, np.nan, eye)
+
+    fig, ax = plt.subplots(figsize=(4.5, 3.5))
+    im = ax.imshow(
+        eye,
+        origin="lower",
+        aspect="auto",
+        extent=(0.0, UI_FULL_SCALE, -V_FULL_SCALE_MV, V_FULL_SCALE_MV),
+        cmap="inferno_r",
+        vmin=0.0,
+        vmax=1.0,
+    )
+    ax.set_xlabel("Phase (UI)")
+    ax.set_ylabel("Voltage (mV)")
+    ax.set_title(f"Eye: {channel} @ {rate}")
+    fig.colorbar(im, ax=ax, label="Error ratio")
+    return fig
 
 
 def link_margin_metrics(
@@ -144,10 +181,16 @@ def link_margin_metrics(
       every amplitude that produced errors (i.e. the reliable floor).
     - error_onset_mv: the largest amplitude that produced errors
       (None if the link never errored in the swept range).
+
+    A lost-lock / unreachable step (error_count < 0) is treated as erroring.
     """
-    order = np.argsort(tx_amplitude_mv)
-    amps = np.asarray(tx_amplitude_mv, dtype=float)[order]
-    errs = np.asarray(error_count, dtype=float)[order]
+    amps = np.asarray(tx_amplitude_mv, dtype=float)
+    raw = np.asarray(error_count, dtype=float)
+    errs = np.where(raw < 0, 1.0, raw)  # lock loss counts as an error
+
+    order = np.argsort(amps)
+    amps = amps[order]
+    errs = errs[order]
 
     erroring = amps[errs > 0]
     error_onset = float(np.max(erroring)) if len(erroring) else None

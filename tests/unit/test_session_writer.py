@@ -168,9 +168,9 @@ class TestWriteSerdesSession:
         )
 
         manifest = pd.read_csv(ref.path / "session_manifest.csv")
-        assert len(manifest) == 4
-        assert (ref.path / "eye_forward_3g.npz").exists()
-        assert (ref.path / "margin_back_6g.csv").exists()
+        assert len(manifest) == 3
+        assert (ref.path / "eye_fwd_3g.csv").exists()
+        assert (ref.path / "margin_rev_187m.csv").exists()
 
         pipeline_result = process_session(ref.path, test_repo)
         assert pipeline_result.validation.is_valid, pipeline_result.validation.errors
