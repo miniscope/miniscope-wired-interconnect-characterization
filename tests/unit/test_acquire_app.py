@@ -28,3 +28,13 @@ class TestAppBuild:
         assert "/measure/resistance/{profile_id}/{condition}" in routes
         assert "/measure/serdes/{profile_id}/{condition}" in routes
         assert "/measure/vna/{profile_id}/{condition}" in routes
+
+
+class TestLaneSectionTitle:
+    def test_titles_separate_speeds(self):
+        from src.acquire.pages.serdes import lane_section_title
+        from src.instruments.types import FORWARD_3G, FORWARD_6G, REVERSE_187M
+
+        assert lane_section_title(FORWARD_3G) == "Forward link -- 3 Gbps"
+        assert lane_section_title(FORWARD_6G) == "Forward link -- 6 Gbps"
+        assert lane_section_title(REVERSE_187M) == "Reverse link -- 187.5 Mbps"

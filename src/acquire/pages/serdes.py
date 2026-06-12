@@ -18,7 +18,15 @@ from src.core.session_schemas import parse_condition_dir
 from src.instruments.registry import use_hardware
 from src.instruments.serdes.driver import SerdesConfig
 from src.instruments.serdes.pico_bridge import list_serial_ports
-from src.instruments.types import EyeDiagram, MarginSweep, ProgressEvent, SerdesResult
+from src.instruments.types import (
+    EyeDiagram,
+    MarginSweep,
+    ProgressEvent,
+    SerdesChannel,
+    SerdesLane,
+    SerdesRate,
+    SerdesResult,
+)
 
 # Capture-resolution presets for the full sequence. Wall-clock is dominated by
 # the eye grid (eye_bins -> ~bins^2 points at ~0.1 s each over the serial
@@ -36,12 +44,40 @@ def _status_chip(ok: bool, ok_text: str, bad_text: str) -> None:
     ui.badge(ok_text if ok else bad_text).props("color=" + ("green" if ok else "red"))
 
 
-def render_link_status(container, status: dict) -> None:
+def _rate_text(rate: SerdesRate) -> str:
+    """Human-readable link rate, e.g. '3 Gbps' / '187.5 Mbps'."""
+    gbps = rate.gbps
+    return f"{gbps * 1000:.1f} Mbps" if gbps < 1 else f"{gbps:.0f} Gbps"
+
+
+def lane_section_title(lane: SerdesLane) -> str:
+    """Section heading for a lane's results, e.g. 'Forward link -- 6 Gbps'."""
+    channel = "Forward" if lane.channel is SerdesChannel.FORWARD else "Reverse"
+    return f"{channel} link -- {_rate_text(lane.rate)}"
+
+
+def _device_box(role: str, dev: dict) -> None:
+    """One chip in the link diagram: role, part number, ID, lock chips."""
+    with ui.card().classes("items-center p-3 min-w-48"):
+        ui.label(role).classes("text-xs uppercase text-gray-500")
+        ui.label(str(dev.get("part", "?"))).classes("text-lg font-bold")
+        dev_id = dev.get("device_id")
+        ui.label(f"ID 0x{dev_id:02X}" if isinstance(dev_id, int) else "ID ?").classes(
+            "text-xs text-gray-600"
+        )
+        with ui.row().classes("gap-1 mt-1"):
+            _status_chip(bool(dev.get("locked")), "locked", "unlocked")
+            _status_chip(not dev.get("error"), "no errors", "errors")
+            _status_chip(bool(dev.get("cmu")), "CMU", "no CMU")
+
+
+def render_link_status(container, status: dict, cable_label: str = "") -> None:
     """Render the SerDes link status into a persistent, readable panel.
 
-    Understands the real driver's rich shape (per-device part number + lock
-    flags and the forward-link rate) and falls back to a flat key/value dump
-    for the simulator.
+    For the real driver, draws a Serializer -- cable -- Deserializer diagram
+    with each chip's part number and lock state, the cable length in the
+    middle, and arrows marking the forward (Ser->Des) and reverse (Des->Ser)
+    channel directions. Falls back to a flat key/value dump for the simulator.
     """
     container.clear()
     ser = status.get("ser")
@@ -63,20 +99,22 @@ def render_link_status(container, status: dict) -> None:
                 )
                 if status.get("demo"):
                     ui.badge("DEMO").props("color=orange")
-            ui.label(f"Forward link rate: {status.get('forward_rate', 'unknown')}").classes(
-                "text-sm"
-            )
-            ui.label("Reverse link rate: 187.5 Mbps (fixed)").classes("text-sm text-gray-500")
-            for role, dev in (("Serializer", ser), ("Deserializer", des)):
-                with ui.row().classes("items-center gap-4"):
-                    ui.label(f"{role}: {dev.get('part', '?')}").classes("font-medium w-64")
-                    dev_id = dev.get("device_id")
-                    ui.label(f"ID 0x{dev_id:02X}" if isinstance(dev_id, int) else "ID ?").classes(
-                        "text-sm text-gray-600 w-20"
+            # Serializer --cable--> Deserializer, with channel-direction arrows.
+            fwd_rate = status.get("forward_rate", "unknown")
+            with ui.row().classes("items-center gap-3 w-full mt-1"):
+                _device_box("Serializer", ser)
+                with ui.column().classes("items-center grow gap-0"):
+                    with ui.row().classes("items-center gap-1 text-blue-700"):
+                        ui.label(f"Forward {fwd_rate}").classes("text-xs font-medium")
+                        ui.icon("arrow_forward")
+                    ui.separator().classes("w-full")
+                    ui.label(f"cable: {cable_label}" if cable_label else "cable").classes(
+                        "text-xs text-gray-600"
                     )
-                    _status_chip(bool(dev.get("locked")), "locked", "unlocked")
-                    _status_chip(not dev.get("error"), "no errors", "errors")
-                    _status_chip(bool(dev.get("cmu")), "CMU locked", "CMU unlocked")
+                    with ui.row().classes("items-center gap-1 text-amber-700"):
+                        ui.icon("arrow_back")
+                        ui.label("Reverse 187.5 Mbps").classes("text-xs font-medium")
+                _device_box("Deserializer", des)
         else:
             for key, value in status.items():
                 ui.label(f"{key}: {value}").classes("text-sm")
@@ -87,7 +125,9 @@ def serdes_page(profile_id: str, condition: str) -> None:
     header(f"SerDes -- {profile_id} @ {condition}")
     # Simulated drivers model loss vs cable length; named conditions
     # (commutator states) use a short nominal length.
-    sim_length_mm = parse_condition_dir(condition) or 100.0
+    parsed_length_mm = parse_condition_dir(condition)
+    sim_length_mm = parsed_length_mm or 100.0
+    cable_label = f"{parsed_length_mm:.0f} mm" if parsed_length_mm is not None else condition
     protocol_panel("serdes")
 
     # Real captures talk to the Pico bridge over a serial port whose name is
@@ -136,7 +176,18 @@ def serdes_page(profile_id: str, condition: str) -> None:
 
     status_label = ui.label("").classes("text-gray-700")
     progress_bar = ui.linear_progress(value=0.0, show_value=False).classes("w-full")
-    previews = ui.grid(columns=4).classes("w-full gap-2")
+    # Results are grouped into one clearly-separated section per speed/lane
+    # (forward 3G, forward 6G, reverse), created on demand as previews arrive.
+    results = ui.column().classes("w-full gap-3")
+    lane_grids: dict[str, object] = {}
+
+    def lane_grid(lane: SerdesLane):
+        """Get or create the results section (eye + margin) for one lane."""
+        if lane.lane_id not in lane_grids:
+            with results, ui.card().classes("w-full"):
+                ui.label(lane_section_title(lane)).classes("text-base font-semibold")
+                lane_grids[lane.lane_id] = ui.grid(columns=2).classes("w-full gap-2")
+        return lane_grids[lane.lane_id]
 
     # Shared between the worker thread and the UI timer
     shared: dict = {"events": [], "result": None, "running": False, "lock": threading.Lock()}
@@ -165,7 +216,7 @@ def serdes_page(profile_id: str, condition: str) -> None:
             return
         finally:
             check_button.enable()
-        render_link_status(link_panel, status)
+        render_link_status(link_panel, status, cable_label)
 
     def on_progress(event: ProgressEvent) -> None:
         # Called on the worker thread; the UI timer drains the queue.
@@ -180,10 +231,10 @@ def serdes_page(profile_id: str, condition: str) -> None:
             progress_bar.value = event.fraction
             status_label.text = event.message
             if isinstance(event.partial, EyeDiagram):
-                with previews:
+                with lane_grid(event.partial.lane):
                     ui.image(png_source(render_eye(event.partial))).classes("w-full")
             elif isinstance(event.partial, MarginSweep):
-                with previews:
+                with lane_grid(event.partial.lane):
                     ui.image(png_source(render_margin(event.partial))).classes("w-full")
 
     ui.timer(0.3, drain_events)
@@ -196,7 +247,8 @@ def serdes_page(profile_id: str, condition: str) -> None:
             return
         shared["running"] = True
         shared["result"] = None
-        previews.clear()
+        results.clear()
+        lane_grids.clear()
         progress_bar.value = 0.0
         config = SerdesConfig(**RESOLUTION_PRESETS[resolution.value])
         status_label.text = f"Running full SerDes sequence ({resolution.value.split(' --')[0]})..."
