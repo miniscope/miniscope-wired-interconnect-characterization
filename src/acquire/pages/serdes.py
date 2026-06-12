@@ -16,8 +16,20 @@ from src.acquire.plots import render_eye, render_margin
 from src.acquire.state import STATE
 from src.core.session_schemas import parse_condition_dir
 from src.instruments.registry import use_hardware
+from src.instruments.serdes.driver import SerdesConfig
 from src.instruments.serdes.pico_bridge import list_serial_ports
 from src.instruments.types import EyeDiagram, MarginSweep, ProgressEvent, SerdesResult
+
+# Capture-resolution presets for the full sequence. Wall-clock is dominated by
+# the eye grid (eye_bins -> ~bins^2 points at ~0.1 s each over the serial
+# bridge) and the per-step margin dwell; eye_observations barely moves it, so
+# we leave that at the driver default. Times are rough, for a real run.
+RESOLUTION_PRESETS: dict[str, dict] = {
+    "Full -- 64x64 eye (~25-30 min, full fidelity)": {"eye_bins": 64, "margin_dwell_s": 2.0},
+    "Standard -- 32x32 eye (~8-10 min)": {"eye_bins": 32, "margin_dwell_s": 1.0},
+    "Quick -- 16x16 eye (~2-3 min, preview)": {"eye_bins": 16, "margin_dwell_s": 0.5},
+}
+DEFAULT_RESOLUTION = next(iter(RESOLUTION_PRESETS))  # Full -- preserves saved-data fidelity
 
 
 def _status_chip(ok: bool, ok_text: str, bad_text: str) -> None:
@@ -116,6 +128,11 @@ def serdes_page(profile_id: str, condition: str) -> None:
 
     device = ui.input(label="SerDes device *").props("outlined").classes("w-96")
     notes = ui.input(label="Session notes").props("outlined").classes("w-full")
+    resolution = (
+        ui.select(list(RESOLUTION_PRESETS), value=DEFAULT_RESOLUTION, label="Capture resolution")
+        .props("outlined")
+        .classes("w-96")
+    )
 
     status_label = ui.label("").classes("text-gray-700")
     progress_bar = ui.linear_progress(value=0.0, show_value=False).classes("w-full")
@@ -181,11 +198,17 @@ def serdes_page(profile_id: str, condition: str) -> None:
         shared["result"] = None
         previews.clear()
         progress_bar.value = 0.0
-        status_label.text = "Running full SerDes sequence..."
+        config = SerdesConfig(**RESOLUTION_PRESETS[resolution.value])
+        status_label.text = f"Running full SerDes sequence ({resolution.value.split(' --')[0]})..."
         go_button.disable()
         try:
             result: SerdesResult = await run.io_bound(
-                run_serdes_capture, sim_length_mm, on_progress, STATE.simulate, selected_port()
+                run_serdes_capture,
+                sim_length_mm,
+                on_progress,
+                STATE.simulate,
+                selected_port(),
+                config,
             )
             shared["result"] = result
             status_label.text = "Capture complete -- review previews, then save."

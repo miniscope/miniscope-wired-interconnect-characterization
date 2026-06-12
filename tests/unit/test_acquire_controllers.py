@@ -245,7 +245,7 @@ class TestSessionControllers:
             def connect(self):
                 pass
 
-            def run_full_sequence(self, progress=None):
+            def run_full_sequence(self, config=None, progress=None):
                 return "RESULT"
 
             def close(self):
@@ -306,6 +306,14 @@ class TestSessionControllers:
         assert status["connected"] is True
         assert status["simulated"] is True
         assert "ser" not in status
+
+    def test_serdes_capture_honors_resolution_config(self):
+        """A custom SerdesConfig (resolution preset) flows through to the capture."""
+        from src.instruments.serdes.driver import SerdesConfig
+
+        result = run_serdes_capture(750.0, simulate=True, config=SerdesConfig(eye_bins=8))
+        assert result.eyes
+        assert all(eye.bins == 8 for eye in result.eyes)
 
     def test_vna_capture_and_save(self, test_repo: Path):
         result = run_vna_capture(750.0, simulate=True)

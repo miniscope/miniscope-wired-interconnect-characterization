@@ -23,6 +23,7 @@ from src.core.session_writer import (
 )
 from src.instruments.lcr.driver import ResistanceReading, validate_reading
 from src.instruments.registry import get_serdes_driver, get_vna_driver
+from src.instruments.serdes.driver import SerdesConfig
 from src.instruments.types import ProgressEvent, SerdesResult, VnaSweepResult
 from src.instruments.vna.driver import VnaConfig
 
@@ -103,11 +104,14 @@ def run_serdes_capture(
     progress: Callable[[ProgressEvent], None] | None = None,
     simulate: bool | None = None,
     port: str | None = None,
+    config: SerdesConfig | None = None,
 ) -> SerdesResult:
     """Run the full SerDes characterization sequence (blocking).
 
     `port` selects the Pico bridge serial port for the real driver; it is
     ignored by the simulator. None lets the driver use its own default.
+    `config` sets the capture resolution (eye grid, margin dwell); None uses
+    the driver's full-resolution default.
     """
     kwargs: dict = {"cable_length_mm": cable_length_mm}
     if port:
@@ -115,7 +119,7 @@ def run_serdes_capture(
     driver = get_serdes_driver(simulate=simulate, **kwargs)
     driver.connect()
     try:
-        return driver.run_full_sequence(progress=progress)
+        return driver.run_full_sequence(config=config, progress=progress)
     finally:
         driver.close()
 
