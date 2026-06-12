@@ -120,6 +120,57 @@ def render_link_status(container, status: dict, cable_label: str = "") -> None:
                 ui.label(f"{key}: {value}").classes("text-sm")
 
 
+def _lane_label(lane: SerdesLane) -> str:
+    """Compact lane label, e.g. 'Forward 3 Gbps' / 'Reverse 187.5 Mbps'."""
+    channel = "Forward" if lane.channel is SerdesChannel.FORWARD else "Reverse"
+    return f"{channel} {_rate_text(lane.rate)}"
+
+
+def margin_summary_row(sweep: MarginSweep) -> dict:
+    """One link-margin summary row: deepest clean TX amplitude and where it failed.
+
+    The sweep steps TX amplitude downward and (by default) stops at the first
+    error, so the lowest 'ok' step is the margin floor and the first non-'ok'
+    step is where the link broke.
+    """
+    pts = sweep.points
+    clean = [p.tx_amplitude_mv for p in pts if p.status == "ok"]
+    fail = next((p for p in pts if p.status != "ok"), None)
+    if fail is None:
+        outcome = "clean throughout"
+    elif fail.status == "errors":
+        outcome = f"errors at {fail.tx_amplitude_mv:.0f} mV"
+    elif fail.status == "lost_lock":
+        outcome = f"lost lock at {fail.tx_amplitude_mv:.0f} mV"
+    else:
+        outcome = f"{fail.status} at {fail.tx_amplitude_mv:.0f} mV"
+    return {
+        "lane": _lane_label(sweep.lane),
+        "steps": len(pts),
+        "clean_mv": f"{min(clean):.0f}" if clean else "--",
+        "fail_mv": f"{fail.tx_amplitude_mv:.0f}" if fail else "--",
+        "outcome": outcome,
+    }
+
+
+def render_margin_summary(container, result) -> None:
+    """Render a per-lane link-margin summary table (no-op if there are none)."""
+    container.clear()
+    if not getattr(result, "margins", None):
+        return
+    columns = [
+        {"name": "lane", "label": "Lane", "field": "lane", "align": "left"},
+        {"name": "steps", "label": "Steps", "field": "steps", "align": "right"},
+        {"name": "clean_mv", "label": "Clean to (mV)", "field": "clean_mv", "align": "right"},
+        {"name": "fail_mv", "label": "First error (mV)", "field": "fail_mv", "align": "right"},
+        {"name": "outcome", "label": "Outcome", "field": "outcome", "align": "left"},
+    ]
+    rows = [margin_summary_row(sweep) for sweep in result.margins]
+    with container, ui.card().classes("w-full"):
+        ui.label("Link-margin summary").classes("text-base font-semibold")
+        ui.table(columns=columns, rows=rows).props("flat dense").classes("w-full")
+
+
 @ui.page("/measure/serdes/{profile_id}/{condition}")
 def serdes_page(profile_id: str, condition: str) -> None:
     header(f"SerDes -- {profile_id} @ {condition}")
@@ -166,6 +217,10 @@ def serdes_page(profile_id: str, condition: str) -> None:
             ui.button("Refresh", icon="refresh", on_click=refresh_ports).props("outline")
         port_warning = ui.label("").classes("text-red-600 text-sm")
 
+    # "Check link" readout, pinned near the top so it stays visible while the
+    # capture results stream in below.
+    link_panel = ui.column().classes("w-full")
+
     device = ui.input(label="SerDes device *").props("outlined").classes("w-96")
     notes = ui.input(label="Session notes").props("outlined").classes("w-full")
     resolution = (
@@ -176,6 +231,8 @@ def serdes_page(profile_id: str, condition: str) -> None:
 
     status_label = ui.label("").classes("text-gray-700")
     progress_bar = ui.linear_progress(value=0.0, show_value=False).classes("w-full")
+    # Per-lane link-margin summary table, filled when a run completes.
+    margin_summary = ui.column().classes("w-full")
     # Results are grouped into one clearly-separated section per speed/lane
     # (forward 3G, forward 6G, reverse), created on demand as previews arrive.
     results = ui.column().classes("w-full gap-3")
@@ -249,6 +306,7 @@ def serdes_page(profile_id: str, condition: str) -> None:
         shared["result"] = None
         results.clear()
         lane_grids.clear()
+        margin_summary.clear()
         progress_bar.value = 0.0
         config = SerdesConfig(**RESOLUTION_PRESETS[resolution.value])
         status_label.text = f"Running full SerDes sequence ({resolution.value.split(' --')[0]})..."
@@ -263,7 +321,8 @@ def serdes_page(profile_id: str, condition: str) -> None:
                 config,
             )
             shared["result"] = result
-            status_label.text = "Capture complete -- review previews, then save."
+            render_margin_summary(margin_summary, result)
+            status_label.text = "Capture complete -- review results, then save."
             save_button.enable()
         except Exception as e:
             status_label.text = f"Capture failed: {e}"
@@ -303,9 +362,6 @@ def serdes_page(profile_id: str, condition: str) -> None:
         go_button = ui.button("Go -- run full sequence", icon="play_arrow", on_click=go)
         save_button = ui.button("Save session", icon="save", on_click=save)
         save_button.disable()
-
-    # Persistent readout for "Check link" (lock state, link rate, part numbers).
-    link_panel = ui.column().classes("w-full mt-2")
 
     # Populate the port list and set the initial button-enabled state. Done
     # after the buttons exist so refresh_ports can toggle them.
