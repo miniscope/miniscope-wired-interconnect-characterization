@@ -301,6 +301,53 @@ class TestRealSerdesDemo:
             assert sweep.points  # the sweep produced points
             assert sweep.points[0].errors == 0  # clean at the high-amplitude start
 
+    def test_full_sequence_recovers_from_post_reset_nak(self):
+        """capture_eye() leaves both chips mid-RESET_ALL, so the margin phase's
+        first register access can NAK while they re-lock. The sequence must
+        recover instead of aborting (regression for the real-hardware i2c error
+        seen between the eye and margin steps)."""
+        from src.instruments.serdes import registers as R
+        from src.instruments.serdes.demo_bridge import DemoBridge
+        from src.instruments.serdes.real import RealSerdesDriver
+
+        class FlakyAfterReset:
+            """DemoBridge that NAKs the first serializer read after the first
+            RESET_ALL -- mimics real silicon briefly going unresponsive."""
+
+            def __init__(self) -> None:
+                self._inner = DemoBridge()
+                self._armed = False
+                self._fired = False
+
+            def read(self, dev: int, reg: int, length: int = 1) -> bytes:
+                if self._armed and not self._fired and dev == R.SER_ADDR:
+                    self._armed = False
+                    self._fired = True
+                    raise OSError("simulated post-reset NAK (ERR i2c_5)")
+                return self._inner.read(dev, reg, length)
+
+            def write(self, dev: int, reg: int, data: bytes) -> None:
+                if (
+                    not self._fired
+                    and dev == R.SER_ADDR
+                    and reg == R.REG_CTRL0
+                    and data
+                    and (data[0] & 0x80)  # RESET_ALL
+                ):
+                    self._armed = True
+                self._inner.write(dev, reg, data)
+
+            def close(self) -> None:
+                self._inner.close()
+
+        driver = RealSerdesDriver(transport=FlakyAfterReset(), demo=True)
+        driver.connect()
+        result = driver.run_full_sequence(config=SerdesConfig(eye_bins=8))
+        driver.close()
+
+        assert len(result.eyes) == 3
+        assert len(result.margins) == 3
+
 
 class TestValidateReading:
     def test_valid(self):

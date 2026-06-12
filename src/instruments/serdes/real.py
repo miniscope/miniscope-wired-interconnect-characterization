@@ -377,6 +377,10 @@ class RealSerdesDriver(SerdesDriver):
 
     # ---- Link margin (ported from gmsl2_link_margin Algorithms #1/#2/#3) -----
     def sweep_margin(self, lane: SerdesLane, config: SerdesConfig) -> MarginSweep:
+        # capture_eye() leaves both chips mid-RESET_ALL, so the very first
+        # register access here can NAK while they re-lock. Recover first (this
+        # tolerates and retries transient I2C errors) before touching REG1.
+        self._ensure_clean_state()
         if lane.channel is SerdesChannel.FORWARD:
             self._set_forward_rate(lane.rate)
         self._ensure_clean_state()
