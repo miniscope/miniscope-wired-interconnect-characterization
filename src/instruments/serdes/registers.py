@@ -26,6 +26,10 @@ REG_CNT0 = 0x0022  # decode error counter (read clears)
 RATE_CODE_3G = 0x01
 RATE_CODE_6G = 0x02
 
+# Human-readable decodes for the link-status readout.
+RATE_NAME = {RATE_CODE_3G: "3 Gbps", RATE_CODE_6G: "6 Gbps"}
+PART_BY_DEV_ID = {SER_DEV_ID_EXPECTED: "MAX96717", DES_DEV_ID_EXPECTED: "MAX96716A"}
+
 # ---- Serializer (MAX96717) RLMS registers -----------------------------------
 REG_SER_RLMS3 = 0x1403  # global adapt [7]
 REG_SER_RLMS4 = 0x1404  # EOM enable/disable

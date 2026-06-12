@@ -51,6 +51,10 @@ class DemoBridge:
         self._regs[(DES7, R.REG_DEV_ID)] = R.DES_DEV_ID_EXPECTED
         self._regs[(SER7, R.REG_CTRL3)] = 0x0A
         self._regs[(DES7, R.REG_CTRL3)] = 0x0A
+        # Power-on forward rate (SER TX_RATE[3:2], DES RX_RATE[1:0]) -> 6 Gbps,
+        # so a link-status read before any capture reports a real speed.
+        self._regs[(SER7, R.REG_REG1)] = R.RATE_CODE_6G << 2
+        self._regs[(DES7, R.REG_REG1)] = R.RATE_CODE_6G
 
         # TX amplitudes start high (well above any error onset) so the
         # algorithms' "link clean at start" pre-checks pass.

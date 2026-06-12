@@ -14,7 +14,12 @@ from src.instruments import (
     SerdesRate,
 )
 from src.instruments.lcr.driver import validate_reading
-from src.instruments.registry import HARDWARE_ENV_VAR, get_serdes_driver, get_vna_driver
+from src.instruments.registry import (
+    HARDWARE_ENV_VAR,
+    get_serdes_driver,
+    get_vna_driver,
+    use_hardware,
+)
 from src.instruments.serdes.driver import SerdesConfig
 from src.instruments.serdes.simulator import SimulatedSerdesDriver
 from src.instruments.vna.driver import VnaConfig, write_s2p
@@ -202,9 +207,80 @@ class TestRegistry:
         with pytest.raises(RuntimeError):
             driver.connect()
 
+    def test_use_hardware_precedence(self, monkeypatch):
+        # explicit arg > env var > default(simulator)
+        monkeypatch.delenv(HARDWARE_ENV_VAR, raising=False)
+        assert use_hardware(None) is False  # default
+        assert use_hardware(False) is True  # explicit "not simulated"
+        assert use_hardware(True) is False
+
+        monkeypatch.setenv(HARDWARE_ENV_VAR, "1")
+        assert use_hardware(None) is True  # env opts in
+        assert use_hardware(True) is False  # explicit arg still wins
+
+
+class TestSerialPorts:
+    """list_serial_ports() drives the acquisition app's port picker."""
+
+    def test_maps_and_sorts_by_device(self, monkeypatch):
+        pytest.importorskip("serial")
+        from types import SimpleNamespace
+
+        from serial.tools import list_ports
+
+        from src.instruments.serdes.pico_bridge import SerialPortInfo, list_serial_ports
+
+        fake = [
+            SimpleNamespace(device="COM5", description="USB Serial Device (COM5)"),
+            SimpleNamespace(device="COM3", description="Pico"),
+        ]
+        monkeypatch.setattr(list_ports, "comports", lambda: fake)
+        assert list_serial_ports() == [
+            SerialPortInfo("COM3", "Pico"),
+            SerialPortInfo("COM5", "USB Serial Device (COM5)"),
+        ]
+
+    def test_empty_when_no_ports(self, monkeypatch):
+        pytest.importorskip("serial")
+        from serial.tools import list_ports
+
+        from src.instruments.serdes.pico_bridge import list_serial_ports
+
+        monkeypatch.setattr(list_ports, "comports", lambda: [])
+        assert list_serial_ports() == []
+
+    def test_description_falls_back_to_device(self, monkeypatch):
+        pytest.importorskip("serial")
+        from types import SimpleNamespace
+
+        from serial.tools import list_ports
+
+        from src.instruments.serdes.pico_bridge import list_serial_ports
+
+        monkeypatch.setattr(
+            list_ports, "comports", lambda: [SimpleNamespace(device="COM9", description="")]
+        )
+        assert list_serial_ports()[0].description == "COM9"
+
 
 class TestRealSerdesDemo:
     """The real driver's ported algorithms run end to end against DemoBridge."""
+
+    def test_demo_link_status_decodes_parts_and_rate(self):
+        from src.instruments.serdes.real import RealSerdesDriver
+
+        driver = RealSerdesDriver(demo=True)
+        driver.connect()
+        status = driver.link_status()
+        driver.close()
+
+        assert status["forward_rate"] == "6 Gbps"
+        assert status["ser"]["part"] == "MAX96717"
+        assert status["ser"]["device_id"] == 0xBF
+        assert status["des"]["part"] == "MAX96716A"
+        assert status["des"]["device_id"] == 0xBE
+        assert status["ser"]["locked"] and status["des"]["locked"]
+        assert not status["ser"]["error"] and not status["des"]["error"]
 
     def test_demo_roundtrip(self):
         from src.instruments.serdes.real import RealSerdesDriver
@@ -224,6 +300,53 @@ class TestRealSerdesDemo:
         for sweep in result.margins:
             assert sweep.points  # the sweep produced points
             assert sweep.points[0].errors == 0  # clean at the high-amplitude start
+
+    def test_full_sequence_recovers_from_post_reset_nak(self):
+        """capture_eye() leaves both chips mid-RESET_ALL, so the margin phase's
+        first register access can NAK while they re-lock. The sequence must
+        recover instead of aborting (regression for the real-hardware i2c error
+        seen between the eye and margin steps)."""
+        from src.instruments.serdes import registers as R
+        from src.instruments.serdes.demo_bridge import DemoBridge
+        from src.instruments.serdes.real import RealSerdesDriver
+
+        class FlakyAfterReset:
+            """DemoBridge that NAKs the first serializer read after the first
+            RESET_ALL -- mimics real silicon briefly going unresponsive."""
+
+            def __init__(self) -> None:
+                self._inner = DemoBridge()
+                self._armed = False
+                self._fired = False
+
+            def read(self, dev: int, reg: int, length: int = 1) -> bytes:
+                if self._armed and not self._fired and dev == R.SER_ADDR:
+                    self._armed = False
+                    self._fired = True
+                    raise OSError("simulated post-reset NAK (ERR i2c_5)")
+                return self._inner.read(dev, reg, length)
+
+            def write(self, dev: int, reg: int, data: bytes) -> None:
+                if (
+                    not self._fired
+                    and dev == R.SER_ADDR
+                    and reg == R.REG_CTRL0
+                    and data
+                    and (data[0] & 0x80)  # RESET_ALL
+                ):
+                    self._armed = True
+                self._inner.write(dev, reg, data)
+
+            def close(self) -> None:
+                self._inner.close()
+
+        driver = RealSerdesDriver(transport=FlakyAfterReset(), demo=True)
+        driver.connect()
+        result = driver.run_full_sequence(config=SerdesConfig(eye_bins=8))
+        driver.close()
+
+        assert len(result.eyes) == 3
+        assert len(result.margins) == 3
 
 
 class TestValidateReading:
