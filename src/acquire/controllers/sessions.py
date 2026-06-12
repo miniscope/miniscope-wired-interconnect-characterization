@@ -28,6 +28,7 @@ from src.instruments.vna.driver import VnaConfig
 
 __all__ = [
     "delete_session",
+    "read_serdes_link_status",
     "record_resistance_session",
     "run_serdes_capture",
     "run_vna_capture",
@@ -73,6 +74,28 @@ def record_resistance_session(
     return write_resistance_session(
         repo_root, profile_id, length_mm, parsed, meta, condition=condition_dir
     )
+
+
+def read_serdes_link_status(
+    cable_length_mm: float,
+    simulate: bool | None = None,
+    port: str | None = None,
+) -> dict:
+    """Connect, read the SerDes link status, and disconnect (blocking).
+
+    Returns the driver's status dict (lock state, device part numbers, and
+    forward-link rate for the real driver). `port` selects the Pico bridge
+    serial port; ignored by the simulator.
+    """
+    kwargs: dict = {"cable_length_mm": cable_length_mm}
+    if port:
+        kwargs["port"] = port
+    driver = get_serdes_driver(simulate=simulate, **kwargs)
+    driver.connect()
+    try:
+        return driver.link_status()
+    finally:
+        driver.close()
 
 
 def run_serdes_capture(

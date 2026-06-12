@@ -6,14 +6,68 @@ import threading
 
 from nicegui import run, ui
 
-from src.acquire.controllers.sessions import run_serdes_capture, save_serdes_session
+from src.acquire.controllers.sessions import (
+    read_serdes_link_status,
+    run_serdes_capture,
+    save_serdes_session,
+)
 from src.acquire.pages.components import header, png_source, protocol_panel, require_operator
 from src.acquire.plots import render_eye, render_margin
 from src.acquire.state import STATE
 from src.core.session_schemas import parse_condition_dir
-from src.instruments.registry import get_serdes_driver, use_hardware
+from src.instruments.registry import use_hardware
 from src.instruments.serdes.pico_bridge import list_serial_ports
 from src.instruments.types import EyeDiagram, MarginSweep, ProgressEvent, SerdesResult
+
+
+def _status_chip(ok: bool, ok_text: str, bad_text: str) -> None:
+    ui.badge(ok_text if ok else bad_text).props("color=" + ("green" if ok else "red"))
+
+
+def render_link_status(container, status: dict) -> None:
+    """Render the SerDes link status into a persistent, readable panel.
+
+    Understands the real driver's rich shape (per-device part number + lock
+    flags and the forward-link rate) and falls back to a flat key/value dump
+    for the simulator.
+    """
+    container.clear()
+    ser = status.get("ser")
+    des = status.get("des")
+    with container, ui.card().classes("w-full"):
+        if isinstance(ser, dict) and isinstance(des, dict):
+            clean = bool(
+                ser.get("locked")
+                and des.get("locked")
+                and not ser.get("error")
+                and not des.get("error")
+            )
+            with ui.row().classes("items-center gap-2"):
+                ui.icon("link" if clean else "link_off").classes(
+                    "text-2xl " + ("text-green-600" if clean else "text-red-600")
+                )
+                ui.label("Link locked & clean" if clean else "Link not clean").classes(
+                    "text-lg font-bold"
+                )
+                if status.get("demo"):
+                    ui.badge("DEMO").props("color=orange")
+            ui.label(f"Forward link rate: {status.get('forward_rate', 'unknown')}").classes(
+                "text-sm"
+            )
+            ui.label("Reverse link rate: 187.5 Mbps (fixed)").classes("text-sm text-gray-500")
+            for role, dev in (("Serializer", ser), ("Deserializer", des)):
+                with ui.row().classes("items-center gap-4"):
+                    ui.label(f"{role}: {dev.get('part', '?')}").classes("font-medium w-64")
+                    dev_id = dev.get("device_id")
+                    ui.label(f"ID 0x{dev_id:02X}" if isinstance(dev_id, int) else "ID ?").classes(
+                        "text-sm text-gray-600 w-20"
+                    )
+                    _status_chip(bool(dev.get("locked")), "locked", "unlocked")
+                    _status_chip(not dev.get("error"), "no errors", "errors")
+                    _status_chip(bool(dev.get("cmu")), "CMU locked", "CMU unlocked")
+        else:
+            for key, value in status.items():
+                ui.label(f"{key}: {value}").classes("text-sm")
 
 
 @ui.page("/measure/serdes/{profile_id}/{condition}")
@@ -74,22 +128,27 @@ def serdes_page(profile_id: str, condition: str) -> None:
         """The chosen serial port, or None in simulate mode (driver default)."""
         return port_select.value if hardware else None
 
-    def check_link() -> None:
+    async def check_link() -> None:
         if hardware and not port_select.value:
             ui.notify("Select a serial port first", type="warning")
             return
-        driver = get_serdes_driver(
-            simulate=STATE.simulate, cable_length_mm=sim_length_mm, port=selected_port()
-        )
+        check_button.disable()
+        link_panel.clear()
+        with link_panel:
+            ui.label("Checking link...").classes("text-gray-600")
         try:
-            driver.connect()
-            status = driver.link_status()
+            status = await run.io_bound(
+                read_serdes_link_status, sim_length_mm, STATE.simulate, selected_port()
+            )
         except Exception as e:
-            ui.notify(f"Link check failed: {e}", type="negative")
+            link_panel.clear()
+            with link_panel:
+                ui.label(f"Link check failed: {e}").classes("text-red-600")
+            ui.notify(f"Link check failed: {e}", type="negative", multi_line=True)
             return
         finally:
-            driver.close()
-        ui.notify(f"Link status: {status}", type="info")
+            check_button.enable()
+        render_link_status(link_panel, status)
 
     def on_progress(event: ProgressEvent) -> None:
         # Called on the worker thread; the UI timer drains the queue.
@@ -169,6 +228,9 @@ def serdes_page(profile_id: str, condition: str) -> None:
         go_button = ui.button("Go -- run full sequence", icon="play_arrow", on_click=go)
         save_button = ui.button("Save session", icon="save", on_click=save)
         save_button.disable()
+
+    # Persistent readout for "Check link" (lock state, link rate, part numbers).
+    link_panel = ui.column().classes("w-full mt-2")
 
     # Populate the port list and set the initial button-enabled state. Done
     # after the buttons exist so refresh_ports can toggle them.

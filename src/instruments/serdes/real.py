@@ -126,13 +126,24 @@ class RealSerdesDriver(SerdesDriver):
             raise RuntimeError("Link did not reach a clean, locked state")
 
     def link_status(self) -> dict[str, object]:
-        def decode(dev: int) -> dict[str, bool]:
-            v = self._bus.read(dev, R.REG_CTRL3)
-            return {"locked": bool(v & 0x08), "error": bool(v & 0x04), "cmu": bool(v & 0x02)}
+        def decode(dev: int) -> dict[str, object]:
+            ctrl3 = self._bus.read(dev, R.REG_CTRL3)
+            dev_id = self._bus.read(dev, R.REG_DEV_ID)
+            return {
+                "part": R.PART_BY_DEV_ID.get(dev_id, f"unknown (0x{dev_id:02X})"),
+                "device_id": dev_id,
+                "locked": bool(ctrl3 & 0x08),
+                "error": bool(ctrl3 & 0x04),
+                "cmu": bool(ctrl3 & 0x02),
+            }
 
+        # Forward-link rate: the deserializer's RX_RATE[1:0] in REG1 (the SER
+        # TX_RATE[3:2] mirrors it). The reverse link is always 187.5 Mbps.
+        rate_code = self._bus.read(R.DES_ADDR, R.REG_REG1) & 0x03
         return {
             "connected": True,
             "demo": self._demo,
+            "forward_rate": R.RATE_NAME.get(rate_code, f"unknown (code 0x{rate_code:02X})"),
             "ser": decode(R.SER_ADDR),
             "des": decode(R.DES_ADDR),
         }

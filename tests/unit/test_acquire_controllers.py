@@ -20,6 +20,7 @@ from src.acquire.controllers.profiles import (
 )
 from src.acquire.controllers.protocols import load_protocol_markdown
 from src.acquire.controllers.sessions import (
+    read_serdes_link_status,
     record_resistance_session,
     run_serdes_capture,
     run_vna_capture,
@@ -268,6 +269,43 @@ class TestSessionControllers:
         # No port (e.g. simulate mode) -> factory is left to its own default.
         run_serdes_capture(750.0, simulate=True)
         assert "port" not in seen
+
+    def test_read_link_status_forwards_port(self, monkeypatch):
+        """The link-status controller forwards the chosen port and returns the dict."""
+        import src.acquire.controllers.sessions as sessions
+
+        class _Driver:
+            def connect(self):
+                pass
+
+            def link_status(self):
+                return {"connected": True, "forward_rate": "6 Gbps"}
+
+            def close(self):
+                pass
+
+        seen: dict = {}
+
+        def fake_get_serdes_driver(simulate=None, **kwargs):
+            seen.clear()
+            seen["simulate"] = simulate
+            seen.update(kwargs)
+            return _Driver()
+
+        monkeypatch.setattr(sessions, "get_serdes_driver", fake_get_serdes_driver)
+
+        status = read_serdes_link_status(100.0, simulate=False, port="COM3")
+        assert status["forward_rate"] == "6 Gbps"
+        assert seen["port"] == "COM3"
+        assert seen["cable_length_mm"] == 100.0
+        assert seen["simulate"] is False
+
+    def test_serdes_simulator_link_status(self):
+        """Simulate mode returns a flat status dict (no GMSL2 part numbers)."""
+        status = read_serdes_link_status(100.0, simulate=True)
+        assert status["connected"] is True
+        assert status["simulated"] is True
+        assert "ser" not in status
 
     def test_vna_capture_and_save(self, test_repo: Path):
         result = run_vna_capture(750.0, simulate=True)

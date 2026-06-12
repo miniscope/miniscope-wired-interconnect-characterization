@@ -266,6 +266,22 @@ class TestSerialPorts:
 class TestRealSerdesDemo:
     """The real driver's ported algorithms run end to end against DemoBridge."""
 
+    def test_demo_link_status_decodes_parts_and_rate(self):
+        from src.instruments.serdes.real import RealSerdesDriver
+
+        driver = RealSerdesDriver(demo=True)
+        driver.connect()
+        status = driver.link_status()
+        driver.close()
+
+        assert status["forward_rate"] == "6 Gbps"
+        assert status["ser"]["part"] == "MAX96717"
+        assert status["ser"]["device_id"] == 0xBF
+        assert status["des"]["part"] == "MAX96716A"
+        assert status["des"]["device_id"] == 0xBE
+        assert status["ser"]["locked"] and status["des"]["locked"]
+        assert not status["ser"]["error"] and not status["des"]["error"]
+
     def test_demo_roundtrip(self):
         from src.instruments.serdes.real import RealSerdesDriver
 
