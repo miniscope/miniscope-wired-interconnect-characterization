@@ -79,9 +79,17 @@ def run_serdes_capture(
     cable_length_mm: float,
     progress: Callable[[ProgressEvent], None] | None = None,
     simulate: bool | None = None,
+    port: str | None = None,
 ) -> SerdesResult:
-    """Run the full SerDes characterization sequence (blocking)."""
-    driver = get_serdes_driver(simulate=simulate, cable_length_mm=cable_length_mm)
+    """Run the full SerDes characterization sequence (blocking).
+
+    `port` selects the Pico bridge serial port for the real driver; it is
+    ignored by the simulator. None lets the driver use its own default.
+    """
+    kwargs: dict = {"cable_length_mm": cable_length_mm}
+    if port:
+        kwargs["port"] = port
+    driver = get_serdes_driver(simulate=simulate, **kwargs)
     driver.connect()
     try:
         return driver.run_full_sequence(progress=progress)

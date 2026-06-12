@@ -11,7 +11,8 @@ from src.acquire.pages.components import header, png_source, protocol_panel, req
 from src.acquire.plots import render_eye, render_margin
 from src.acquire.state import STATE
 from src.core.session_schemas import parse_condition_dir
-from src.instruments.registry import get_serdes_driver
+from src.instruments.registry import get_serdes_driver, use_hardware
+from src.instruments.serdes.pico_bridge import list_serial_ports
 from src.instruments.types import EyeDiagram, MarginSweep, ProgressEvent, SerdesResult
 
 
@@ -23,6 +24,42 @@ def serdes_page(profile_id: str, condition: str) -> None:
     sim_length_mm = parse_condition_dir(condition) or 100.0
     protocol_panel("serdes")
 
+    # Real captures talk to the Pico bridge over a serial port whose name is
+    # platform-specific (COMx on Windows, /dev/tty* on Linux), so we can't
+    # hard-code it. In hardware mode the operator picks from the detected
+    # ports; with none present we warn and disable the capture buttons rather
+    # than letting a capture fail deep in the driver. The simulator needs no
+    # port, so this whole section is skipped in simulate mode.
+    hardware = use_hardware(STATE.simulate)
+    port_select = None
+    port_warning = None
+
+    def refresh_ports() -> None:
+        ports = list_serial_ports()
+        options = {p.device: f"{p.device} -- {p.description}" for p in ports}
+        port_select.set_options(options)
+        if ports:
+            if port_select.value not in options:
+                port_select.set_value(ports[0].device)
+            port_warning.text = ""
+            check_button.enable()
+            go_button.enable()
+        else:
+            port_select.set_value(None)
+            port_warning.text = (
+                "No serial ports detected. Connect the Pico bridge, then click Refresh."
+            )
+            check_button.disable()
+            go_button.disable()
+
+    if hardware:
+        with ui.row().classes("items-center gap-2 w-full"):
+            port_select = (
+                ui.select({}, label="Pico serial port *").props("outlined").classes("w-96")
+            )
+            ui.button("Refresh", icon="refresh", on_click=refresh_ports).props("outline")
+        port_warning = ui.label("").classes("text-red-600 text-sm")
+
     device = ui.input(label="SerDes device *").props("outlined").classes("w-96")
     notes = ui.input(label="Session notes").props("outlined").classes("w-full")
 
@@ -33,8 +70,17 @@ def serdes_page(profile_id: str, condition: str) -> None:
     # Shared between the worker thread and the UI timer
     shared: dict = {"events": [], "result": None, "running": False, "lock": threading.Lock()}
 
+    def selected_port() -> str | None:
+        """The chosen serial port, or None in simulate mode (driver default)."""
+        return port_select.value if hardware else None
+
     def check_link() -> None:
-        driver = get_serdes_driver(simulate=STATE.simulate, cable_length_mm=sim_length_mm)
+        if hardware and not port_select.value:
+            ui.notify("Select a serial port first", type="warning")
+            return
+        driver = get_serdes_driver(
+            simulate=STATE.simulate, cable_length_mm=sim_length_mm, port=selected_port()
+        )
         try:
             driver.connect()
             status = driver.link_status()
@@ -69,6 +115,9 @@ def serdes_page(profile_id: str, condition: str) -> None:
     async def go() -> None:
         if shared["running"]:
             return
+        if hardware and not port_select.value:
+            ui.notify("Select a serial port first", type="warning")
+            return
         shared["running"] = True
         shared["result"] = None
         previews.clear()
@@ -77,7 +126,7 @@ def serdes_page(profile_id: str, condition: str) -> None:
         go_button.disable()
         try:
             result: SerdesResult = await run.io_bound(
-                run_serdes_capture, sim_length_mm, on_progress, STATE.simulate
+                run_serdes_capture, sim_length_mm, on_progress, STATE.simulate, selected_port()
             )
             shared["result"] = result
             status_label.text = "Capture complete -- review previews, then save."
@@ -116,7 +165,12 @@ def serdes_page(profile_id: str, condition: str) -> None:
         ui.navigate.to(f"/profile/{profile_id}")
 
     with ui.row().classes("gap-2 mt-4"):
-        ui.button("Check link", icon="cable", on_click=check_link).props("outline")
+        check_button = ui.button("Check link", icon="cable", on_click=check_link).props("outline")
         go_button = ui.button("Go -- run full sequence", icon="play_arrow", on_click=go)
         save_button = ui.button("Save session", icon="save", on_click=save)
         save_button.disable()
+
+    # Populate the port list and set the initial button-enabled state. Done
+    # after the buttons exist so refresh_ports can toggle them.
+    if hardware:
+        refresh_ports()

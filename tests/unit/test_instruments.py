@@ -14,7 +14,12 @@ from src.instruments import (
     SerdesRate,
 )
 from src.instruments.lcr.driver import validate_reading
-from src.instruments.registry import HARDWARE_ENV_VAR, get_serdes_driver, get_vna_driver
+from src.instruments.registry import (
+    HARDWARE_ENV_VAR,
+    get_serdes_driver,
+    get_vna_driver,
+    use_hardware,
+)
 from src.instruments.serdes.driver import SerdesConfig
 from src.instruments.serdes.simulator import SimulatedSerdesDriver
 from src.instruments.vna.driver import VnaConfig, write_s2p
@@ -201,6 +206,61 @@ class TestRegistry:
         driver = RealSerdesDriver(transport=NullI2C())
         with pytest.raises(RuntimeError):
             driver.connect()
+
+    def test_use_hardware_precedence(self, monkeypatch):
+        # explicit arg > env var > default(simulator)
+        monkeypatch.delenv(HARDWARE_ENV_VAR, raising=False)
+        assert use_hardware(None) is False  # default
+        assert use_hardware(False) is True  # explicit "not simulated"
+        assert use_hardware(True) is False
+
+        monkeypatch.setenv(HARDWARE_ENV_VAR, "1")
+        assert use_hardware(None) is True  # env opts in
+        assert use_hardware(True) is False  # explicit arg still wins
+
+
+class TestSerialPorts:
+    """list_serial_ports() drives the acquisition app's port picker."""
+
+    def test_maps_and_sorts_by_device(self, monkeypatch):
+        pytest.importorskip("serial")
+        from types import SimpleNamespace
+
+        from serial.tools import list_ports
+
+        from src.instruments.serdes.pico_bridge import SerialPortInfo, list_serial_ports
+
+        fake = [
+            SimpleNamespace(device="COM5", description="USB Serial Device (COM5)"),
+            SimpleNamespace(device="COM3", description="Pico"),
+        ]
+        monkeypatch.setattr(list_ports, "comports", lambda: fake)
+        assert list_serial_ports() == [
+            SerialPortInfo("COM3", "Pico"),
+            SerialPortInfo("COM5", "USB Serial Device (COM5)"),
+        ]
+
+    def test_empty_when_no_ports(self, monkeypatch):
+        pytest.importorskip("serial")
+        from serial.tools import list_ports
+
+        from src.instruments.serdes.pico_bridge import list_serial_ports
+
+        monkeypatch.setattr(list_ports, "comports", lambda: [])
+        assert list_serial_ports() == []
+
+    def test_description_falls_back_to_device(self, monkeypatch):
+        pytest.importorskip("serial")
+        from types import SimpleNamespace
+
+        from serial.tools import list_ports
+
+        from src.instruments.serdes.pico_bridge import list_serial_ports
+
+        monkeypatch.setattr(
+            list_ports, "comports", lambda: [SimpleNamespace(device="COM9", description="")]
+        )
+        assert list_serial_ports()[0].description == "COM9"
 
 
 class TestRealSerdesDemo:

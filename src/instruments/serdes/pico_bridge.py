@@ -16,6 +16,34 @@ analysis install never needs it.
 from __future__ import annotations
 
 import time
+from typing import NamedTuple
+
+
+class SerialPortInfo(NamedTuple):
+    """A serial port the OS reports, for the acquisition app's port picker."""
+
+    device: str  # what you pass to PicoBridgeI2C(port=...) -- e.g. 'COM5', '/dev/pico'
+    description: str  # human label from the OS -- e.g. 'USB Serial Device (COM5)'
+
+
+def list_serial_ports() -> list[SerialPortInfo]:
+    """
+    Enumerate the serial ports currently visible to the OS.
+
+    The Pico bridge enumerates as a COM port on Windows and a /dev/tty* (or the
+    udev alias /dev/pico) on Linux, so the device name is platform-specific and
+    can't be hard-coded -- the GUI lets the operator pick from this list. Returns
+    an empty list when pyserial is missing (analysis-only installs) or when no
+    ports are present, so callers treat "no hardware" as a normal, handled state.
+    """
+    try:
+        from serial.tools import list_ports  # noqa: PLC0415  (lazy: hardware-only dep)
+    except ImportError:  # pragma: no cover - acquire installs ship pyserial
+        return []
+    return [
+        SerialPortInfo(device=p.device, description=p.description or p.device)
+        for p in sorted(list_ports.comports(), key=lambda p: p.device)
+    ]
 
 
 class PicoBridgeI2C:

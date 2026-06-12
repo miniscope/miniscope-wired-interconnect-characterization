@@ -22,7 +22,12 @@ from src.instruments.vna.simulator import SimulatedVnaDriver
 HARDWARE_ENV_VAR = "MINISCOPE_ACQUIRE_HARDWARE"
 
 
-def _use_hardware(simulate: bool | None) -> bool:
+def use_hardware(simulate: bool | None) -> bool:
+    """Whether the factories below will return real-hardware drivers.
+
+    Exposed so the acquisition UI can decide whether to surface hardware-only
+    controls (e.g. the SerDes serial-port picker) without re-deriving the rule.
+    """
     if simulate is not None:
         return not simulate
     return os.environ.get(HARDWARE_ENV_VAR, "") == "1"
@@ -30,7 +35,7 @@ def _use_hardware(simulate: bool | None) -> bool:
 
 def get_serdes_driver(simulate: bool | None = None, **kwargs) -> SerdesDriver:
     """Return a SerDes driver. kwargs are forwarded to the chosen driver."""
-    if _use_hardware(simulate):
+    if use_hardware(simulate):
         from src.instruments.serdes.real import RealSerdesDriver
 
         return RealSerdesDriver(**kwargs)
@@ -39,7 +44,7 @@ def get_serdes_driver(simulate: bool | None = None, **kwargs) -> SerdesDriver:
 
 def get_vna_driver(simulate: bool | None = None, **kwargs) -> VnaDriver:
     """Return a VNA driver. kwargs are forwarded to the chosen driver."""
-    if _use_hardware(simulate):
+    if use_hardware(simulate):
         from src.instruments.vna.real import RealPicoVnaDriver
 
         return RealPicoVnaDriver(**kwargs)

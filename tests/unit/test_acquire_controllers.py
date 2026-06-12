@@ -236,6 +236,39 @@ class TestSessionControllers:
         assert ref.measurement_type == "serdes"
         assert (ref.path / "session_manifest.csv").exists()
 
+    def test_serdes_capture_forwards_port(self, monkeypatch):
+        """A chosen serial port reaches the driver factory; None is omitted."""
+        import src.acquire.controllers.sessions as sessions
+
+        class _RecordingDriver:
+            def connect(self):
+                pass
+
+            def run_full_sequence(self, progress=None):
+                return "RESULT"
+
+            def close(self):
+                pass
+
+        seen: dict = {}
+
+        def fake_get_serdes_driver(simulate=None, **kwargs):
+            seen.clear()
+            seen["simulate"] = simulate
+            seen.update(kwargs)
+            return _RecordingDriver()
+
+        monkeypatch.setattr(sessions, "get_serdes_driver", fake_get_serdes_driver)
+
+        assert run_serdes_capture(750.0, port="COM5", simulate=False) == "RESULT"
+        assert seen["port"] == "COM5"
+        assert seen["cable_length_mm"] == 750.0
+        assert seen["simulate"] is False
+
+        # No port (e.g. simulate mode) -> factory is left to its own default.
+        run_serdes_capture(750.0, simulate=True)
+        assert "port" not in seen
+
     def test_vna_capture_and_save(self, test_repo: Path):
         result = run_vna_capture(750.0, simulate=True)
         ref = save_vna_session(
