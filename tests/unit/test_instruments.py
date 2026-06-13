@@ -101,6 +101,29 @@ class TestSimulatedSerdesDriver:
         # Live-preview partials attached
         assert all(e.partial is not None for e in events)
 
+    def test_margin_iterations_repeat_only_the_sweep(self, driver):
+        """N margin iterations -> 1 eye + N margins per lane; progress stays sane."""
+        events: list[ProgressEvent] = []
+        result = driver.run_full_sequence(
+            config=SerdesConfig(eye_bins=16, margin_iterations=3), progress=events.append
+        )
+
+        # Eye captured once per lane, margin swept three times per lane.
+        assert len(result.eyes) == 3
+        assert len(result.margins) == 9
+        for lane in DEFAULT_LANES:
+            assert sum(m.lane == lane for m in result.margins) == 3
+
+        # 3 lanes x (1 eye + 3 margins) = 12 events, monotone, ending at 1.0.
+        assert len(events) == 12
+        fractions = [e.fraction for e in events]
+        assert fractions == sorted(fractions)
+        assert fractions[-1] == pytest.approx(1.0)
+        # Repeated sweeps carry a per-run stage tag for the live preview.
+        margin_stages = [e.stage for e in events if e.stage.startswith("margin:")]
+        assert f"margin:{FORWARD_6G.lane_id}#1" in margin_stages
+        assert f"margin:{FORWARD_6G.lane_id}#3" in margin_stages
+
 
 class TestSimulatedVnaDriver:
     def test_sweep_shape(self):
