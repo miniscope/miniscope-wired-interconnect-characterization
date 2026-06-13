@@ -84,7 +84,12 @@ class SerdesDriver(ABC):
         progress: ProgressCallback | None = None,
     ) -> SerdesResult:
         """
-        Capture eye + margin for every configured lane.
+        Capture one eye + ``config.margin_iterations`` margin sweeps per lane.
+
+        The eye grid dominates wall-clock, so it is captured once; only the
+        link-margin sweep repeats, letting callers average out run-to-run noise.
+        Each repeat is appended to ``result.margins`` (so a lane may have several
+        sweeps); downstream averaging lives in the acquisition layer.
 
         Emits a ProgressEvent after each sub-step; the event's `partial`
         carries the just-completed EyeDiagram/MarginSweep for live preview.
@@ -92,8 +97,9 @@ class SerdesDriver(ABC):
         if config is None:
             config = SerdesConfig()
 
+        iterations = max(1, config.margin_iterations)
         result = SerdesResult()
-        total_steps = len(config.lanes) * 2  # eye + margin per lane
+        total_steps = len(config.lanes) * (1 + iterations)  # 1 eye + N margins per lane
         step = 0
 
         def emit(message: str, stage: str, partial: object | None) -> None:
@@ -117,13 +123,17 @@ class SerdesDriver(ABC):
                 eye,
             )
 
-            margin = self.sweep_margin(lane, config)
-            result.margins.append(margin)
-            step += 1
-            emit(
-                f"Completed link-margin sweep: {lane.channel.value} @ {lane.rate.label}",
-                f"margin:{lane.lane_id}",
-                margin,
-            )
+            for i in range(iterations):
+                margin = self.sweep_margin(lane, config)
+                result.margins.append(margin)
+                step += 1
+                run_label = f" (run {i + 1}/{iterations})" if iterations > 1 else ""
+                stage = f"margin:{lane.lane_id}" + (f"#{i + 1}" if iterations > 1 else "")
+                emit(
+                    f"Completed link-margin sweep{run_label}: "
+                    f"{lane.channel.value} @ {lane.rate.label}",
+                    stage,
+                    margin,
+                )
 
         return result

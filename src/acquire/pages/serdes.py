@@ -18,7 +18,20 @@ from src.core.session_schemas import parse_condition_dir
 from src.instruments.registry import use_hardware
 from src.instruments.serdes.driver import SerdesConfig
 from src.instruments.serdes.pico_bridge import list_serial_ports
-from src.instruments.types import EyeDiagram, MarginSweep, ProgressEvent, SerdesResult
+from src.instruments.types import (
+    EyeDiagram,
+    MarginPoint,
+    MarginSweep,
+    ProgressEvent,
+    SerdesChannel,
+    SerdesLane,
+    SerdesRate,
+    SerdesResult,
+)
+
+# Error-count ceiling for a lost-lock / unreachable margin step. Matches the
+# clamp render_margin() uses so averaged curves stay on the same scale.
+_ERROR_CEILING = 256
 
 # Capture-resolution presets for the full sequence. Wall-clock is dominated by
 # the eye grid (eye_bins -> ~bins^2 points at ~0.1 s each over the serial
@@ -36,12 +49,40 @@ def _status_chip(ok: bool, ok_text: str, bad_text: str) -> None:
     ui.badge(ok_text if ok else bad_text).props("color=" + ("green" if ok else "red"))
 
 
-def render_link_status(container, status: dict) -> None:
+def _rate_text(rate: SerdesRate) -> str:
+    """Human-readable link rate, e.g. '3 Gbps' / '187.5 Mbps'."""
+    gbps = rate.gbps
+    return f"{gbps * 1000:.1f} Mbps" if gbps < 1 else f"{gbps:.0f} Gbps"
+
+
+def lane_section_title(lane: SerdesLane) -> str:
+    """Section heading for a lane's results, e.g. 'Forward link -- 6 Gbps'."""
+    channel = "Forward" if lane.channel is SerdesChannel.FORWARD else "Reverse"
+    return f"{channel} link -- {_rate_text(lane.rate)}"
+
+
+def _device_box(role: str, dev: dict) -> None:
+    """One chip in the link diagram: role, part number, ID, lock chips."""
+    with ui.card().classes("items-center p-3 min-w-48"):
+        ui.label(role).classes("text-xs uppercase text-gray-500")
+        ui.label(str(dev.get("part", "?"))).classes("text-lg font-bold")
+        dev_id = dev.get("device_id")
+        ui.label(f"ID 0x{dev_id:02X}" if isinstance(dev_id, int) else "ID ?").classes(
+            "text-xs text-gray-600"
+        )
+        with ui.row().classes("gap-1 mt-1"):
+            _status_chip(bool(dev.get("locked")), "locked", "unlocked")
+            _status_chip(not dev.get("error"), "no errors", "errors")
+            _status_chip(bool(dev.get("cmu")), "CMU", "no CMU")
+
+
+def render_link_status(container, status: dict, cable_label: str = "") -> None:
     """Render the SerDes link status into a persistent, readable panel.
 
-    Understands the real driver's rich shape (per-device part number + lock
-    flags and the forward-link rate) and falls back to a flat key/value dump
-    for the simulator.
+    For the real driver, draws a Serializer -- cable -- Deserializer diagram
+    with each chip's part number and lock state, the cable length in the
+    middle, and arrows marking the forward (Ser->Des) and reverse (Des->Ser)
+    channel directions. Falls back to a flat key/value dump for the simulator.
     """
     container.clear()
     ser = status.get("ser")
@@ -63,23 +104,210 @@ def render_link_status(container, status: dict) -> None:
                 )
                 if status.get("demo"):
                     ui.badge("DEMO").props("color=orange")
-            ui.label(f"Forward link rate: {status.get('forward_rate', 'unknown')}").classes(
-                "text-sm"
-            )
-            ui.label("Reverse link rate: 187.5 Mbps (fixed)").classes("text-sm text-gray-500")
-            for role, dev in (("Serializer", ser), ("Deserializer", des)):
-                with ui.row().classes("items-center gap-4"):
-                    ui.label(f"{role}: {dev.get('part', '?')}").classes("font-medium w-64")
-                    dev_id = dev.get("device_id")
-                    ui.label(f"ID 0x{dev_id:02X}" if isinstance(dev_id, int) else "ID ?").classes(
-                        "text-sm text-gray-600 w-20"
+            # Serializer --cable--> Deserializer, with channel-direction arrows.
+            fwd_rate = status.get("forward_rate", "unknown")
+            with ui.row().classes("items-center gap-3 w-full mt-1"):
+                _device_box("Serializer", ser)
+                with ui.column().classes("items-center grow gap-0"):
+                    with ui.row().classes("items-center gap-1 text-blue-700"):
+                        ui.label(f"Forward {fwd_rate}").classes("text-xs font-medium")
+                        ui.icon("arrow_forward")
+                    ui.separator().classes("w-full")
+                    ui.label(f"cable: {cable_label}" if cable_label else "cable").classes(
+                        "text-xs text-gray-600"
                     )
-                    _status_chip(bool(dev.get("locked")), "locked", "unlocked")
-                    _status_chip(not dev.get("error"), "no errors", "errors")
-                    _status_chip(bool(dev.get("cmu")), "CMU locked", "CMU unlocked")
+                    with ui.row().classes("items-center gap-1 text-amber-700"):
+                        ui.icon("arrow_back")
+                        ui.label("Reverse 187.5 Mbps").classes("text-xs font-medium")
+                _device_box("Deserializer", des)
         else:
             for key, value in status.items():
                 ui.label(f"{key}: {value}").classes("text-sm")
+
+
+def _lane_label(lane: SerdesLane) -> str:
+    """Compact lane label, e.g. 'Forward 3 Gbps' / 'Reverse 187.5 Mbps'."""
+    channel = "Forward" if lane.channel is SerdesChannel.FORWARD else "Reverse"
+    return f"{channel} {_rate_text(lane.rate)}"
+
+
+def group_margins_by_lane(
+    margins: list[MarginSweep],
+) -> list[tuple[SerdesLane, list[MarginSweep]]]:
+    """Group margin sweeps by lane, preserving first-seen lane order.
+
+    A full sequence with N margin iterations emits the sweeps lane-major
+    (lane0 x N, lane1 x N, ...), so this keeps each lane's runs together in the
+    order they were captured.
+    """
+    grouped: dict[str, list[MarginSweep]] = {}
+    order: list[SerdesLane] = []
+    for sweep in margins:
+        if sweep.lane.lane_id not in grouped:
+            grouped[sweep.lane.lane_id] = []
+            order.append(sweep.lane)
+        grouped[sweep.lane.lane_id].append(sweep)
+    return [(lane, grouped[lane.lane_id]) for lane in order]
+
+
+def average_margin_sweeps(sweeps: list[MarginSweep]) -> MarginSweep:
+    """Average several link-margin sweeps of one lane into one representative sweep.
+
+    Every sweep walks the same deterministic TX-amplitude grid (shared
+    start/step/stop), but a sweep that errors stops at its first failing step
+    (``margin_continue_on_error`` off), so runs can be different lengths. We
+    average the error count at each amplitude over ALL runs: a run that stopped
+    *above* a given amplitude already failed at an easier step and would only be
+    worse at the harder, lower amplitude, so it counts as a failure (errors at
+    the ``_ERROR_CEILING``) there. Lost-lock steps (errors == -1) use the same
+    ceiling. The averaged status is "ok" only where the mean rounds to zero.
+
+    Single-run (or empty) inputs are returned as-is.
+    """
+    populated = [s for s in sweeps if s.points]
+    if len(populated) <= 1:
+        # Nothing to average: hand back the single populated sweep, or (if every
+        # run came back empty) the first original sweep to preserve its lane.
+        return populated[0] if populated else sweeps[0]
+
+    lane = populated[0].lane
+    by_amp = [{p.tx_amplitude_mv: p for p in s.points} for s in populated]
+    reached_floor = [min(d) for d in by_amp]  # lowest amplitude each run measured
+    amps = sorted({a for d in by_amp for a in d}, reverse=True)  # union, high -> low
+
+    points: list[MarginPoint] = []
+    for amp in amps:
+        errs: list[float] = []
+        sample: MarginPoint | None = None
+        for d, floor in zip(by_amp, reached_floor, strict=True):
+            point = d.get(amp)
+            if point is not None:
+                sample = sample or point
+                errs.append(float(_ERROR_CEILING if point.errors < 0 else point.errors))
+            elif amp < floor:
+                # Run stopped above this amplitude -> treat the harder step as failed.
+                errs.append(float(_ERROR_CEILING))
+        avg_errors = round(sum(errs) / len(errs)) if errs else 0
+        status = "ok" if avg_errors == 0 else "errors"
+        points.append(
+            MarginPoint(
+                tx_amplitude_mv=amp,
+                code=sample.code if sample else 0,
+                rep=sample.rep if sample else 0,
+                locked=avg_errors < _ERROR_CEILING,
+                errors=avg_errors,
+                status=status,
+            )
+        )
+    return MarginSweep(lane=lane, points=points)
+
+
+def margin_summary_row(sweep: MarginSweep) -> dict:
+    """One link-margin summary row: deepest clean TX amplitude and where it failed.
+
+    The sweep steps TX amplitude downward and (by default) stops at the first
+    error, so the lowest 'ok' step is the margin floor and the first non-'ok'
+    step is where the link broke.
+    """
+    pts = sweep.points
+    clean = [p.tx_amplitude_mv for p in pts if p.status == "ok"]
+    fail = next((p for p in pts if p.status != "ok"), None)
+    if fail is None:
+        outcome = "clean throughout"
+    elif fail.status == "errors":
+        outcome = f"errors at {fail.tx_amplitude_mv:.0f} mV"
+    elif fail.status == "lost_lock":
+        outcome = f"lost lock at {fail.tx_amplitude_mv:.0f} mV"
+    else:
+        outcome = f"{fail.status} at {fail.tx_amplitude_mv:.0f} mV"
+    return {
+        "lane": _lane_label(sweep.lane),
+        "steps": len(pts),
+        "clean_mv": f"{min(clean):.0f}" if clean else "--",
+        "fail_mv": f"{fail.tx_amplitude_mv:.0f}" if fail else "--",
+        "outcome": outcome,
+    }
+
+
+def margin_iteration_rows(margins: list[MarginSweep]) -> list[dict]:
+    """One summary row per (lane, iteration), labelled with the iteration number."""
+    rows: list[dict] = []
+    for _lane, sweeps in group_margins_by_lane(margins):
+        for i, sweep in enumerate(sweeps, start=1):
+            rows.append({**margin_summary_row(sweep), "iteration": str(i)})
+    return rows
+
+
+def margin_average_rows(margins: list[MarginSweep]) -> list[dict]:
+    """One averaged summary row per lane (the mean across that lane's iterations)."""
+    return [
+        margin_summary_row(average_margin_sweeps(sweeps))
+        for _lane, sweeps in group_margins_by_lane(margins)
+    ]
+
+
+def _summary_columns(*, iteration: bool) -> list[dict]:
+    columns = [{"name": "lane", "label": "Lane", "field": "lane", "align": "left"}]
+    if iteration:
+        columns.append(
+            {"name": "iteration", "label": "Iteration", "field": "iteration", "align": "left"}
+        )
+    columns += [
+        {"name": "steps", "label": "Steps", "field": "steps", "align": "right"},
+        {"name": "clean_mv", "label": "Clean to (mV)", "field": "clean_mv", "align": "right"},
+        {"name": "fail_mv", "label": "First error (mV)", "field": "fail_mv", "align": "right"},
+        {"name": "outcome", "label": "Outcome", "field": "outcome", "align": "left"},
+    ]
+    return columns
+
+
+def _summary_table(title: str, rows: list[dict], *, iteration: bool) -> None:
+    with ui.card().classes("w-full"):
+        ui.label(title).classes("text-base font-semibold")
+        ui.table(columns=_summary_columns(iteration=iteration), rows=rows).props(
+            "flat dense"
+        ).classes("w-full")
+
+
+def render_margin_summary(container, result) -> None:
+    """Render the link-margin summary tables (no-op if there are none).
+
+    When the sweep was repeated, the per-iteration rows and the per-lane
+    averages are shown in two separate tables; a single run collapses to one
+    table with one row per lane.
+    """
+    container.clear()
+    margins = getattr(result, "margins", None)
+    if not margins:
+        return
+    grouped = group_margins_by_lane(margins)
+    multi_run = any(len(sweeps) > 1 for _, sweeps in grouped)
+    with container:
+        if multi_run:
+            _summary_table(
+                "Link-margin -- each iteration", margin_iteration_rows(margins), iteration=True
+            )
+            _summary_table(
+                "Link-margin -- average per lane", margin_average_rows(margins), iteration=False
+            )
+        else:
+            rows = [margin_summary_row(sweeps[0]) for _lane, sweeps in grouped]
+            _summary_table("Link-margin summary", rows, iteration=False)
+
+
+# Margin-step statuses that mean the link dropped lock outright (as opposed to
+# the normal "errors" floor). After these the GMSL2 pair can stay stuck until
+# it is power-cycled, so the GUI flags them and blocks the save.
+LOCK_LOSS_STATUSES = frozenset({"lost_lock", "ser_unreachable"})
+
+
+def lock_was_lost(result) -> bool:
+    """True if any margin step lost lock / lost the serializer during the run."""
+    return any(
+        point.status in LOCK_LOSS_STATUSES
+        for sweep in getattr(result, "margins", [])
+        for point in sweep.points
+    )
 
 
 @ui.page("/measure/serdes/{profile_id}/{condition}")
@@ -87,7 +315,9 @@ def serdes_page(profile_id: str, condition: str) -> None:
     header(f"SerDes -- {profile_id} @ {condition}")
     # Simulated drivers model loss vs cable length; named conditions
     # (commutator states) use a short nominal length.
-    sim_length_mm = parse_condition_dir(condition) or 100.0
+    parsed_length_mm = parse_condition_dir(condition)
+    sim_length_mm = parsed_length_mm or 100.0
+    cable_label = f"{parsed_length_mm:.0f} mm" if parsed_length_mm is not None else condition
     protocol_panel("serdes")
 
     # Real captures talk to the Pico bridge over a serial port whose name is
@@ -101,6 +331,8 @@ def serdes_page(profile_id: str, condition: str) -> None:
     port_warning = None
 
     def refresh_ports() -> None:
+        # Only gate "Check link" on a port being present; "Go" is unlocked
+        # separately, once a link check succeeds (see check_link()).
         ports = list_serial_ports()
         options = {p.device: f"{p.device} -- {p.description}" for p in ports}
         port_select.set_options(options)
@@ -109,7 +341,6 @@ def serdes_page(profile_id: str, condition: str) -> None:
                 port_select.set_value(ports[0].device)
             port_warning.text = ""
             check_button.enable()
-            go_button.enable()
         else:
             port_select.set_value(None)
             port_warning.text = (
@@ -126,17 +357,80 @@ def serdes_page(profile_id: str, condition: str) -> None:
             ui.button("Refresh", icon="refresh", on_click=refresh_ports).props("outline")
         port_warning = ui.label("").classes("text-red-600 text-sm")
 
+    # "Check link" readout, pinned near the top so it stays visible while the
+    # capture results stream in below.
+    link_panel = ui.column().classes("w-full")
+
     device = ui.input(label="SerDes device *").props("outlined").classes("w-96")
     notes = ui.input(label="Session notes").props("outlined").classes("w-full")
-    resolution = (
-        ui.select(list(RESOLUTION_PRESETS), value=DEFAULT_RESOLUTION, label="Capture resolution")
-        .props("outlined")
-        .classes("w-96")
-    )
+    with ui.row().classes("items-center gap-3 w-full"):
+        resolution = (
+            ui.select(
+                list(RESOLUTION_PRESETS), value=DEFAULT_RESOLUTION, label="Capture resolution"
+            )
+            .props("outlined")
+            .classes("w-96")
+        )
+        # Repeat just the link-margin sweep this many times per lane (the eye is
+        # captured once); the results average out run-to-run noise.
+        iterations = (
+            ui.number(label="Margin iterations", value=1, min=1, max=20, precision=0, step=1)
+            .props("outlined")
+            .classes("w-48")
+        )
 
     status_label = ui.label("").classes("text-gray-700")
     progress_bar = ui.linear_progress(value=0.0, show_value=False).classes("w-full")
-    previews = ui.grid(columns=4).classes("w-full gap-2")
+    # Prominent banner shown when the link drops lock mid-run (power-cycle prompt).
+    reset_banner = ui.column().classes("w-full")
+    # Results are grouped into one clearly-separated section per speed/lane
+    # (forward 3G, forward 6G, reverse), created on demand as previews arrive.
+    results = ui.column().classes("w-full gap-3")
+    lane_grids: dict[str, object] = {}
+
+    def show_reset_needed() -> None:
+        """Warn that the link dropped lock and the device likely needs a power cycle."""
+        reset_banner.clear()
+        with reset_banner, ui.card().classes("w-full bg-red-50 border border-red-300"):
+            with ui.row().classes("items-center gap-2"):
+                ui.icon("power_off").classes("text-red-600 text-2xl")
+                ui.label("Link lost lock -- manual reset needed").classes("text-red-700 font-bold")
+            ui.label(
+                "The SerDes link dropped lock during the sweep and may stay stuck. "
+                "Power-cycle the device (turn it OFF, then back ON), then click 'Check link' "
+                "to confirm it re-locks before running again. This run was not saved."
+            ).classes("text-red-700 text-sm")
+        ui.notify(
+            "Link lost lock -- power-cycle the device, then re-check.",
+            type="negative",
+            multi_line=True,
+        )
+
+    def lane_grid(lane: SerdesLane):
+        """Get or create the results section (eye + margin) for one lane."""
+        if lane.lane_id not in lane_grids:
+            with results, ui.card().classes("w-full"):
+                ui.label(lane_section_title(lane)).classes("text-base font-semibold")
+                lane_grids[lane.lane_id] = ui.grid(columns=2).classes("w-full gap-2")
+        return lane_grids[lane.lane_id]
+
+    def render_final_results(result: SerdesResult) -> None:
+        """Replace the streamed previews with the final view: each lane's eye
+        plus its averaged link-margin curve (one margin plot per lane, even when
+        the sweep was repeated several times)."""
+        results.clear()
+        lane_grids.clear()
+        sweeps_by_lane = {
+            lane.lane_id: sweeps for lane, sweeps in group_margins_by_lane(result.margins)
+        }
+        for eye in result.eyes:
+            with lane_grid(eye.lane):
+                ui.image(png_source(render_eye(eye))).classes("w-full")
+                sweeps = sweeps_by_lane.get(eye.lane.lane_id)
+                if sweeps:
+                    ui.image(png_source(render_margin(average_margin_sweeps(sweeps)))).classes(
+                        "w-full"
+                    )
 
     # Shared between the worker thread and the UI timer
     shared: dict = {"events": [], "result": None, "running": False, "lock": threading.Lock()}
@@ -145,11 +439,19 @@ def serdes_page(profile_id: str, condition: str) -> None:
         """The chosen serial port, or None in simulate mode (driver default)."""
         return port_select.value if hardware else None
 
+    def selected_iterations() -> int:
+        """Margin-sweep repeats per lane (>= 1); coerces a blank/odd field to 1."""
+        try:
+            return max(1, int(iterations.value))
+        except (TypeError, ValueError):
+            return 1
+
     async def check_link() -> None:
         if hardware and not port_select.value:
             ui.notify("Select a serial port first", type="warning")
             return
         check_button.disable()
+        reset_banner.clear()
         link_panel.clear()
         with link_panel:
             ui.label("Checking link...").classes("text-gray-600")
@@ -165,7 +467,9 @@ def serdes_page(profile_id: str, condition: str) -> None:
             return
         finally:
             check_button.enable()
-        render_link_status(link_panel, status)
+        render_link_status(link_panel, status, cable_label)
+        # A successful check is the gate for running the full sequence.
+        go_button.enable()
 
     def on_progress(event: ProgressEvent) -> None:
         # Called on the worker thread; the UI timer drains the queue.
@@ -180,10 +484,10 @@ def serdes_page(profile_id: str, condition: str) -> None:
             progress_bar.value = event.fraction
             status_label.text = event.message
             if isinstance(event.partial, EyeDiagram):
-                with previews:
+                with lane_grid(event.partial.lane):
                     ui.image(png_source(render_eye(event.partial))).classes("w-full")
             elif isinstance(event.partial, MarginSweep):
-                with previews:
+                with lane_grid(event.partial.lane):
                     ui.image(png_source(render_margin(event.partial))).classes("w-full")
 
     ui.timer(0.3, drain_events)
@@ -196,11 +500,21 @@ def serdes_page(profile_id: str, condition: str) -> None:
             return
         shared["running"] = True
         shared["result"] = None
-        previews.clear()
+        results.clear()
+        lane_grids.clear()
+        margin_summary.clear()
+        reset_banner.clear()
+        save_button.disable()
         progress_bar.value = 0.0
-        config = SerdesConfig(**RESOLUTION_PRESETS[resolution.value])
-        status_label.text = f"Running full SerDes sequence ({resolution.value.split(' --')[0]})..."
+        runs = selected_iterations()
+        config = SerdesConfig(**RESOLUTION_PRESETS[resolution.value], margin_iterations=runs)
+        preset = resolution.value.split(" --")[0]
+        runs_note = f", {runs} margin iterations" if runs > 1 else ""
+        status_label.text = f"Running full SerDes sequence ({preset}{runs_note})..."
         go_button.disable()
+        # When the link drops lock the device needs a manual power cycle, so we
+        # keep Go disabled until the operator re-checks the link (post reset).
+        needs_reset = False
         try:
             result: SerdesResult = await run.io_bound(
                 run_serdes_capture,
@@ -210,15 +524,42 @@ def serdes_page(profile_id: str, condition: str) -> None:
                 selected_port(),
                 config,
             )
-            shared["result"] = result
-            status_label.text = "Capture complete -- review previews, then save."
-            save_button.enable()
+            # Drop any previews still queued so the rebuilt (averaged) view wins.
+            with shared["lock"]:
+                shared["events"].clear()
+            render_final_results(result)
+            render_margin_summary(margin_summary, result)
+            if lock_was_lost(result):
+                # Incomplete/compromised run -- prompt for a reset, block the save.
+                needs_reset = True
+                show_reset_needed()
+                status_label.text = (
+                    "Link lost lock during the sweep -- power-cycle the device and "
+                    "re-check the link. This run was not saved."
+                )
+            else:
+                # Persist one averaged margin per lane (the on-disk format is one
+                # sweep per lane); the per-run detail lives in the table/plots above.
+                shared["result"] = SerdesResult(
+                    eyes=result.eyes,
+                    margins=[
+                        average_margin_sweeps(sweeps)
+                        for _lane, sweeps in group_margins_by_lane(result.margins)
+                    ],
+                )
+                status_label.text = "Capture complete -- review results, then save."
+                save_button.enable()
         except Exception as e:
             status_label.text = f"Capture failed: {e}"
             ui.notify(f"Capture failed: {e}", type="negative", multi_line=True)
+            if "lock" in str(e).lower():
+                needs_reset = True
+                show_reset_needed()
         finally:
             shared["running"] = False
-            go_button.enable()
+            # Re-enable Go for a retry, unless the link must be reset + re-checked.
+            if not needs_reset:
+                go_button.enable()
 
     def save() -> None:
         if not require_operator():
@@ -250,10 +591,14 @@ def serdes_page(profile_id: str, condition: str) -> None:
         check_button = ui.button("Check link", icon="cable", on_click=check_link).props("outline")
         go_button = ui.button("Go -- run full sequence", icon="play_arrow", on_click=go)
         save_button = ui.button("Save session", icon="save", on_click=save)
+        # Go is gated behind a successful "Check link"; Save behind a clean run.
+        go_button.disable()
+        go_button.tooltip("Run a link check first")
         save_button.disable()
 
-    # Persistent readout for "Check link" (lock state, link rate, part numbers).
-    link_panel = ui.column().classes("w-full mt-2")
+    # Per-lane link-margin summary table, pinned at the bottom: one row per run
+    # plus an averaged row when the sweep was repeated. Filled when a run ends.
+    margin_summary = ui.column().classes("w-full")
 
     # Populate the port list and set the initial button-enabled state. Done
     # after the buttons exist so refresh_ports can toggle them.

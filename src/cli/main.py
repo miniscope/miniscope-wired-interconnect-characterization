@@ -229,7 +229,13 @@ def cmd_acquire(args: argparse.Namespace) -> int:
         )
         return 1
 
-    simulate = True if args.simulate else None
+    # --simulate / --hardware force the choice; with neither, leave it None so
+    # the registry falls back to the MINISCOPE_ACQUIRE_HARDWARE env var.
+    simulate: bool | None = None
+    if args.simulate:
+        simulate = True
+    elif args.hardware:
+        simulate = False
     run_acquire(repo_root=Path(args.repo_root), host=args.host, port=args.port, simulate=simulate)
     return 0
 
@@ -307,11 +313,21 @@ def app() -> None:
     # acquire
     p_acquire = subparsers.add_parser("acquire", help="Launch the acquisition app")
     p_acquire.add_argument("--host", default="127.0.0.1", help="Bind address")
-    p_acquire.add_argument("--port", type=int, default=8080, help="Port")
-    p_acquire.add_argument(
+    # 8080 is a frequent conflict on Windows (commonly held by a bundled
+    # ApplicationWebServer), so default to 8081; override with --port.
+    p_acquire.add_argument("--port", type=int, default=8081, help="Port")
+    # Instrument selection. With neither flag, the MINISCOPE_ACQUIRE_HARDWARE
+    # env var decides (unset -> simulator). See src/instruments/registry.py.
+    instruments = p_acquire.add_mutually_exclusive_group()
+    instruments.add_argument(
         "--simulate",
         action="store_true",
         help="Force simulated instruments (no hardware needed)",
+    )
+    instruments.add_argument(
+        "--hardware",
+        action="store_true",
+        help="Force real instruments (overrides the MINISCOPE_ACQUIRE_HARDWARE env var)",
     )
 
     args = parser.parse_args()

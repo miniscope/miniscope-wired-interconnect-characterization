@@ -117,6 +117,13 @@ anywhere; CI never needs hardware; and the complete path (driver ->
 writer -> validation -> analysis) is exercised end-to-end in tests with
 realistic data shapes.
 
+Driver selection lives in `src/instruments/registry.py` with a single
+precedence rule (highest first): the explicit `simulate=` argument, then the
+`MINISCOPE_ACQUIRE_HARDWARE=1` env var, else the simulator. The acquire CLI
+surfaces the override as `--simulate` / `--hardware` (mutually exclusive);
+passing neither defers to the env var, so the safe default everywhere -- dev
+boxes, CI, a fresh clone -- is the simulator.
+
 ## The pipeline (`src/pipeline.py` + `src/analysis/`)
 
 Five deterministic stages, each idempotent and individually runnable.

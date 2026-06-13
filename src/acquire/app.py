@@ -34,7 +34,7 @@ def build_app(repo_root: Path, simulate: bool | None = None) -> None:
 def run_acquire(
     repo_root: Path,
     host: str = "127.0.0.1",
-    port: int = 8080,
+    port: int = 8081,  # 8080 is a frequent conflict on Windows; see cli.main
     simulate: bool | None = None,
 ) -> None:
     """Build and launch the app (blocking)."""
