@@ -65,9 +65,14 @@ many sessions, and consolidation pools them with mean/std/n.
 
 ```bash
 poetry install --with acquire
-poetry run miniscope-char acquire            # opens the app in your browser
-poetry run miniscope-char acquire --simulate # no hardware needed (demo/dev)
+poetry run miniscope-char acquire             # opens the app (simulator by default)
+poetry run miniscope-char acquire --hardware  # use real instruments (Pico bridge / PicoVNA)
+poetry run miniscope-char acquire --simulate  # force the simulator (demo/dev)
 ```
+
+Instruments default to the **simulator** unless you pass `--hardware` (or set
+`MINISCOPE_ACQUIRE_HARDWARE=1`). The app serves on `http://127.0.0.1:8081` by
+default; pass `--port` if that clashes with another service.
 
 The app walks you through: pick or create a cable profile (form generated
 from the schema -- no hand-written YAML), pick or add a length, choose a
