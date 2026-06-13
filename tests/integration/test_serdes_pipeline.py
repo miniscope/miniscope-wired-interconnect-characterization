@@ -53,3 +53,37 @@ class TestSerdesPipelineIntegration:
 
         df = pd.read_csv(outputs["serdes_metrics_table"])
         assert len(df) == 6  # 2 sessions x 3 lanes
+
+    def test_multi_run_margin_round_trip(self, tmp_path: Path):
+        """Repeated margin sweeps persist raw per run and re-derive the average."""
+        from datetime import date
+
+        from src.core.session_writer import SessionMeta, write_serdes_session
+        from src.instruments.serdes.driver import SerdesConfig
+        from src.instruments.serdes.simulator import SimulatedSerdesDriver
+
+        repo = build_test_repo(tmp_path)
+        driver = SimulatedSerdesDriver(cable_length_mm=500.0, seed=11)
+        driver.connect()
+        result = driver.run_full_sequence(config=SerdesConfig(eye_bins=16, margin_iterations=2))
+
+        meta = SessionMeta(
+            operator="tester",
+            date=date(2025, 4, 9),
+            notes="multi-run",
+            type_fields={"serdes_device": "Test GMSL2 eval kit"},
+        )
+        # write_serdes_session validates with the exact CI rules before returning.
+        ref = write_serdes_session(repo, "test_cable", 500.0, result, meta)
+
+        # Raw per-run files persisted; run 1 keeps the plain margin_<lane>.csv name.
+        assert (ref.path / "margin_fwd_6g.csv").exists()
+        assert (ref.path / "margin_fwd_6g_run2.csv").exists()
+        manifest = pd.read_csv(ref.path / "session_manifest.csv")
+        assert (manifest["margin_iterations"] == 2).all()
+
+        # Processing re-derives the average from the raw runs and reports the count.
+        processed = process_session(ref.path, repo)
+        assert processed.validation.is_valid, processed.validation.errors
+        metrics = pd.read_csv(processed.outputs["serdes_metrics_csv"])
+        assert (metrics["num_margin_runs"] == 2).all()

@@ -125,6 +125,27 @@ class TestSimulatedSerdesDriver:
         assert f"margin:{FORWARD_6G.lane_id}#3" in margin_stages
 
 
+class TestSerdesDisplayLabels:
+    def test_rate_label_gbps_and_mbps(self):
+        from src.instruments.types import rate_label
+
+        assert rate_label(3.0) == "3 Gbps"
+        assert rate_label(6.0) == "6 Gbps"
+        assert rate_label(0.1875) == "187.5 Mbps"
+
+    def test_rate_display_matches_rate_label(self):
+        assert SerdesRate.GBPS_6.display == "6 Gbps"
+        assert SerdesRate.MBPS_187.display == "187.5 Mbps"
+
+    def test_channel_and_lane_display(self):
+        from src.instruments.types import SerdesChannel
+
+        assert SerdesChannel.FORWARD.display == "Forward"
+        assert SerdesChannel.REVERSE.display == "Reverse"
+        assert FORWARD_3G.label == "Forward 3 Gbps"
+        assert REVERSE_187M.label == "Reverse 187.5 Mbps"
+
+
 class TestSimulatedVnaDriver:
     def test_sweep_shape(self):
         driver = SimulatedVnaDriver(cable_length_mm=1000.0)
@@ -370,6 +391,72 @@ class TestRealSerdesDemo:
 
         assert len(result.eyes) == 3
         assert len(result.margins) == 3
+
+    def test_link_status_retries_through_transient_nak(self):
+        """A freshly-connected link can NAK a status read once; link_status must
+        retry rather than abort the whole Check-link."""
+        from src.instruments.serdes.demo_bridge import DemoBridge
+        from src.instruments.serdes.real import RealSerdesDriver
+
+        class NakOnceOnRead:
+            def __init__(self) -> None:
+                self._inner = DemoBridge()
+                self.arm = False
+                self._fired = False
+
+            def read(self, dev: int, reg: int, length: int = 1) -> bytes:
+                if self.arm and not self._fired:
+                    self._fired = True
+                    raise OSError("transient NAK")
+                return self._inner.read(dev, reg, length)
+
+            def write(self, dev: int, reg: int, data: bytes) -> None:
+                self._inner.write(dev, reg, data)
+
+            def close(self) -> None:
+                self._inner.close()
+
+        transport = NakOnceOnRead()
+        driver = RealSerdesDriver(transport=transport, demo=True)
+        driver.connect()
+        transport.arm = True  # NAK the first read inside link_status
+        status = driver.link_status()
+        driver.close()
+
+        assert transport._fired  # the NAK actually fired and was absorbed
+        assert status["ser"]["locked"] and status["des"]["locked"]
+
+    def test_link_status_decodes_error_bit(self):
+        """The 'link not clean' path: a set CTRL3 ERROR bit surfaces as error=True."""
+        from src.instruments.serdes import registers as R
+        from src.instruments.serdes.demo_bridge import DemoBridge
+        from src.instruments.serdes.real import RealSerdesDriver
+
+        class DesErrorBit:
+            def __init__(self) -> None:
+                self._inner = DemoBridge()
+                self.arm = False
+
+            def read(self, dev: int, reg: int, length: int = 1) -> bytes:
+                data = self._inner.read(dev, reg, length)
+                if self.arm and dev == R.DES_ADDR and reg == R.REG_CTRL3:
+                    return bytes([data[0] | 0x04, *data[1:]])  # force ERROR bit
+                return data
+
+            def write(self, dev: int, reg: int, data: bytes) -> None:
+                self._inner.write(dev, reg, data)
+
+            def close(self) -> None:
+                self._inner.close()
+
+        transport = DesErrorBit()
+        driver = RealSerdesDriver(transport=transport, demo=True)
+        driver.connect()  # clean state required to connect
+        transport.arm = True  # only now report the error bit
+        status = driver.link_status()
+        driver.close()
+
+        assert status["des"]["error"] is True
 
 
 class TestValidateReading:

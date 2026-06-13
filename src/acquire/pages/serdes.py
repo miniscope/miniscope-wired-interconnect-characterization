@@ -20,18 +20,13 @@ from src.instruments.serdes.driver import SerdesConfig
 from src.instruments.serdes.pico_bridge import list_serial_ports
 from src.instruments.types import (
     EyeDiagram,
-    MarginPoint,
     MarginSweep,
     ProgressEvent,
-    SerdesChannel,
     SerdesLane,
-    SerdesRate,
     SerdesResult,
+    group_margins_by_lane,
 )
-
-# Error-count ceiling for a lost-lock / unreachable margin step. Matches the
-# clamp render_margin() uses so averaged curves stay on the same scale.
-_ERROR_CEILING = 256
+from src.processing.serdes import average_margin_sweeps
 
 # Capture-resolution presets for the full sequence. Wall-clock is dominated by
 # the eye grid (eye_bins -> ~bins^2 points at ~0.1 s each over the serial
@@ -49,16 +44,9 @@ def _status_chip(ok: bool, ok_text: str, bad_text: str) -> None:
     ui.badge(ok_text if ok else bad_text).props("color=" + ("green" if ok else "red"))
 
 
-def _rate_text(rate: SerdesRate) -> str:
-    """Human-readable link rate, e.g. '3 Gbps' / '187.5 Mbps'."""
-    gbps = rate.gbps
-    return f"{gbps * 1000:.1f} Mbps" if gbps < 1 else f"{gbps:.0f} Gbps"
-
-
 def lane_section_title(lane: SerdesLane) -> str:
     """Section heading for a lane's results, e.g. 'Forward link -- 6 Gbps'."""
-    channel = "Forward" if lane.channel is SerdesChannel.FORWARD else "Reverse"
-    return f"{channel} link -- {_rate_text(lane.rate)}"
+    return f"{lane.channel.display} link -- {lane.rate.display}"
 
 
 def _device_box(role: str, dev: dict) -> None:
@@ -125,105 +113,33 @@ def render_link_status(container, status: dict, cable_label: str = "") -> None:
                 ui.label(f"{key}: {value}").classes("text-sm")
 
 
-def _lane_label(lane: SerdesLane) -> str:
-    """Compact lane label, e.g. 'Forward 3 Gbps' / 'Reverse 187.5 Mbps'."""
-    channel = "Forward" if lane.channel is SerdesChannel.FORWARD else "Reverse"
-    return f"{channel} {_rate_text(lane.rate)}"
-
-
-def group_margins_by_lane(
-    margins: list[MarginSweep],
-) -> list[tuple[SerdesLane, list[MarginSweep]]]:
-    """Group margin sweeps by lane, preserving first-seen lane order.
-
-    A full sequence with N margin iterations emits the sweeps lane-major
-    (lane0 x N, lane1 x N, ...), so this keeps each lane's runs together in the
-    order they were captured.
-    """
-    grouped: dict[str, list[MarginSweep]] = {}
-    order: list[SerdesLane] = []
-    for sweep in margins:
-        if sweep.lane.lane_id not in grouped:
-            grouped[sweep.lane.lane_id] = []
-            order.append(sweep.lane)
-        grouped[sweep.lane.lane_id].append(sweep)
-    return [(lane, grouped[lane.lane_id]) for lane in order]
-
-
-def average_margin_sweeps(sweeps: list[MarginSweep]) -> MarginSweep:
-    """Average several link-margin sweeps of one lane into one representative sweep.
-
-    Every sweep walks the same deterministic TX-amplitude grid (shared
-    start/step/stop), but a sweep that errors stops at its first failing step
-    (``margin_continue_on_error`` off), so runs can be different lengths. We
-    average the error count at each amplitude over ALL runs: a run that stopped
-    *above* a given amplitude already failed at an easier step and would only be
-    worse at the harder, lower amplitude, so it counts as a failure (errors at
-    the ``_ERROR_CEILING``) there. Lost-lock steps (errors == -1) use the same
-    ceiling. The averaged status is "ok" only where the mean rounds to zero.
-
-    Single-run (or empty) inputs are returned as-is.
-    """
-    populated = [s for s in sweeps if s.points]
-    if len(populated) <= 1:
-        # Nothing to average: hand back the single populated sweep, or (if every
-        # run came back empty) the first original sweep to preserve its lane.
-        return populated[0] if populated else sweeps[0]
-
-    lane = populated[0].lane
-    by_amp = [{p.tx_amplitude_mv: p for p in s.points} for s in populated]
-    reached_floor = [min(d) for d in by_amp]  # lowest amplitude each run measured
-    amps = sorted({a for d in by_amp for a in d}, reverse=True)  # union, high -> low
-
-    points: list[MarginPoint] = []
-    for amp in amps:
-        errs: list[float] = []
-        sample: MarginPoint | None = None
-        for d, floor in zip(by_amp, reached_floor, strict=True):
-            point = d.get(amp)
-            if point is not None:
-                sample = sample or point
-                errs.append(float(_ERROR_CEILING if point.errors < 0 else point.errors))
-            elif amp < floor:
-                # Run stopped above this amplitude -> treat the harder step as failed.
-                errs.append(float(_ERROR_CEILING))
-        avg_errors = round(sum(errs) / len(errs)) if errs else 0
-        status = "ok" if avg_errors == 0 else "errors"
-        points.append(
-            MarginPoint(
-                tx_amplitude_mv=amp,
-                code=sample.code if sample else 0,
-                rep=sample.rep if sample else 0,
-                locked=avg_errors < _ERROR_CEILING,
-                errors=avg_errors,
-                status=status,
-            )
-        )
-    return MarginSweep(lane=lane, points=points)
-
-
 def margin_summary_row(sweep: MarginSweep) -> dict:
     """One link-margin summary row: deepest clean TX amplitude and where it failed.
 
-    The sweep steps TX amplitude downward and (by default) stops at the first
-    error, so the lowest 'ok' step is the margin floor and the first non-'ok'
-    step is where the link broke.
+    Walking the sweep from the strongest amplitude down, the margin floor is the
+    lowest 'ok' step in the leading clean run and the first non-'ok' step is
+    where the link broke. Taking the clean *prefix* (rather than the global min
+    'ok' step) keeps this correct for an averaged sweep, whose ok/error steps
+    can interleave below the first failure.
     """
     pts = sweep.points
-    clean = [p.tx_amplitude_mv for p in pts if p.status == "ok"]
-    fail = next((p for p in pts if p.status != "ok"), None)
+    ordered = sorted(pts, key=lambda p: p.tx_amplitude_mv, reverse=True)
+    clean_prefix: list[float] = []
+    fail = None
+    for p in ordered:
+        if p.status != "ok":
+            fail = p
+            break
+        clean_prefix.append(p.tx_amplitude_mv)
     if fail is None:
         outcome = "clean throughout"
-    elif fail.status == "errors":
-        outcome = f"errors at {fail.tx_amplitude_mv:.0f} mV"
-    elif fail.status == "lost_lock":
-        outcome = f"lost lock at {fail.tx_amplitude_mv:.0f} mV"
     else:
-        outcome = f"{fail.status} at {fail.tx_amplitude_mv:.0f} mV"
+        label = "lost lock" if fail.status == "lost_lock" else fail.status
+        outcome = f"{label} at {fail.tx_amplitude_mv:.0f} mV"
     return {
-        "lane": _lane_label(sweep.lane),
+        "lane": sweep.lane.label,
         "steps": len(pts),
-        "clean_mv": f"{min(clean):.0f}" if clean else "--",
+        "clean_mv": f"{min(clean_prefix):.0f}" if clean_prefix else "--",
         "fail_mv": f"{fail.tx_amplitude_mv:.0f}" if fail else "--",
         "outcome": outcome,
     }
@@ -538,15 +454,9 @@ def serdes_page(profile_id: str, condition: str) -> None:
                     "re-check the link. This run was not saved."
                 )
             else:
-                # Persist one averaged margin per lane (the on-disk format is one
-                # sweep per lane); the per-run detail lives in the table/plots above.
-                shared["result"] = SerdesResult(
-                    eyes=result.eyes,
-                    margins=[
-                        average_margin_sweeps(sweeps)
-                        for _lane, sweeps in group_margins_by_lane(result.margins)
-                    ],
-                )
+                # Persist every raw margin run (append-only); the per-lane
+                # average shown above is re-derived in processing on read.
+                shared["result"] = result
                 status_label.text = "Capture complete -- review results, then save."
                 save_button.enable()
         except Exception as e:

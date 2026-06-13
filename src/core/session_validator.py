@@ -338,6 +338,24 @@ def validate_serdes_session(
                     elif not (session_dir / filename).exists():
                         result.add_error(f"Row {i}: referenced file not found: {filename}")
 
+                # Repeated margin sweeps (optional column; absent => single run)
+                # append as margin_<lane>_run<i>.csv; check each exists.
+                iters_raw = (row.get("margin_iterations") or "").strip()
+                if iters_raw:
+                    try:
+                        iters = int(iters_raw)
+                    except ValueError:
+                        result.add_error(
+                            f"Row {i}: margin_iterations is not an integer: '{iters_raw}'"
+                        )
+                    else:
+                        if iters < 1:
+                            result.add_error(f"Row {i}: margin_iterations must be >= 1: {iters}")
+                        for n in range(2, iters + 1):
+                            run = f"margin_{lane_id}_run{n}.csv"
+                            if not (session_dir / run).exists():
+                                result.add_error(f"Row {i}: margin run file not found: {run}")
+
             for lane_id in sorted(EXPECTED_LANES - set(seen_lanes)):
                 result.add_error(f"Manifest missing lane: '{lane_id}'")
             if len(seen_lanes) != len(set(seen_lanes)):

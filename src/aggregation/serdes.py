@@ -10,11 +10,7 @@ import matplotlib.pyplot as plt
 
 from src.aggregation.base import BaseAggregator, SessionContext
 from src.core.schemas import MeasurementDefinition
-
-
-def _rate_label(gbps: float) -> str:
-    """Human label for a link rate, e.g. '6 Gbps' or '187.5 Mbps'."""
-    return f"{gbps:g} Gbps" if gbps >= 1 else f"{gbps * 1000:g} Mbps"
+from src.instruments.types import rate_label
 
 
 class SerdesSummary(BaseAggregator):
@@ -125,7 +121,7 @@ class SerdesSummary(BaseAggregator):
                 )
                 has_data = True
 
-            ax.set_title(_rate_label(rate))
+            ax.set_title(rate_label(rate))
             ax.set_xlabel("Cable length (mm)")
             ax.set_ylabel(ylabel)
             ax.grid(True, alpha=0.3)

@@ -27,7 +27,7 @@ from src.core.loading import load_session
 from src.core.session_schemas import length_dir_name
 from src.core.session_validator import validate_session
 from src.instruments.lcr.driver import ResistanceReading
-from src.instruments.types import SerdesResult, VnaSweepResult
+from src.instruments.types import SerdesResult, VnaSweepResult, group_margins_by_lane
 from src.instruments.vna.driver import write_s2p
 from src.measurement_types.registry import MeasurementTypeRegistry
 
@@ -229,7 +229,12 @@ def write_serdes_session(
         repo_root, profile_id, cable_length_mm, "serdes", meta, condition=condition
     )
 
-    margins_by_lane = {sweep.lane: sweep for sweep in result.margins}
+    # A repeated margin sweep yields several sweeps per lane; persist each run
+    # RAW (append-only) and let processing derive the average. Run 1 keeps the
+    # plain margin_<lane>.csv name; repeats append as margin_<lane>_run<i>.csv.
+    margins_by_lane = {
+        lane.lane_id: sweeps for lane, sweeps in group_margins_by_lane(result.margins)
+    }
 
     manifest_rows: list[dict[str, str]] = []
     for eye in result.eyes:
@@ -244,14 +249,19 @@ def write_serdes_session(
                 writer.writerow([int(ph), int(vt), int(pol), int(hit), int(err)])
 
         margin_csv = f"margin_{lane.lane_id}.csv"
-        sweep = margins_by_lane.get(lane)
-        with open(ref.path / margin_csv, "w", newline="") as f:
-            writer = csv.writer(f)
-            writer.writerow(["tx_amp_mv", "code", "rep", "locked", "errors", "status"])
-            for p in sweep.points if sweep else []:
-                writer.writerow(
-                    [p.tx_amplitude_mv, p.code, p.rep, int(p.locked), p.errors, p.status]
-                )
+        # At least one (possibly empty) run so the manifest's margin_csv resolves.
+        runs = [s.points for s in margins_by_lane.get(lane.lane_id, [])] or [[]]
+        run_files = [margin_csv] + [
+            f"margin_{lane.lane_id}_run{i}.csv" for i in range(2, len(runs) + 1)
+        ]
+        for filename, points in zip(run_files, runs, strict=True):
+            with open(ref.path / filename, "w", newline="") as f:
+                writer = csv.writer(f)
+                writer.writerow(["tx_amp_mv", "code", "rep", "locked", "errors", "status"])
+                for p in points:
+                    writer.writerow(
+                        [p.tx_amplitude_mv, p.code, p.rep, int(p.locked), p.errors, p.status]
+                    )
 
         manifest_rows.append(
             {
@@ -260,11 +270,19 @@ def write_serdes_session(
                 "rate_gbps": f"{lane.rate.gbps:g}",
                 "eye_csv": eye_csv,
                 "margin_csv": margin_csv,
+                "margin_iterations": str(len(runs)),
             }
         )
 
     with open(ref.path / "session_manifest.csv", "w", newline="") as f:
-        fieldnames = ["lane_id", "channel", "rate_gbps", "eye_csv", "margin_csv"]
+        fieldnames = [
+            "lane_id",
+            "channel",
+            "rate_gbps",
+            "eye_csv",
+            "margin_csv",
+            "margin_iterations",
+        ]
         writer = csv.DictWriter(f, fieldnames=fieldnames)
         writer.writeheader()
         writer.writerows(manifest_rows)
