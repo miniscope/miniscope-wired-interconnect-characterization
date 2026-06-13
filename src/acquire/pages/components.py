@@ -34,8 +34,7 @@ def _confirm_close() -> None:
     with ui.dialog() as dialog, ui.card():
         ui.label("Close the tool?").classes("text-lg font-bold")
         ui.label(
-            "This stops the app for everyone and frees the port. "
-            "Any unsaved capture is lost."
+            "This stops the app for everyone and frees the port. " "Any unsaved capture is lost."
         ).classes("text-sm text-gray-600")
         with ui.row().classes("justify-end gap-2 w-full"):
             ui.button("Cancel", on_click=dialog.close).props("flat")
