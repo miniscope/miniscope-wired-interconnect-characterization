@@ -1,0 +1,51 @@
+name: weight
+version: 1
+description: >
+  Mass measurement of a coaxial cable assembly. The full assembly (cable
+  plus its end PCBs and SMA connectors) is weighed, the non-cable fixture
+  (the PCBs plus SMA connectors alone) is weighed separately, and the net
+  cable mass is their difference -- so the recorded raw values are what was
+  actually put on the balance and the cable mass is derived. The cable
+  profile and length come from the session's location in the measurements/
+  tree. The analysis pipeline derives mass per centimetre (g/cm) across
+  sessions and lengths; non-cable DUTs (commutators) have no length, so only
+  the net mass applies.
+
+fields:
+  - name: measurement_instrument
+    field_type: string
+    required: true
+    description: Balance/scale used for the measurement (e.g. "Ohaus Scout SKX 220")
+
+  - name: measurement_method
+    field_type: enum
+    required: true
+    enum_values: ["digital_balance", "mechanical_scale", "other"]
+    description: How the masses were measured
+
+files:
+  - name: weight_csv
+    filename_pattern: "weight.csv"
+    file_format: csv
+    required: true
+    description: >
+      CSV with columns: assembly_weight_g (required), fixture_weight_g
+      (required), [notes].
+      assembly_weight_g is the mass of the whole cable assembly (cable +
+      end PCBs + SMA connectors); fixture_weight_g is the mass of just the
+      non-cable parts (PCBs + SMA connectors). The net cable mass is their
+      difference, so assembly_weight_g must exceed fixture_weight_g.
+      Multiple rows = repeated weighings within this session.
+      Cable length is NOT a column; it comes from the session folder.
+
+processing_steps:
+  - name: normalize_weight
+    processor: src.processing.weight.NormalizeWeight
+    description: Normalize raw CSV, derive net cable mass and mass per centimetre
+    outputs: ["normalized_weight_csv", "weight_summary_json"]
+
+aggregation:
+  - name: weight_summary
+    aggregator: src.aggregation.weight.WeightSummary
+    description: Aggregate weight measurements across sessions
+    outputs: ["weight_summary_table", "weight_boxplot"]

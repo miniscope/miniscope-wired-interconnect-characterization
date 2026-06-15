@@ -20,7 +20,10 @@ from src.core.session_writer import (
     write_resistance_session,
     write_serdes_session,
     write_vna_session,
+    write_weight_session,
 )
+from src.instruments.balance.driver import WeightReading
+from src.instruments.balance.driver import validate_reading as validate_weight_reading
 from src.instruments.lcr.driver import ResistanceReading, validate_reading
 from src.instruments.registry import get_serdes_driver, get_vna_driver
 from src.instruments.serdes.driver import SerdesConfig
@@ -31,6 +34,7 @@ __all__ = [
     "delete_session",
     "read_serdes_link_status",
     "record_resistance_session",
+    "record_weight_session",
     "run_serdes_capture",
     "run_vna_capture",
     "save_serdes_session",
@@ -73,6 +77,42 @@ def record_resistance_session(
     meta = SessionMeta(operator=operator, date=date.today(), notes=notes, type_fields=type_fields)
     length_mm, condition_dir = _normalize_condition(condition)
     return write_resistance_session(
+        repo_root, profile_id, length_mm, parsed, meta, condition=condition_dir
+    )
+
+
+def record_weight_session(
+    repo_root: Path,
+    profile_id: str,
+    condition: float | str,
+    readings: list[tuple[float, float, str]],
+    operator: str,
+    notes: str,
+    instrument: str,
+    method: str = "digital_balance",
+) -> SessionRef:
+    """Validate manual entries and write a weight session.
+
+    Each reading is (assembly_weight_g, fixture_weight_g, note): the whole
+    cable assembly and the bare PCB+SMA fixture; the net cable mass is their
+    difference.
+    """
+    parsed: list[WeightReading] = []
+    for assembly, fixture, note in readings:
+        validate_weight_reading(assembly, fixture)
+        parsed.append(
+            WeightReading(
+                assembly_weight_g=float(assembly),
+                fixture_weight_g=float(fixture),
+                note=note,
+            )
+        )
+
+    type_fields: dict = {"measurement_instrument": instrument, "measurement_method": method}
+
+    meta = SessionMeta(operator=operator, date=date.today(), notes=notes, type_fields=type_fields)
+    length_mm, condition_dir = _normalize_condition(condition)
+    return write_weight_session(
         repo_root, profile_id, length_mm, parsed, meta, condition=condition_dir
     )
 

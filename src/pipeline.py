@@ -30,6 +30,7 @@ from src.core.session_validator import (
     validate_serdes_session,
     validate_session,
     validate_vna_manifest_csv,
+    validate_weight_csv,
 )
 from src.measurement_types.registry import MeasurementTypeRegistry
 from src.processing.base import BaseProcessor
@@ -51,6 +52,7 @@ class PipelineResult:
 # Each entry is (filename, validator_fn, needs_session_dir).
 _CSV_VALIDATORS: dict[str, list[tuple[str, callable, bool]]] = {
     "resistance": [("resistance.csv", validate_resistance_csv, False)],
+    "weight": [("weight.csv", validate_weight_csv, False)],
     "vna": [("manifest.csv", validate_vna_manifest_csv, True)],
 }
 

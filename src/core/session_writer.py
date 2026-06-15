@@ -26,6 +26,7 @@ import yaml
 from src.core.loading import load_session
 from src.core.session_schemas import length_dir_name
 from src.core.session_validator import validate_session
+from src.instruments.balance.driver import WeightReading
 from src.instruments.lcr.driver import ResistanceReading
 from src.instruments.types import SerdesResult, VnaSweepResult, group_margins_by_lane
 from src.instruments.vna.driver import write_s2p
@@ -212,6 +213,30 @@ def write_resistance_session(
         writer.writerow(["resistance_ohm", "notes"])
         for reading in readings:
             writer.writerow([reading.resistance_ohm, reading.note])
+
+    return _finalize_session(repo_root, ref)
+
+
+def write_weight_session(
+    repo_root: Path,
+    profile_id: str,
+    cable_length_mm: float | None,
+    readings: list[WeightReading],
+    meta: SessionMeta,
+    condition: str | None = None,
+) -> SessionRef:
+    """Write a manual weight session (weight.csv)."""
+    if not readings:
+        raise ValueError("At least one weight reading is required")
+
+    ref = _start_session(
+        repo_root, profile_id, cable_length_mm, "weight", meta, condition=condition
+    )
+    with open(ref.path / "weight.csv", "w", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow(["assembly_weight_g", "fixture_weight_g", "notes"])
+        for reading in readings:
+            writer.writerow([reading.assembly_weight_g, reading.fixture_weight_g, reading.note])
 
     return _finalize_session(repo_root, ref)
 

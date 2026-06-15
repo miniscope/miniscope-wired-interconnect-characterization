@@ -57,6 +57,60 @@ def vna_session_dir(measurements_fixtures_dir: Path) -> Path:
     return measurements_fixtures_dir / "test_cable" / "1000mm" / "vna" / "20250301_01"
 
 
+def make_weight_session(
+    base_dir: Path,
+    *,
+    session_id: str = "20250115_01",
+    profile_id: str = "test_cable",
+    length_mm: float | None = 500.0,
+    condition: str | None = None,
+    rows: list[tuple[float, float, str]] | None = None,
+) -> Path:
+    """
+    Write a self-contained weight session under base_dir and return its dir.
+
+    Weight has no committed fixtures (it would shift the session counts the
+    other tests assert), so weight tests build their own sessions here.
+    """
+    if rows is None:
+        rows = [(12.00, 4.00, "w1"), (12.05, 4.00, "w2"), (11.98, 4.02, "w3"), (12.02, 3.99, "w4")]
+    cond = condition or (f"{length_mm:g}mm" if length_mm is not None else "static")
+    session_dir = base_dir / profile_id / cond / "weight" / session_id
+    session_dir.mkdir(parents=True)
+
+    lines = [
+        'schema_version: "1.0"',
+        f'session_id: "{session_id}"',
+        f"profile_id: {profile_id}",
+    ]
+    if length_mm is not None:
+        lines.append(f"cable_length_mm: {length_mm:g}")
+    else:
+        lines.append(f"condition: {cond}")
+    lines += [
+        "measurement_type: weight",
+        "measurement_type_version: 1",
+        "date: 2025-01-15",
+        "operator: Test Operator",
+        'notes: "fixture weight session"',
+        "type_fields:",
+        '  measurement_instrument: "Test Balance"',
+        "  measurement_method: digital_balance",
+    ]
+    (session_dir / "session.yaml").write_text("\n".join(lines) + "\n")
+
+    csv_lines = ["assembly_weight_g,fixture_weight_g,notes"]
+    csv_lines += [f"{a},{f},{n}" for a, f, n in rows]
+    (session_dir / "weight.csv").write_text("\n".join(csv_lines) + "\n")
+    return session_dir
+
+
+@pytest.fixture
+def weight_session_dir(tmp_path: Path) -> Path:
+    """A self-contained 500 mm cable weight session (net ~8 g -> ~0.16 g/cm)."""
+    return make_weight_session(tmp_path)
+
+
 def build_test_repo(
     tmp_path: Path,
     include_measurements: bool = True,

@@ -28,6 +28,7 @@ def build_app(repo_root: Path, simulate: bool | None = None) -> None:
         resistance,
         serdes,
         vna,
+        weight,
     )
 
 
