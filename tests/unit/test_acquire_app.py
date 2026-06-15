@@ -80,56 +80,49 @@ class TestMarginSummaryRow:
         assert row["clean_mv"] == "410"
         assert row["outcome"] == "lost lock at 400 mV"
 
+    def test_unknown_status_falls_through(self):
+        # Any non-lost_lock status renders via the generic fallback, not dropped.
+        from src.acquire.pages.serdes import margin_summary_row
+        from src.instruments.types import FORWARD_3G, MarginPoint, MarginSweep
 
-class TestAverageMarginSweeps:
-    def _sweep(self, lane, points):
-        from src.instruments.types import MarginPoint, MarginSweep
+        pts = [
+            MarginPoint(410.0, 41, 0, True, 0, "ok"),
+            MarginPoint(400.0, 40, 0, False, -1, "ser_unreachable"),
+        ]
+        row = margin_summary_row(MarginSweep(FORWARD_3G, pts))
+        assert row["outcome"] == "ser_unreachable at 400 mV"
 
-        return MarginSweep(
-            lane, [MarginPoint(a, int(a // 10), 0, e == 0, e, s) for a, e, s in points]
-        )
+    def test_floor_is_clean_prefix_not_global_min(self):
+        # An averaged sweep can have an "ok" step below the first failure; the
+        # floor must be the clean run above the failure, not the global min ok.
+        from src.acquire.pages.serdes import margin_summary_row
+        from src.instruments.types import FORWARD_6G, MarginPoint, MarginSweep
 
-    def test_single_run_returned_unchanged(self):
-        from src.acquire.pages.serdes import average_margin_sweeps
-        from src.instruments.types import FORWARD_3G
+        pts = [
+            MarginPoint(400.0, 40, 0, True, 0, "ok"),
+            MarginPoint(390.0, 39, 0, True, 3, "errors"),
+            MarginPoint(380.0, 38, 0, True, 0, "ok"),  # spurious clean below failure
+        ]
+        row = margin_summary_row(MarginSweep(FORWARD_6G, pts))
+        assert row["clean_mv"] == "400"  # not 380
+        assert row["fail_mv"] == "390"
 
-        sweep = self._sweep(FORWARD_3G, [(400.0, 0, "ok"), (390.0, 5, "errors")])
-        assert average_margin_sweeps([sweep]) is sweep
 
-    def test_averages_errors_and_penalizes_early_stop(self):
-        """Different-length runs: a run that stopped above an amplitude counts as
-        failed (error ceiling) at that harder, lower step."""
-        from src.acquire.pages.serdes import _ERROR_CEILING, average_margin_sweeps
-        from src.instruments.types import FORWARD_3G
+class TestRenderMarginSummary:
+    def test_no_op_when_no_margins(self):
+        from src.acquire.pages.serdes import render_margin_summary
+        from src.instruments.types import SerdesResult
 
-        run_a = self._sweep(  # stopped at 390 (errored)
-            FORWARD_3G, [(410.0, 0, "ok"), (400.0, 0, "ok"), (390.0, 4, "errors")]
-        )
-        run_b = self._sweep(  # reached 380 before erroring
-            FORWARD_3G,
-            [(410.0, 0, "ok"), (400.0, 0, "ok"), (390.0, 0, "ok"), (380.0, 10, "errors")],
-        )
+        class FakeContainer:
+            def __init__(self):
+                self.cleared = 0
 
-        avg = average_margin_sweeps([run_a, run_b])
-        by_amp = {p.tx_amplitude_mv: p for p in avg.points}
+            def clear(self):
+                self.cleared += 1
 
-        assert sorted(by_amp, reverse=True) == [410.0, 400.0, 390.0, 380.0]
-        assert by_amp[410.0].errors == 0 and by_amp[410.0].status == "ok"
-        assert by_amp[390.0].errors == 2 and by_amp[390.0].status == "errors"  # mean(4, 0)
-        # 380 mV: run A stopped above it -> failure ceiling; mean(256, 10) -> 133.
-        assert by_amp[380.0].errors == round((_ERROR_CEILING + 10) / 2)
-        assert by_amp[380.0].status == "errors"
-
-    def test_lost_lock_clamped_to_ceiling(self):
-        from src.acquire.pages.serdes import _ERROR_CEILING, average_margin_sweeps
-        from src.instruments.types import REVERSE_187M
-
-        run_a = self._sweep(REVERSE_187M, [(250.0, 0, "ok"), (240.0, -1, "lost_lock")])
-        run_b = self._sweep(REVERSE_187M, [(250.0, 0, "ok"), (240.0, 0, "ok")])
-
-        avg = average_margin_sweeps([run_a, run_b])
-        by_amp = {p.tx_amplitude_mv: p for p in avg.points}
-        assert by_amp[240.0].errors == round(_ERROR_CEILING / 2)  # mean(256, 0)
+        container = FakeContainer()
+        render_margin_summary(container, SerdesResult())
+        assert container.cleared == 1
 
 
 class TestMarginSummaryTables:

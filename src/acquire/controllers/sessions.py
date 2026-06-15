@@ -92,8 +92,8 @@ def read_serdes_link_status(
     if port:
         kwargs["port"] = port
     driver = get_serdes_driver(simulate=simulate, **kwargs)
-    driver.connect()
     try:
+        driver.connect()
         return driver.link_status()
     finally:
         driver.close()
@@ -117,8 +117,8 @@ def run_serdes_capture(
     if port:
         kwargs["port"] = port
     driver = get_serdes_driver(simulate=simulate, **kwargs)
-    driver.connect()
     try:
+        driver.connect()
         return driver.run_full_sequence(config=config, progress=progress)
     finally:
         driver.close()

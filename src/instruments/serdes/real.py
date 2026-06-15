@@ -125,10 +125,26 @@ class RealSerdesDriver(SerdesDriver):
         if not self._ensure_clean_state():
             raise RuntimeError("Link did not reach a clean, locked state")
 
+    def _read_settle(self, dev: int, reg: int, attempts: int = 3) -> int:
+        """Read a register, retrying through transient I2C NAKs.
+
+        A freshly-connected link can still be settling, so a status read may NAK
+        once or twice before it answers. Every other register path in this
+        driver tolerates NAKs, so the read-only status check should too rather
+        than aborting the whole "Check link" on the first stutter.
+        """
+        for attempt in range(1, attempts + 1):
+            try:
+                return self._bus.read(dev, reg)
+            except OSError:
+                if attempt == attempts:
+                    raise
+                self._sleep(0.05)
+
     def link_status(self) -> dict[str, object]:
         def decode(dev: int) -> dict[str, object]:
-            ctrl3 = self._bus.read(dev, R.REG_CTRL3)
-            dev_id = self._bus.read(dev, R.REG_DEV_ID)
+            ctrl3 = self._read_settle(dev, R.REG_CTRL3)
+            dev_id = self._read_settle(dev, R.REG_DEV_ID)
             return {
                 "part": R.PART_BY_DEV_ID.get(dev_id, f"unknown (0x{dev_id:02X})"),
                 "device_id": dev_id,
@@ -139,7 +155,7 @@ class RealSerdesDriver(SerdesDriver):
 
         # Forward-link rate: the deserializer's RX_RATE[1:0] in REG1 (the SER
         # TX_RATE[3:2] mirrors it). The reverse link is always 187.5 Mbps.
-        rate_code = self._bus.read(R.DES_ADDR, R.REG_REG1) & 0x03
+        rate_code = self._read_settle(R.DES_ADDR, R.REG_REG1) & 0x03
         return {
             "connected": True,
             "demo": self._demo,

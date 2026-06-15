@@ -24,6 +24,16 @@ class SerdesChannel(str, Enum):
     FORWARD = "forward"  # serializer -> deserializer (high-bandwidth video/data)
     REVERSE = "reverse"  # deserializer -> serializer (fixed low-rate control back-channel)
 
+    @property
+    def display(self) -> str:
+        """Capitalized direction name, e.g. 'Forward' / 'Reverse'."""
+        return "Forward" if self is SerdesChannel.FORWARD else "Reverse"
+
+
+def rate_label(gbps: float) -> str:
+    """Human-readable link rate, e.g. '6 Gbps' / '187.5 Mbps'."""
+    return f"{gbps:g} Gbps" if gbps >= 1 else f"{gbps * 1000:g} Mbps"
+
 
 class SerdesRate(Enum):
     """
@@ -47,6 +57,11 @@ class SerdesRate(Enum):
     def label(self) -> str:
         return self.value[1]
 
+    @property
+    def display(self) -> str:
+        """Human-readable rate, e.g. '6 Gbps' / '187.5 Mbps'."""
+        return rate_label(self.gbps)
+
 
 @dataclass(frozen=True)
 class SerdesLane:
@@ -60,6 +75,11 @@ class SerdesLane:
         """Short, filename-safe id, e.g. ``fwd_6g`` / ``rev_187m``."""
         prefix = "fwd" if self.channel is SerdesChannel.FORWARD else "rev"
         return f"{prefix}_{self.rate.label}"
+
+    @property
+    def label(self) -> str:
+        """Compact human label, e.g. 'Forward 6 Gbps' / 'Reverse 187.5 Mbps'."""
+        return f"{self.channel.display} {self.rate.display}"
 
 
 # The three lanes every SerDes session covers (the back channel is the fixed
@@ -120,10 +140,31 @@ class MarginSweep:
 
 @dataclass
 class SerdesResult:
-    """Complete SerDes characterization: one eye + one margin sweep per lane."""
+    """Complete SerDes characterization: one eye per lane + one margin sweep
+    per (lane, iteration). A repeated margin sweep appends several sweeps for
+    the same lane to ``margins`` (see ``group_margins_by_lane``)."""
 
     eyes: list[EyeDiagram] = field(default_factory=list)
     margins: list[MarginSweep] = field(default_factory=list)
+
+
+def group_margins_by_lane(
+    margins: list[MarginSweep],
+) -> list[tuple[SerdesLane, list[MarginSweep]]]:
+    """Group margin sweeps by lane, preserving first-seen lane order.
+
+    A full sequence with N margin iterations emits the sweeps lane-major
+    (lane0 x N, lane1 x N, ...), so this keeps each lane's runs together in the
+    order they were captured.
+    """
+    grouped: dict[str, list[MarginSweep]] = {}
+    order: list[SerdesLane] = []
+    for sweep in margins:
+        if sweep.lane.lane_id not in grouped:
+            grouped[sweep.lane.lane_id] = []
+            order.append(sweep.lane)
+        grouped[sweep.lane.lane_id].append(sweep)
+    return [(lane, grouped[lane.lane_id]) for lane in order]
 
 
 @dataclass
