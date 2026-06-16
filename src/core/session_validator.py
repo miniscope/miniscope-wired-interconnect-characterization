@@ -282,6 +282,65 @@ def validate_resistance_csv(
     )
 
 
+def validate_weight_csv(
+    csv_path: Path,
+    result: ValidationResult,
+) -> None:
+    """
+    Weight-specific CSV validation.
+
+    Required columns: assembly_weight_g, fixture_weight_g
+    Optional columns: notes
+    Cable length is structural (it comes from the session folder), so it is
+    NOT a column. The assembly mass must be positive, the fixture mass
+    non-negative, and the assembly must exceed the fixture so the net cable
+    mass is positive.
+    """
+
+    def check_row(i: int, row: dict) -> int:
+        errors = 0
+        assembly: float | None = None
+        fixture: float | None = None
+
+        assembly_raw = row.get("assembly_weight_g", "").strip()
+        try:
+            assembly = float(assembly_raw)
+            if assembly <= 0:
+                result.add_error(f"Row {i}: assembly_weight_g must be positive, got {assembly}")
+                errors += 1
+                assembly = None
+        except ValueError:
+            result.add_error(f"Row {i}: assembly_weight_g is not numeric: '{assembly_raw}'")
+            errors += 1
+
+        fixture_raw = row.get("fixture_weight_g", "").strip()
+        try:
+            fixture = float(fixture_raw)
+            if fixture < 0:
+                result.add_error(f"Row {i}: fixture_weight_g must be >= 0, got {fixture}")
+                errors += 1
+                fixture = None
+        except ValueError:
+            result.add_error(f"Row {i}: fixture_weight_g is not numeric: '{fixture_raw}'")
+            errors += 1
+
+        if assembly is not None and fixture is not None and assembly <= fixture:
+            result.add_error(
+                f"Row {i}: assembly_weight_g ({assembly}) must exceed fixture_weight_g "
+                f"({fixture}) for a positive net cable mass"
+            )
+            errors += 1
+        return errors
+
+    _validate_data_csv(
+        csv_path,
+        result,
+        required_columns=["assembly_weight_g", "fixture_weight_g"],
+        check_row=check_row,
+        forbid_length_column=True,
+    )
+
+
 def validate_serdes_session(
     session_dir: Path,
     result: ValidationResult,

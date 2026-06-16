@@ -10,6 +10,7 @@ with across-session variability (mean, std, n).
 
 Outputs per profile, under derived/profiles/<profile_id>/:
 - resistance_by_length.csv  (one row per length)
+- weight_by_length.csv      (one row per length)
 - serdes_by_length.csv      (one row per length x channel x rate)
 - vna_by_length.csv         (one row per length)
 - consolidated.json         (everything above, nested, for downstream code)
@@ -134,6 +135,34 @@ def _consolidate_resistance(entries: list[tuple[SessionRecord, dict]]) -> list[d
     return rows
 
 
+def _consolidate_weight(entries: list[tuple[SessionRecord, dict]]) -> list[dict]:
+    """One row per condition: pooled net cable mass stats across sessions."""
+    by_condition: dict[str, list[tuple[SessionRecord, dict]]] = defaultdict(list)
+    for session, summary in entries:
+        by_condition[session.condition].append((session, summary))
+
+    rows: list[dict] = []
+    for condition in _sorted_conditions(by_condition):
+        sessions_summaries = by_condition[condition]
+        summaries = [s for _, s in sessions_summaries]
+        length_mm = sessions_summaries[0][0].cable_length_mm
+        per_cm = _mean_std_n([s.get("mean_cable_weight_g_per_cm") for s in summaries])
+        absolute = _mean_std_n([s.get("mean_cable_weight_g") for s in summaries])
+        rows.append(
+            {
+                "condition": condition,
+                "cable_length_mm": length_mm,
+                "n_sessions": absolute["n_sessions"],
+                "total_measurements": sum(s.get("num_measurements", 0) for s in summaries),
+                "mean_cable_weight_g": absolute["mean"],
+                "std_cable_weight_g": absolute["std"],
+                "mean_cable_weight_g_per_cm": per_cm["mean"],
+                "std_cable_weight_g_per_cm": per_cm["std"],
+            }
+        )
+    return rows
+
+
 def _consolidate_serdes(entries: list[tuple[SessionRecord, dict]]) -> list[dict]:
     """One row per (condition, channel, rate): pooled eye + margin stats."""
     by_combo: dict[tuple[str, str, float], list[dict]] = defaultdict(list)
@@ -234,6 +263,7 @@ def consolidate_profile(repo_root: Path, profile_id: str) -> dict[str, Path]:
 
     consolidators = {
         "resistance": ("resistance_by_length", _consolidate_resistance),
+        "weight": ("weight_by_length", _consolidate_weight),
         "serdes": ("serdes_by_length", _consolidate_serdes),
         "vna": ("vna_by_length", _consolidate_vna),
     }

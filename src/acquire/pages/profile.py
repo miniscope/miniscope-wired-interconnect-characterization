@@ -11,7 +11,7 @@ from src.core.loading import load_profile
 from src.core.profile_schemas import CommutatorProfile
 from src.core.session_schemas import COMMUTATOR_CONDITIONS
 
-MEASUREMENT_TYPES = ["resistance", "serdes", "vna"]
+MEASUREMENT_TYPES = ["resistance", "weight", "serdes", "vna"]
 
 
 @ui.page("/profile/{profile_id}")
