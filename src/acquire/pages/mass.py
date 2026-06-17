@@ -1,20 +1,20 @@
-"""Weight measurement page: protocol + manual entry of repeated weighings."""
+"""Mass measurement page: protocol + manual entry of repeated weighings."""
 
 from __future__ import annotations
 
 from nicegui import ui
 
-from src.acquire.controllers.sessions import record_weight_session
+from src.acquire.controllers.sessions import record_mass_session
 from src.acquire.pages.components import header, protocol_panel, require_operator
 from src.acquire.state import STATE
 
 METHODS = ["digital_balance", "mechanical_scale", "other"]
 
 
-@ui.page("/measure/weight/{profile_id}/{condition}")
-def weight_page(profile_id: str, condition: str) -> None:
-    header(f"Weight -- {profile_id} @ {condition}")
-    protocol_panel("weight")
+@ui.page("/measure/mass/{profile_id}/{condition}")
+def mass_page(profile_id: str, condition: str) -> None:
+    header(f"Mass -- {profile_id} @ {condition}")
+    protocol_panel("mass")
 
     instrument = ui.input(label="Measurement instrument *").props("outlined").classes("w-96")
     method = ui.select(METHODS, value="digital_balance", label="Method").props("outlined dense")
@@ -57,7 +57,7 @@ def weight_page(profile_id: str, condition: str) -> None:
             ui.notify("Enter at least one weighing (assembly and fixture)", type="warning")
             return
         try:
-            ref = record_weight_session(
+            ref = record_mass_session(
                 STATE.repo_root,
                 profile_id,
                 condition,

@@ -1,3 +1,3 @@
-from src.instruments.balance.driver import WeightReading, validate_reading
+from src.instruments.balance.driver import MassReading, validate_reading
 
-__all__ = ["WeightReading", "validate_reading"]
+__all__ = ["MassReading", "validate_reading"]

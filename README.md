@@ -55,7 +55,7 @@ acquisition app  ──writes──>  measurements/  ──PR──>  CI validat
 | Type | What it captures | Raw data |
 |---|---|---|
 | `resistance` | Round-trip loop resistance (one end shorted, LCR meter). Pipeline derives round-trip resistivity (ohm/m) and per-miniscope supply-voltage requirements. | `resistance.csv` |
-| `weight` | Net cable mass: the whole assembly and the bare PCB+SMA fixture are weighed and subtracted. Pipeline derives mass per centimetre (g/cm) across lengths. | `weight.csv` |
+| `mass` | Net cable mass: the whole assembly and the bare PCB+SMA fixture are weighed and subtracted. Pipeline derives mass per centimetre (g/cm) across lengths. | `mass.csv` |
 | `serdes` | GMSL2 link quality: eye diagram + link-margin sweep for {forward, back} channel x {3, 6} Gbps. | `session_manifest.csv`, `eye_*.npz`, `margin_*.csv` |
 | `vna` | 2-port S-parameters (PicoVNA). Pipeline derives attenuation vs frequency and characteristic impedance. | `manifest.csv`, `raw/*.s2p` |
 

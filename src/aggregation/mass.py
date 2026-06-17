@@ -12,9 +12,9 @@ from src.aggregation.base import BaseAggregator, SessionContext
 from src.core.schemas import MeasurementDefinition
 
 
-class WeightSummary(BaseAggregator):
+class MassSummary(BaseAggregator):
     """
-    Aggregates processed weight data across sessions.
+    Aggregates processed mass data across sessions.
     Produces a summary table CSV and a boxplot PNG of net cable mass.
     """
 
@@ -29,18 +29,18 @@ class WeightSummary(BaseAggregator):
     ) -> dict[str, Path]:
         output_dir.mkdir(parents=True, exist_ok=True)
 
-        summaries = self.load_summaries(sessions, "weight")
+        summaries = self.load_summaries(sessions, "mass")
         outputs: dict[str, Path] = {}
 
         if summaries:
             table_df = self._build_summary_table(summaries)
-            table_path = output_dir / "weight_summary.csv"
+            table_path = output_dir / "mass_summary.csv"
             table_df.to_csv(table_path, index=False)
-            outputs["weight_summary_table"] = table_path
+            outputs["mass_summary_table"] = table_path
 
-            boxplot_path = output_dir / "weight_boxplot.png"
+            boxplot_path = output_dir / "mass_boxplot.png"
             self._generate_boxplot(sessions, boxplot_path)
-            outputs["weight_boxplot"] = boxplot_path
+            outputs["mass_boxplot"] = boxplot_path
 
         return outputs
 
@@ -56,13 +56,13 @@ class WeightSummary(BaseAggregator):
             "measurement_method",
             "measurement_instrument",
             "num_measurements",
-            "mean_cable_weight_g",
-            "std_cable_weight_g",
-            "min_cable_weight_g",
-            "max_cable_weight_g",
-            "median_cable_weight_g",
-            "mean_cable_weight_g_per_cm",
-            "std_cable_weight_g_per_cm",
+            "mean_cable_mass_g",
+            "std_cable_mass_g",
+            "min_cable_mass_g",
+            "max_cable_mass_g",
+            "median_cable_mass_g",
+            "mean_cable_mass_g_per_cm",
+            "std_cable_mass_g_per_cm",
         ]
         rows: list[dict] = []
         for s in summaries:
@@ -77,14 +77,14 @@ class WeightSummary(BaseAggregator):
         labels: list[str] = []
 
         for ctx in sessions:
-            csv_path = ctx.derived_dir / "normalized_weight.csv"
+            csv_path = ctx.derived_dir / "normalized_mass.csv"
 
             if not csv_path.exists():
                 continue
 
             df = pd.read_csv(csv_path)
-            if "cable_weight_g" in df.columns:
-                values = df["cable_weight_g"].dropna().tolist()
+            if "cable_mass_g" in df.columns:
+                values = df["cable_mass_g"].dropna().tolist()
                 if values:
                     data.append(values)
                     labels.append(ctx.label)

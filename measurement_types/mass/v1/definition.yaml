@@ -1,4 +1,4 @@
-name: weight
+name: mass
 version: 1
 description: >
   Mass measurement of a coaxial cable assembly. The full assembly (cable
@@ -24,28 +24,28 @@ fields:
     description: How the masses were measured
 
 files:
-  - name: weight_csv
-    filename_pattern: "weight.csv"
+  - name: mass_csv
+    filename_pattern: "mass.csv"
     file_format: csv
     required: true
     description: >
-      CSV with columns: assembly_weight_g (required), fixture_weight_g
+      CSV with columns: assembly_mass_g (required), fixture_mass_g
       (required), [notes].
-      assembly_weight_g is the mass of the whole cable assembly (cable +
-      end PCBs + SMA connectors); fixture_weight_g is the mass of just the
+      assembly_mass_g is the mass of the whole cable assembly (cable +
+      end PCBs + SMA connectors); fixture_mass_g is the mass of just the
       non-cable parts (PCBs + SMA connectors). The net cable mass is their
-      difference, so assembly_weight_g must exceed fixture_weight_g.
+      difference, so assembly_mass_g must exceed fixture_mass_g.
       Multiple rows = repeated weighings within this session.
       Cable length is NOT a column; it comes from the session folder.
 
 processing_steps:
-  - name: normalize_weight
-    processor: src.processing.weight.NormalizeWeight
+  - name: normalize_mass
+    processor: src.processing.mass.NormalizeMass
     description: Normalize raw CSV, derive net cable mass and mass per centimetre
-    outputs: ["normalized_weight_csv", "weight_summary_json"]
+    outputs: ["normalized_mass_csv", "mass_summary_json"]
 
 aggregation:
-  - name: weight_summary
-    aggregator: src.aggregation.weight.WeightSummary
-    description: Aggregate weight measurements across sessions
-    outputs: ["weight_summary_table", "weight_boxplot"]
+  - name: mass_summary
+    aggregator: src.aggregation.mass.MassSummary
+    description: Aggregate mass measurements across sessions
+    outputs: ["mass_summary_table", "mass_boxplot"]
