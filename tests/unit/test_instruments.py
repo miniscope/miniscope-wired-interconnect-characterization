@@ -241,6 +241,16 @@ class TestRegistry:
         assert isinstance(get_serdes_driver(transport=NullI2C()), RealSerdesDriver)
         assert isinstance(get_vna_driver(), RealPicoVnaDriver)
 
+    def test_real_vna_tolerates_forwarded_kwargs(self, monkeypatch):
+        # Regression: the acquisition controller forwards cable_length_mm (a
+        # simulator-only knob) to get_vna_driver, so the real PicoVNA driver
+        # must accept and ignore it rather than crashing on construction.
+        from src.instruments.vna.real import RealPicoVnaDriver
+
+        monkeypatch.setenv(HARDWARE_ENV_VAR, "1")
+        driver = get_vna_driver(cable_length_mm=500.0)
+        assert isinstance(driver, RealPicoVnaDriver)
+
     def test_real_serdes_connect_rejects_wrong_ids(self):
         # NullI2C returns 0x00 for every register, so connect() must fail the
         # device-ID handshake rather than silently proceed.
@@ -305,6 +315,85 @@ class TestSerialPorts:
             list_ports, "comports", lambda: [SimpleNamespace(device="COM9", description="")]
         )
         assert list_serial_ports()[0].description == "COM9"
+
+
+class TestListVnaDevices:
+    """list_vna_devices() drives the VNA page's connection check.
+
+    The PicoVNA is an FTDI USB device, not a COM port, so detection goes
+    through the PicoVNA 5 SDK. These tests inject a fake `vna` module so the
+    lazy vendor import succeeds without the SDK installed.
+    """
+
+    @staticmethod
+    def _install_fake_vna(monkeypatch, device):
+        """Inject a fake `vna` package whose `.vna` attribute exposes Device."""
+        import sys
+        import types
+
+        pkg = types.ModuleType("vna")
+        pkg.vna = types.SimpleNamespace(Device=device)
+        monkeypatch.setitem(sys.modules, "vna", pkg)
+
+    def test_empty_when_sdk_missing(self, monkeypatch):
+        import sys
+
+        from src.instruments.vna.real import list_vna_devices
+
+        # `None` in sys.modules forces `from vna import vna` to raise ImportError.
+        monkeypatch.setitem(sys.modules, "vna", None)
+        assert list_vna_devices(demo=False) == []
+        assert list_vna_devices(demo=True) == []
+
+    def test_demo_reports_demo_device(self, monkeypatch):
+        from src.instruments.vna.driver import VnaDeviceInfo
+        from src.instruments.vna.real import list_vna_devices
+
+        self._install_fake_vna(monkeypatch, device=None)  # demo short-circuits before openAny
+        assert list_vna_devices(demo=True) == [VnaDeviceInfo("demo", "PicoVNA demo device")]
+
+    def test_env_var_enables_demo(self, monkeypatch):
+        from src.instruments.vna.real import DEMO_ENV_VAR, list_vna_devices
+
+        self._install_fake_vna(monkeypatch, device=None)
+        monkeypatch.setenv(DEMO_ENV_VAR, "1")
+        assert list_vna_devices()[0].serial == "demo"
+
+    def test_detects_connected_instrument(self, monkeypatch):
+        from types import SimpleNamespace
+
+        from src.instruments.vna.real import list_vna_devices
+
+        class FakeInstrument:
+            def __init__(self):
+                self.closed = False
+
+            def getInfo(self):
+                return SimpleNamespace(serial="JN001-123")
+
+            def close(self):
+                self.closed = True
+
+        instrument = FakeInstrument()
+        device = SimpleNamespace(openAny=lambda: instrument)
+        self._install_fake_vna(monkeypatch, device=device)
+
+        devices = list_vna_devices(demo=False)
+        assert len(devices) == 1
+        assert devices[0].serial == "JN001-123"
+        assert "PicoVNA" in devices[0].description
+        assert instrument.closed is True  # probe releases the handle
+
+    def test_empty_when_no_instrument(self, monkeypatch):
+        from types import SimpleNamespace
+
+        from src.instruments.vna.real import list_vna_devices
+
+        def open_any():
+            raise RuntimeError("DeviceNotFound")
+
+        self._install_fake_vna(monkeypatch, device=SimpleNamespace(openAny=open_any))
+        assert list_vna_devices(demo=False) == []
 
 
 class TestRealSerdesDemo:

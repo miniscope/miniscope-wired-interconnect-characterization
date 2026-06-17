@@ -39,9 +39,63 @@ import os
 import numpy as np
 
 from src.instruments.types import VnaSweepResult
-from src.instruments.vna.driver import VnaConfig, VnaDriver
+from src.instruments.vna.driver import VnaConfig, VnaDeviceInfo, VnaDriver
 
 DEMO_ENV_VAR = "MINISCOPE_ACQUIRE_VNA_DEMO"
+
+
+def list_vna_devices(demo: bool | None = None) -> list[VnaDeviceInfo]:
+    """Detect attached PicoVNA hardware for the acquisition app's connection check.
+
+    The PicoVNA enumerates as an FTDI USB device, not a COM port, so the SerDes
+    serial-port picker can't find it; instead we ask the PicoVNA 5 SDK whether
+    an instrument is present. Returns an empty list when the SDK is not
+    installed (analysis-only machines) or no instrument is connected, so the
+    GUI treats "no VNA" as a normal, handled state -- exactly like
+    list_serial_ports() does for the SerDes bridge.
+
+    In demo mode (``demo=True`` or MINISCOPE_ACQUIRE_VNA_DEMO=1) the SDK's
+    simulated device is reported as present, so the offline acquire path can be
+    exercised end to end. Demo still needs the `vna` package installed (it backs
+    openDemo()), so a machine without the SDK reports no device even in demo
+    mode -- which is truthful, since a capture there would fail at connect().
+    """
+    if demo is None:
+        demo = os.environ.get(DEMO_ENV_VAR, "") == "1"
+
+    # Lazy vendor import, like connect(): importing this module never needs the
+    # SDK, only probing does.
+    try:
+        from vna import vna
+    except ImportError:
+        return []
+
+    if demo:
+        return [VnaDeviceInfo(serial="demo", description="PicoVNA demo device")]
+
+    # openAny() is the SDK's own "is a PicoVNA attached?" probe: it opens the
+    # first instrument found or raises DeviceNotFoundException. We open, read the
+    # serial, and immediately close -- a brief exclusive open, mirroring the
+    # SerDes "Check link" which also connects. Going through the SDK (rather than
+    # enumerating FTDI devices directly) is what distinguishes a PicoVNA from any
+    # other FTDI gadget on the bus.
+    try:
+        instrument = vna.Device.openAny()
+    except Exception:  # noqa: BLE001 - any open failure means "not available"
+        return []
+    try:
+        info = instrument.getInfo()
+        serial = str(getattr(info, "serial", "") or "")
+    except Exception:  # noqa: BLE001 - present but unreadable: still report it
+        serial = ""
+    finally:
+        close = getattr(instrument, "close", None)
+        if callable(close):
+            try:
+                close()
+            except Exception:  # noqa: BLE001 - best-effort release of the probe handle
+                pass
+    return [VnaDeviceInfo(serial=serial, description=f"PicoVNA {serial}".strip())]
 
 
 class RealPicoVnaDriver(VnaDriver):
@@ -65,6 +119,9 @@ class RealPicoVnaDriver(VnaDriver):
         calibration_file: str | None = None,
         power_dbm: float = 0.0,
         bandwidth_hz: float = 1000.0,
+        **_: object,  # tolerate forwarded kwargs (e.g. cable_length_mm) the real
+        # instrument doesn't use, mirroring RealSerdesDriver. The acquisition
+        # controller forwards cable_length_mm for the simulator's length model.
     ) -> None:
         if demo is None:
             demo = os.environ.get(DEMO_ENV_VAR, "") == "1"

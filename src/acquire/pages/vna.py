@@ -9,7 +9,9 @@ from src.acquire.pages.components import header, png_source, protocol_panel, req
 from src.acquire.plots import render_attenuation
 from src.acquire.state import STATE
 from src.core.session_schemas import parse_condition_dir
+from src.instruments.registry import use_hardware
 from src.instruments.types import VnaSweepResult
+from src.instruments.vna.real import list_vna_devices
 
 CALIBRATION_TYPES = ["SOLT", "TRL", "electronic_cal", "other"]
 
@@ -27,6 +29,40 @@ def vna_page(profile_id: str, condition: str) -> None:
         "outlined dense"
     )
     notes = ui.input(label="Session notes").props("outlined").classes("w-full")
+
+    # Connection check (hardware mode only). The PicoVNA enumerates as an FTDI
+    # USB device, not a COM port, so we ask the PicoVNA 5 SDK whether an
+    # instrument is attached rather than listing serial ports. With none present
+    # we warn and disable Capture instead of letting the sweep fail deep in the
+    # driver. The simulator needs no instrument, so this is skipped in simulate
+    # mode. This mirrors the SerDes page's serial-port check.
+    hardware = use_hardware(STATE.simulate)
+    vna_status = None
+
+    async def refresh_vna() -> None:
+        # Detecting the PicoVNA opens the instrument briefly, so run it off the
+        # UI thread (like the SerDes "Check link"), and disable Capture while
+        # the probe is in flight so it can't be clicked against a stale state.
+        capture_button.disable()
+        vna_status.text = "Checking for VNA..."
+        vna_status.classes(replace="text-gray-600 text-sm")
+        devices = await run.io_bound(list_vna_devices)
+        if devices:
+            vna_status.text = f"VNA detected: {devices[0].description}"
+            vna_status.classes(replace="text-green-700 text-sm")
+            capture_button.enable()
+        else:
+            vna_status.text = (
+                "No VNA detected. Connect the PicoVNA (and install the PicoVNA 5 "
+                "SDK), then click Refresh."
+            )
+            vna_status.classes(replace="text-red-600 text-sm")
+            capture_button.disable()
+
+    if hardware:
+        with ui.row().classes("items-center gap-2"):
+            ui.button("Refresh", icon="refresh", on_click=refresh_vna).props("outline")
+            vna_status = ui.label("").classes("text-sm")
 
     status_label = ui.label("").classes("text-gray-700")
     preview = ui.column().classes("w-full")
@@ -83,3 +119,11 @@ def vna_page(profile_id: str, condition: str) -> None:
         capture_button = ui.button("Capture sweep", icon="play_arrow", on_click=capture)
         save_button = ui.button("Save session", icon="save", on_click=save)
         save_button.disable()
+
+    # Kick off the initial detection now that the buttons exist (refresh_vna
+    # toggles Capture). Deferred via a one-shot timer so the hardware probe
+    # runs after the page renders instead of blocking it. Skipped in simulate
+    # mode, where no instrument is needed.
+    if hardware:
+        capture_button.disable()
+        ui.timer(0.1, refresh_vna, once=True)

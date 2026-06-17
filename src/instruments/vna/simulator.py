@@ -14,7 +14,7 @@ class SimulatedVnaDriver(VnaDriver):
     (a reasonable coax model) and a small, wiggly return loss.
     """
 
-    def __init__(self, cable_length_mm: float = 1000.0, seed: int = 0) -> None:
+    def __init__(self, cable_length_mm: float = 1000.0, seed: int = 0, **_: object) -> None:
         self._cable_length_mm = cable_length_mm
         self._seed = seed
         self._connected = False
