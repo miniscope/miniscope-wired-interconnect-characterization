@@ -57,9 +57,7 @@ class TestNormalizeMass:
             df["cable_mass_g_per_cm"], expected_net / 50, check_names=False
         )
 
-    def test_summary_json_keys(
-        self, processor, definition, mass_session_dir: Path, tmp_path: Path
-    ):
+    def test_summary_json_keys(self, processor, definition, mass_session_dir: Path, tmp_path: Path):
         session = load_session(mass_session_dir / "session.yaml")
         outputs = processor.process(mass_session_dir, session, definition, tmp_path / "output")
 

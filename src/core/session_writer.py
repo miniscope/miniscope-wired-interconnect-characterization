@@ -229,9 +229,7 @@ def write_mass_session(
     if not readings:
         raise ValueError("At least one mass reading is required")
 
-    ref = _start_session(
-        repo_root, profile_id, cable_length_mm, "mass", meta, condition=condition
-    )
+    ref = _start_session(repo_root, profile_id, cable_length_mm, "mass", meta, condition=condition)
     with open(ref.path / "mass.csv", "w", newline="") as f:
         writer = csv.writer(f)
         writer.writerow(["assembly_mass_g", "fixture_mass_g", "notes"])
