@@ -177,7 +177,7 @@ class TestMiniscopeControllers:
 
 
 class TestProtocols:
-    @pytest.mark.parametrize("mtype", ["resistance", "weight", "serdes", "vna"])
+    @pytest.mark.parametrize("mtype", ["resistance", "mass", "serdes", "vna"])
     def test_every_type_has_protocol(self, mtype: str):
         text = load_protocol_markdown(mtype)
         assert len(text) > 200

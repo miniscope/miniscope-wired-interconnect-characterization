@@ -10,14 +10,14 @@ from src.core.session_schemas import SessionRecord
 from src.processing.base import BaseProcessor, copy_type_fields, session_header
 
 
-class NormalizeWeight(BaseProcessor):
+class NormalizeMass(BaseProcessor):
     """
-    Reads weight.csv, derives the net cable mass and mass per centimetre, and
+    Reads mass.csv, derives the net cable mass and mass per centimetre, and
     writes normalized CSV + summary JSON.
 
-    The weight protocol weighs the whole cable assembly and the non-cable
+    The mass protocol weighs the whole cable assembly and the non-cable
     fixture (PCBs + SMA connectors) separately, so the net cable mass is
-    ``assembly_weight_g - fixture_weight_g``. Cable length is structural: it
+    ``assembly_mass_g - fixture_mass_g``. Cable length is structural: it
     comes from the session, not the CSV, and yields the mass per centimetre.
     """
 
@@ -36,29 +36,29 @@ class NormalizeWeight(BaseProcessor):
         df = self._read_measurements(session_dir)
         df = self._compute_derived(df, session.cable_length_mm)
 
-        normalized_path = output_dir / "normalized_weight.csv"
+        normalized_path = output_dir / "normalized_mass.csv"
         df.to_csv(normalized_path, index=False)
 
         summary = self._compute_summary(df, session)
-        summary_path = output_dir / "weight_summary.json"
+        summary_path = output_dir / "mass_summary.json"
         with open(summary_path, "w") as f:
             json.dump(summary, f, indent=2)
 
         return {
-            "normalized_weight_csv": normalized_path,
-            "weight_summary_json": summary_path,
+            "normalized_mass_csv": normalized_path,
+            "mass_summary_json": summary_path,
         }
 
     def _read_measurements(self, session_dir: Path) -> pd.DataFrame:
-        """Read weight.csv and coerce the mass columns to numbers."""
-        csv_path = session_dir / "weight.csv"
+        """Read mass.csv and coerce the mass columns to numbers."""
+        csv_path = session_dir / "mass.csv"
         df = pd.read_csv(csv_path)
 
         df.columns = df.columns.str.strip()
-        for col in ["assembly_weight_g", "fixture_weight_g"]:
+        for col in ["assembly_mass_g", "fixture_mass_g"]:
             df[col] = pd.to_numeric(df[col], errors="coerce")
 
-        df = df.dropna(subset=["assembly_weight_g", "fixture_weight_g"])
+        df = df.dropna(subset=["assembly_mass_g", "fixture_mass_g"])
         return df
 
     def _compute_derived(self, df: pd.DataFrame, cable_length_mm: float | None) -> pd.DataFrame:
@@ -68,10 +68,10 @@ class NormalizeWeight(BaseProcessor):
         no length, so only the net mass applies.
         """
         df = df.copy()
-        df["cable_weight_g"] = df["assembly_weight_g"] - df["fixture_weight_g"]
+        df["cable_mass_g"] = df["assembly_mass_g"] - df["fixture_mass_g"]
         if cable_length_mm is not None:
             cable_length_cm = cable_length_mm / 10.0
-            df["cable_weight_g_per_cm"] = df["cable_weight_g"] / cable_length_cm
+            df["cable_mass_g_per_cm"] = df["cable_mass_g"] / cable_length_cm
         return df
 
     def _compute_summary(self, df: pd.DataFrame, session: SessionRecord) -> dict:
@@ -79,10 +79,10 @@ class NormalizeWeight(BaseProcessor):
         summary: dict = {**session_header(session), "num_measurements": len(df)}
 
         for col in [
-            "assembly_weight_g",
-            "fixture_weight_g",
-            "cable_weight_g",
-            "cable_weight_g_per_cm",
+            "assembly_mass_g",
+            "fixture_mass_g",
+            "cable_mass_g",
+            "cable_mass_g_per_cm",
         ]:
             if col in df.columns and not df[col].isna().all():
                 series = df[col].dropna()

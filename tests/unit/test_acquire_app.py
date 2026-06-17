@@ -26,7 +26,7 @@ class TestAppBuild:
         assert "/miniscopes" in routes
         assert "/profile/{profile_id}" in routes
         assert "/measure/resistance/{profile_id}/{condition}" in routes
-        assert "/measure/weight/{profile_id}/{condition}" in routes
+        assert "/measure/mass/{profile_id}/{condition}" in routes
         assert "/measure/serdes/{profile_id}/{condition}" in routes
         assert "/measure/vna/{profile_id}/{condition}" in routes
 

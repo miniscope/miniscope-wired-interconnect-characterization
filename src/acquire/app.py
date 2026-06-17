@@ -23,12 +23,12 @@ def build_app(repo_root: Path, simulate: bool | None = None) -> None:
     # Importing the page modules registers their @ui.page routes.
     from src.acquire.pages import (  # noqa: F401
         landing,
+        mass,
         miniscopes,
         profile,
         resistance,
         serdes,
         vna,
-        weight,
     )
 
 

@@ -282,14 +282,14 @@ def validate_resistance_csv(
     )
 
 
-def validate_weight_csv(
+def validate_mass_csv(
     csv_path: Path,
     result: ValidationResult,
 ) -> None:
     """
-    Weight-specific CSV validation.
+    Mass-specific CSV validation.
 
-    Required columns: assembly_weight_g, fixture_weight_g
+    Required columns: assembly_mass_g, fixture_mass_g
     Optional columns: notes
     Cable length is structural (it comes from the session folder), so it is
     NOT a column. The assembly mass must be positive, the fixture mass
@@ -302,31 +302,31 @@ def validate_weight_csv(
         assembly: float | None = None
         fixture: float | None = None
 
-        assembly_raw = row.get("assembly_weight_g", "").strip()
+        assembly_raw = row.get("assembly_mass_g", "").strip()
         try:
             assembly = float(assembly_raw)
             if assembly <= 0:
-                result.add_error(f"Row {i}: assembly_weight_g must be positive, got {assembly}")
+                result.add_error(f"Row {i}: assembly_mass_g must be positive, got {assembly}")
                 errors += 1
                 assembly = None
         except ValueError:
-            result.add_error(f"Row {i}: assembly_weight_g is not numeric: '{assembly_raw}'")
+            result.add_error(f"Row {i}: assembly_mass_g is not numeric: '{assembly_raw}'")
             errors += 1
 
-        fixture_raw = row.get("fixture_weight_g", "").strip()
+        fixture_raw = row.get("fixture_mass_g", "").strip()
         try:
             fixture = float(fixture_raw)
             if fixture < 0:
-                result.add_error(f"Row {i}: fixture_weight_g must be >= 0, got {fixture}")
+                result.add_error(f"Row {i}: fixture_mass_g must be >= 0, got {fixture}")
                 errors += 1
                 fixture = None
         except ValueError:
-            result.add_error(f"Row {i}: fixture_weight_g is not numeric: '{fixture_raw}'")
+            result.add_error(f"Row {i}: fixture_mass_g is not numeric: '{fixture_raw}'")
             errors += 1
 
         if assembly is not None and fixture is not None and assembly <= fixture:
             result.add_error(
-                f"Row {i}: assembly_weight_g ({assembly}) must exceed fixture_weight_g "
+                f"Row {i}: assembly_mass_g ({assembly}) must exceed fixture_mass_g "
                 f"({fixture}) for a positive net cable mass"
             )
             errors += 1
@@ -335,7 +335,7 @@ def validate_weight_csv(
     _validate_data_csv(
         csv_path,
         result,
-        required_columns=["assembly_weight_g", "fixture_weight_g"],
+        required_columns=["assembly_mass_g", "fixture_mass_g"],
         check_row=check_row,
         forbid_length_column=True,
     )
