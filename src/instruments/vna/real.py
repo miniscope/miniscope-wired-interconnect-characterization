@@ -35,6 +35,7 @@ and rejects user-cal application):
 from __future__ import annotations
 
 import os
+import subprocess
 
 import numpy as np
 
@@ -43,59 +44,78 @@ from src.instruments.vna.driver import VnaConfig, VnaDeviceInfo, VnaDriver
 
 DEMO_ENV_VAR = "MINISCOPE_ACQUIRE_VNA_DEMO"
 
+# The PicoVNA presents as an FTDI-bus USB device under Pico Technology's USB
+# vendor ID (0x0CE9) with a custom PID (e.g. PID_1500), bound to Pico's FTDI
+# driver -- so it never shows up as a COM port and the SerDes serial-port
+# picker can't see it. Windows still enumerates it via PnP as a "PicoVNA Series
+# Analyzer" though, which is how we detect presence below.
+_PICO_VNA_PNP_QUERY = (
+    "Get-PnpDevice -PresentOnly | "
+    "Where-Object { $_.InstanceId -like 'USB\\VID_0CE9*' -and $_.FriendlyName -like 'PicoVNA*' } | "
+    "ForEach-Object { $_.InstanceId + '|' + $_.FriendlyName }"
+)
+
 
 def list_vna_devices(demo: bool | None = None) -> list[VnaDeviceInfo]:
     """Detect attached PicoVNA hardware for the acquisition app's connection check.
 
-    The PicoVNA enumerates as an FTDI USB device, not a COM port, so the SerDes
-    serial-port picker can't find it; instead we ask the PicoVNA 5 SDK whether
-    an instrument is present. Returns an empty list when the SDK is not
-    installed (analysis-only machines) or no instrument is connected, so the
-    GUI treats "no VNA" as a normal, handled state -- exactly like
-    list_serial_ports() does for the SerDes bridge.
+    The PicoVNA is an FTDI USB device, not a COM port, so the SerDes serial-port
+    picker can't find it. We enumerate it the way the OS already does -- via
+    Windows PnP, by Pico's USB vendor ID -- which is a true "is it plugged in?"
+    check that, unlike opening the instrument, needs neither the PicoVNA 5 SDK
+    nor exclusive access. Capture still needs the SDK (see vna_sdk_available);
+    keeping the two checks separate lets the GUI tell "no instrument connected"
+    apart from "connected but the SDK isn't installed".
 
-    In demo mode (``demo=True`` or MINISCOPE_ACQUIRE_VNA_DEMO=1) the SDK's
-    simulated device is reported as present, so the offline acquire path can be
-    exercised end to end. Demo still needs the `vna` package installed (it backs
-    openDemo()), so a machine without the SDK reports no device even in demo
-    mode -- which is truthful, since a capture there would fail at connect().
+    Returns an empty list when no instrument is present or detection isn't
+    possible (e.g. non-Windows, or PowerShell unavailable), so the GUI treats
+    "no VNA" as a normal, handled state -- like list_serial_ports() for the
+    SerDes bridge. In demo mode (``demo=True`` or MINISCOPE_ACQUIRE_VNA_DEMO=1)
+    the SDK's simulated device is reported as present so the offline acquire
+    path can be exercised end to end.
     """
     if demo is None:
         demo = os.environ.get(DEMO_ENV_VAR, "") == "1"
-
-    # Lazy vendor import, like connect(): importing this module never needs the
-    # SDK, only probing does.
-    try:
-        from vna import vna
-    except ImportError:
-        return []
-
     if demo:
         return [VnaDeviceInfo(serial="demo", description="PicoVNA demo device")]
 
-    # openAny() is the SDK's own "is a PicoVNA attached?" probe: it opens the
-    # first instrument found or raises DeviceNotFoundException. We open, read the
-    # serial, and immediately close -- a brief exclusive open, mirroring the
-    # SerDes "Check link" which also connects. Going through the SDK (rather than
-    # enumerating FTDI devices directly) is what distinguishes a PicoVNA from any
-    # other FTDI gadget on the bus.
     try:
-        instrument = vna.Device.openAny()
-    except Exception:  # noqa: BLE001 - any open failure means "not available"
+        result = subprocess.run(
+            ["powershell", "-NoProfile", "-NonInteractive", "-Command", _PICO_VNA_PNP_QUERY],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+    except (OSError, subprocess.SubprocessError):
+        # No PowerShell (non-Windows bench) or it failed to launch -- not an
+        # error, just "can't detect here". Capture surfaces a clear message if
+        # the user tries anyway.
         return []
+
+    devices: list[VnaDeviceInfo] = []
+    for line in result.stdout.splitlines():
+        instance_id, sep, friendly = line.strip().partition("|")
+        if not sep:
+            continue
+        # Instance id looks like USB\VID_0CE9&PID_1500\PW10080A; the trailing
+        # segment is the unit serial.
+        serial = instance_id.rsplit("\\", 1)[-1]
+        devices.append(VnaDeviceInfo(serial=serial, description=friendly.strip() or "PicoVNA"))
+    return devices
+
+
+def vna_sdk_available() -> bool:
+    """Whether the PicoVNA 5 SDK (the `vna` package) can be imported for capture.
+
+    Detection (list_vna_devices) only needs the OS to see the USB device; the
+    actual sweep needs this SDK plus its native libraries. The GUI checks both
+    so it can point the user at the missing piece.
+    """
     try:
-        info = instrument.getInfo()
-        serial = str(getattr(info, "serial", "") or "")
-    except Exception:  # noqa: BLE001 - present but unreadable: still report it
-        serial = ""
-    finally:
-        close = getattr(instrument, "close", None)
-        if callable(close):
-            try:
-                close()
-            except Exception:  # noqa: BLE001 - best-effort release of the probe handle
-                pass
-    return [VnaDeviceInfo(serial=serial, description=f"PicoVNA {serial}".strip())]
+        from vna import vna  # noqa: F401  (import probe; presence only)
+    except ImportError:
+        return False
+    return True
 
 
 class RealPicoVnaDriver(VnaDriver):

@@ -11,9 +11,14 @@ from src.acquire.state import STATE
 from src.core.session_schemas import parse_condition_dir
 from src.instruments.registry import use_hardware
 from src.instruments.types import VnaSweepResult
-from src.instruments.vna.real import list_vna_devices
+from src.instruments.vna.real import list_vna_devices, vna_sdk_available
 
 CALIBRATION_TYPES = ["SOLT", "TRL", "electronic_cal", "other"]
+
+
+def _probe_vna() -> tuple[list, bool]:
+    """Detect the PicoVNA and whether its SDK is installed (run off the UI thread)."""
+    return list_vna_devices(), vna_sdk_available()
 
 
 @ui.page("/measure/vna/{profile_id}/{condition}")
@@ -30,34 +35,39 @@ def vna_page(profile_id: str, condition: str) -> None:
     )
     notes = ui.input(label="Session notes").props("outlined").classes("w-full")
 
-    # Connection check (hardware mode only). The PicoVNA enumerates as an FTDI
-    # USB device, not a COM port, so we ask the PicoVNA 5 SDK whether an
-    # instrument is attached rather than listing serial ports. With none present
-    # we warn and disable Capture instead of letting the sweep fail deep in the
-    # driver. The simulator needs no instrument, so this is skipped in simulate
-    # mode. This mirrors the SerDes page's serial-port check.
+    # Connection check (hardware mode only). The PicoVNA is an FTDI USB device,
+    # not a COM port, so we enumerate it via the OS (by Pico's USB vendor ID)
+    # rather than listing serial ports. Capture additionally needs the PicoVNA 5
+    # SDK, so we report three distinct states -- not connected / connected but
+    # no SDK / ready -- and only enable Capture in the last. The simulator needs
+    # no instrument, so this is skipped in simulate mode. Mirrors the SerDes
+    # page's serial-port check.
     hardware = use_hardware(STATE.simulate)
     vna_status = None
 
     async def refresh_vna() -> None:
-        # Detecting the PicoVNA opens the instrument briefly, so run it off the
-        # UI thread (like the SerDes "Check link"), and disable Capture while
-        # the probe is in flight so it can't be clicked against a stale state.
+        # The detection runs a hardware/OS probe, so do it off the UI thread
+        # (like the SerDes "Check link") and disable Capture while it's in
+        # flight so it can't be clicked against a stale state.
         capture_button.disable()
         vna_status.text = "Checking for VNA..."
         vna_status.classes(replace="text-gray-600 text-sm")
-        devices = await run.io_bound(list_vna_devices)
-        if devices:
-            vna_status.text = f"VNA detected: {devices[0].description}"
-            vna_status.classes(replace="text-green-700 text-sm")
-            capture_button.enable()
-        else:
-            vna_status.text = (
-                "No VNA detected. Connect the PicoVNA (and install the PicoVNA 5 "
-                "SDK), then click Refresh."
-            )
+        devices, sdk_ok = await run.io_bound(_probe_vna)
+        if not devices:
+            vna_status.text = "No VNA detected. Connect the PicoVNA, then click Refresh."
             vna_status.classes(replace="text-red-600 text-sm")
-            capture_button.disable()
+            return
+        device = devices[0]
+        if not sdk_ok:
+            vna_status.text = (
+                f"{device.description} detected ({device.serial}), but the PicoVNA 5 "
+                "SDK isn't installed -- capture needs it. See src/instruments/vna/real.py."
+            )
+            vna_status.classes(replace="text-amber-700 text-sm")
+            return
+        vna_status.text = f"VNA ready: {device.description} ({device.serial})"
+        vna_status.classes(replace="text-green-700 text-sm")
+        capture_button.enable()
 
     if hardware:
         with ui.row().classes("items-center gap-2"):

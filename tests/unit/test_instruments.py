@@ -320,80 +320,83 @@ class TestSerialPorts:
 class TestListVnaDevices:
     """list_vna_devices() drives the VNA page's connection check.
 
-    The PicoVNA is an FTDI USB device, not a COM port, so detection goes
-    through the PicoVNA 5 SDK. These tests inject a fake `vna` module so the
-    lazy vendor import succeeds without the SDK installed.
+    The PicoVNA is an FTDI USB device, not a COM port, so presence is detected
+    via Windows PnP (by Pico's USB vendor ID), independent of the PicoVNA 5 SDK.
+    These tests stub the PnP subprocess so they run on any OS.
     """
 
     @staticmethod
-    def _install_fake_vna(monkeypatch, device):
-        """Inject a fake `vna` package whose `.vna` attribute exposes Device."""
-        import sys
-        import types
+    def _stub_pnp(monkeypatch, stdout):
+        """Make the PnP query return canned stdout, as `powershell` would."""
+        from types import SimpleNamespace
 
-        pkg = types.ModuleType("vna")
-        pkg.vna = types.SimpleNamespace(Device=device)
-        monkeypatch.setitem(sys.modules, "vna", pkg)
+        from src.instruments.vna import real
 
-    def test_empty_when_sdk_missing(self, monkeypatch):
-        import sys
+        def fake_run(*_a, **_k):
+            return SimpleNamespace(stdout=stdout, returncode=0)
 
+        monkeypatch.setattr(real.subprocess, "run", fake_run)
+
+    def test_parses_present_device(self, monkeypatch):
         from src.instruments.vna.real import list_vna_devices
 
-        # `None` in sys.modules forces `from vna import vna` to raise ImportError.
-        monkeypatch.setitem(sys.modules, "vna", None)
+        self._stub_pnp(monkeypatch, "USB\\VID_0CE9&PID_1500\\PW10080A|PicoVNA Series Analyzer\r\n")
+        devices = list_vna_devices(demo=False)
+        assert len(devices) == 1
+        assert devices[0].serial == "PW10080A"
+        assert devices[0].description == "PicoVNA Series Analyzer"
+
+    def test_empty_when_no_device(self, monkeypatch):
+        from src.instruments.vna.real import list_vna_devices
+
+        self._stub_pnp(monkeypatch, "")
         assert list_vna_devices(demo=False) == []
-        assert list_vna_devices(demo=True) == []
+
+    def test_empty_when_powershell_missing(self, monkeypatch):
+        from src.instruments.vna import real
+        from src.instruments.vna.real import list_vna_devices
+
+        def boom(*_a, **_k):
+            raise FileNotFoundError("powershell")
+
+        monkeypatch.setattr(real.subprocess, "run", boom)
+        assert list_vna_devices(demo=False) == []
 
     def test_demo_reports_demo_device(self, monkeypatch):
         from src.instruments.vna.driver import VnaDeviceInfo
         from src.instruments.vna.real import list_vna_devices
 
-        self._install_fake_vna(monkeypatch, device=None)  # demo short-circuits before openAny
+        # Demo short-circuits before any PnP query, so no instrument is needed.
+        self._stub_pnp(monkeypatch, "")
         assert list_vna_devices(demo=True) == [VnaDeviceInfo("demo", "PicoVNA demo device")]
 
     def test_env_var_enables_demo(self, monkeypatch):
         from src.instruments.vna.real import DEMO_ENV_VAR, list_vna_devices
 
-        self._install_fake_vna(monkeypatch, device=None)
         monkeypatch.setenv(DEMO_ENV_VAR, "1")
         assert list_vna_devices()[0].serial == "demo"
 
-    def test_detects_connected_instrument(self, monkeypatch):
-        from types import SimpleNamespace
 
-        from src.instruments.vna.real import list_vna_devices
+class TestVnaSdkAvailable:
+    def test_false_without_sdk(self, monkeypatch):
+        import sys
 
-        class FakeInstrument:
-            def __init__(self):
-                self.closed = False
+        from src.instruments.vna.real import vna_sdk_available
 
-            def getInfo(self):
-                return SimpleNamespace(serial="JN001-123")
+        # `None` in sys.modules forces `from vna import vna` to raise ImportError.
+        monkeypatch.setitem(sys.modules, "vna", None)
+        assert vna_sdk_available() is False
 
-            def close(self):
-                self.closed = True
+    def test_true_with_sdk(self, monkeypatch):
+        import sys
+        import types
 
-        instrument = FakeInstrument()
-        device = SimpleNamespace(openAny=lambda: instrument)
-        self._install_fake_vna(monkeypatch, device=device)
+        from src.instruments.vna.real import vna_sdk_available
 
-        devices = list_vna_devices(demo=False)
-        assert len(devices) == 1
-        assert devices[0].serial == "JN001-123"
-        assert "PicoVNA" in devices[0].description
-        assert instrument.closed is True  # probe releases the handle
-
-    def test_empty_when_no_instrument(self, monkeypatch):
-        from types import SimpleNamespace
-
-        from src.instruments.vna.real import list_vna_devices
-
-        def open_any():
-            raise RuntimeError("DeviceNotFound")
-
-        self._install_fake_vna(monkeypatch, device=SimpleNamespace(openAny=open_any))
-        assert list_vna_devices(demo=False) == []
+        pkg = types.ModuleType("vna")
+        pkg.vna = types.SimpleNamespace()
+        monkeypatch.setitem(sys.modules, "vna", pkg)
+        assert vna_sdk_available() is True
 
 
 class TestRealSerdesDemo:
