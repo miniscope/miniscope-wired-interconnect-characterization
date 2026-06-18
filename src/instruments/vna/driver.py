@@ -12,6 +12,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
+from typing import NamedTuple
 
 import numpy as np
 
@@ -27,6 +28,18 @@ class VnaConfig:
     num_points: int = 1001
     ref_impedance_ohm: float = 50.0
     calibration: str = "SOLT"  # informational; calibration is a guided manual step
+
+
+class VnaDeviceInfo(NamedTuple):
+    """A VNA the host can see, for the acquisition app's connection check.
+
+    The PicoVNA analogue of SerDes's SerialPortInfo: it enumerates as an FTDI
+    USB device (not a COM port), so detection goes through the PicoVNA 5 SDK
+    rather than the serial-port list -- see vna/real.py:list_vna_devices.
+    """
+
+    serial: str  # instrument serial number, or "demo" for the SDK demo device
+    description: str  # human label for the picker, e.g. "PicoVNA 0123ABC"
 
 
 class VnaDriver(ABC):

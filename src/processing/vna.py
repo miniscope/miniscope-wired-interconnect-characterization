@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
@@ -21,51 +22,76 @@ def _interpolate_at_freq(
     return float(np.interp(target_hz, frequencies_hz, values_db))
 
 
-def characteristic_impedance_profile(ts: TouchstoneData) -> np.ndarray | None:
+@dataclass
+class AbcdMatrix:
+    """The ABCD (transmission/cascade) matrix of a 2-port, per frequency.
+
+    Each of a, b, c, d is a complex array over frequency: a and d are
+    dimensionless, b has units of ohms, c of siemens. The matrix relates the
+    input port (V1, I1) to the output (V2, I2) as
+    [V1 I1]^T = [[a, b], [c, d]] [V2, -I2]^T, which makes cascaded networks
+    multiply. For a reciprocal 2-port det = a*d - b*c = 1. Built from
+    S-parameters via `sparams_to_abcd`; the cable's characteristic impedance
+    follows as sqrt(b/c) -- see `characteristic_impedance`.
     """
-    Per-frequency characteristic impedance Z0(f) of the cable, in ohms.
 
-    Method: treat the cable as a 2-port and convert its complex
-    S-parameters (normalized to the measurement reference impedance) to the
-    ABCD matrix, then use the transmission-line identity Z0 = sqrt(B/C).
-    This is exact for a uniform reciprocal line and a robust estimate for a
-    real cable; it needs phase, which is why the Touchstone parser retains
-    complex S-parameters. Returns the complex Z0(f); callers typically take
-    the real part. Returns None if complex data is unavailable.
+    a: np.ndarray
+    b: np.ndarray
+    c: np.ndarray
+    d: np.ndarray
 
-    NOTE: connector/fixture discontinuities dominate Z0 at the band edges, so
-    the scalar in `estimate_characteristic_impedance` reports a mid-band
-    value rather than a single point.
+
+def sparams_to_abcd(
+    s11: np.ndarray,
+    s21: np.ndarray,
+    s12: np.ndarray,
+    s22: np.ndarray,
+    z_ref: float = 50.0,
+) -> AbcdMatrix:
+    """Convert 2-port S-parameters (referenced to real ``z_ref``) to ABCD.
+
+    Standard reciprocal-network conversion (same real reference impedance at
+    both ports). The conversion divides by S21, so entries blow up at deep
+    transmission nulls (|S21| -> 0); callers guard with np.isfinite. Inputs are
+    coerced to complex arrays, so the cable's complex S-parameters (magnitude
+    and phase) feed straight in.
     """
-    if ts.s21.size == 0:
-        return None
+    s11 = np.asarray(s11, dtype=complex)
+    s21 = np.asarray(s21, dtype=complex)
+    s12 = np.asarray(s12, dtype=complex)
+    s22 = np.asarray(s22, dtype=complex)
 
-    z_ref = ts.ref_impedance
-    s11, s21, s12, s22 = ts.s11, ts.s21, ts.s12, ts.s22
-
-    # S -> ABCD (B and C are all we need for Z0 = sqrt(B/C)).
     with np.errstate(divide="ignore", invalid="ignore"):
         denom = 2.0 * s21
+        a = ((1 + s11) * (1 - s22) + s12 * s21) / denom
         b = z_ref * ((1 + s11) * (1 + s22) - s12 * s21) / denom
         c = ((1 - s11) * (1 - s22) - s12 * s21) / (denom * z_ref)
-        z0 = np.sqrt(b / c)
+        d = ((1 - s11) * (1 + s22) + s12 * s21) / denom
 
-    return z0
+    return AbcdMatrix(a=a, b=b, c=c, d=d)
 
 
-def estimate_characteristic_impedance(ts: TouchstoneData) -> float | None:
+def characteristic_impedance(abcd: AbcdMatrix) -> np.ndarray:
+    """Characteristic impedance Z0(f) = sqrt(B/C) from an ABCD matrix, in ohms.
+
+    Exact for a uniform reciprocal line and a robust estimate for a real cable.
+    Complex in general; callers typically take the real part.
     """
-    Single characteristic-impedance value for the cable, in ohms.
+    with np.errstate(divide="ignore", invalid="ignore"):
+        return np.sqrt(abcd.b / abcd.c)
 
-    Takes the median of Re(Z0(f)) over the middle 80% of the swept band
-    (dropping the lowest/highest 10% of points, where connector and fixture
-    effects distort the estimate). Returns None if no usable points exist.
+
+def summarize_characteristic_impedance(z0_real: np.ndarray) -> float | None:
+    """Single robust characteristic impedance (ohms) from a Re(Z0(f)) trace.
+
+    Median of Re(Z0) over the middle 80% of the band, dropping the lowest and
+    highest 10% of points (where connector and fixture effects distort the
+    estimate) and any non-finite/non-positive samples (the spikes at deep S21
+    nulls). Returns None if no usable points remain. Shared by the offline
+    metric (`estimate_characteristic_impedance`) and the capture-page readout
+    so both report the same number.
     """
-    z0 = characteristic_impedance_profile(ts)
-    if z0 is None:
-        return None
-
-    real = np.real(z0)
+    real = np.asarray(z0_real, dtype=float)
     finite = np.isfinite(real) & (real > 0)
     if not finite.any():
         return None
@@ -79,6 +105,42 @@ def estimate_characteristic_impedance(ts: TouchstoneData) -> float | None:
         usable = real[finite]
 
     return float(np.median(usable))
+
+
+def characteristic_impedance_profile(ts: TouchstoneData) -> np.ndarray | None:
+    """
+    Per-frequency characteristic impedance Z0(f) of the cable, in ohms.
+
+    Method: treat the cable as a 2-port, convert its complex S-parameters
+    (normalized to the measurement reference impedance) to the ABCD matrix via
+    `sparams_to_abcd`, then take Z0 = sqrt(B/C) (`characteristic_impedance`).
+    This needs phase, which is why the Touchstone parser retains complex
+    S-parameters. Returns the complex Z0(f) (callers typically take the real
+    part), or None if complex data is unavailable.
+
+    NOTE: connector/fixture discontinuities dominate Z0 at the band edges, so
+    the scalar in `estimate_characteristic_impedance` reports a mid-band
+    value rather than a single point.
+    """
+    if ts.s21.size == 0:
+        return None
+
+    abcd = sparams_to_abcd(ts.s11, ts.s21, ts.s12, ts.s22, z_ref=ts.ref_impedance)
+    return characteristic_impedance(abcd)
+
+
+def estimate_characteristic_impedance(ts: TouchstoneData) -> float | None:
+    """
+    Single characteristic-impedance value for the cable, in ohms.
+
+    Takes the median of Re(Z0(f)) over the middle 80% of the swept band
+    (dropping the lowest/highest 10% of points, where connector and fixture
+    effects distort the estimate). Returns None if no usable points exist.
+    """
+    z0 = characteristic_impedance_profile(ts)
+    if z0 is None:
+        return None
+    return summarize_characteristic_impedance(np.real(z0))
 
 
 class ProcessVNA(BaseProcessor):

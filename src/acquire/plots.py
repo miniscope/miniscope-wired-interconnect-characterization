@@ -17,6 +17,11 @@ import matplotlib.pyplot as plt
 
 from src.instruments.types import EyeDiagram, MarginSweep, VnaSweepResult
 from src.processing.eye import eye_figure
+from src.processing.vna import (
+    characteristic_impedance,
+    sparams_to_abcd,
+    summarize_characteristic_impedance,
+)
 
 
 def _fig_to_png(fig) -> bytes:
@@ -54,14 +59,56 @@ def render_margin(sweep: MarginSweep) -> bytes:
     return _fig_to_png(fig)
 
 
-def render_attenuation(result: VnaSweepResult) -> bytes:
-    """Attenuation (|S21| in dB, sign-flipped) vs frequency."""
+def render_attenuation(result: VnaSweepResult, xscale: str = "log") -> bytes:
+    """Attenuation (|S21| in dB, sign-flipped) vs frequency.
+
+    ``xscale`` selects the frequency axis: "log" (default) or "linear".
+    """
     fig, ax = plt.subplots(figsize=(6, 3.5))
     attenuation_db = -20 * np.log10(np.maximum(np.abs(result.s21), 1e-12))
     ax.plot(result.frequencies_hz / 1e6, attenuation_db)
     ax.set_xlabel("Frequency (MHz)")
     ax.set_ylabel("Attenuation (dB)")
     ax.set_title("Cable attenuation (from S21)")
-    ax.set_xscale("log")
+    ax.set_xscale(xscale)
     ax.grid(True, alpha=0.3, which="both")
     return _fig_to_png(fig)
+
+
+def render_sparameters(result: VnaSweepResult, xscale: str = "log") -> bytes:
+    """The four S-parameters as a 2x2 grid (S11 S21 / S12 S22), magnitude in dB.
+
+    Layout mirrors the PicoVNA 5 software: S11 top-left, S21 top-right,
+    S12 bottom-left, S22 bottom-right. ``xscale`` selects the frequency axis:
+    "log" (default) or "linear".
+    """
+    f_mhz = result.frequencies_hz / 1e6
+    fig, axs = plt.subplots(2, 2, figsize=(8, 6))
+    panels = (
+        (axs[0][0], result.s11, "S11"),
+        (axs[0][1], result.s21, "S21"),
+        (axs[1][0], result.s12, "S12"),
+        (axs[1][1], result.s22, "S22"),
+    )
+    for ax, s, label in panels:
+        ax.plot(f_mhz, 20 * np.log10(np.maximum(np.abs(s), 1e-12)), lw=1)
+        ax.set_title(label)
+        ax.set_xlabel("Frequency (MHz)")
+        ax.set_ylabel("Magnitude (dB)")
+        ax.set_xscale(xscale)
+        ax.grid(True, alpha=0.3, which="both")
+    return _fig_to_png(fig)
+
+
+def summary_impedance(result: VnaSweepResult) -> float | None:
+    """Single characteristic impedance (ohms): the mid-band median of Re(Z0).
+
+    Z0 = sqrt(B/C) from the measured S-parameters (via the ABCD matrix), then
+    the same robust mid-band median the offline metric uses
+    (`summarize_characteristic_impedance`), so the capture readout and the
+    processed `vna_metrics.csv` agree. None if no usable points exist.
+    """
+    abcd = sparams_to_abcd(
+        result.s11, result.s21, result.s12, result.s22, z_ref=result.ref_impedance_ohm
+    )
+    return summarize_characteristic_impedance(np.real(characteristic_impedance(abcd)))

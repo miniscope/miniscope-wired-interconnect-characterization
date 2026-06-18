@@ -172,35 +172,100 @@ class TestSimulatedVnaDriver:
         assert np.abs(long.s21).mean() < np.abs(short.s21).mean()
 
 
-class TestRealPicoVnaDriverDemo:
-    """
-    Exercises the real PicoVNA 5 driver against the SDK's demo device.
+class _FakeScpi:
+    """Canned PicoVNA SCPI server for driver tests (no socket, no hardware).
 
-    Skips when the `vna` package isn't installed (e.g. CI), so it runs only
-    on a machine with the PicoVNA 5 SDK present -- no hardware required.
+    Answers the handful of commands RealPicoVnaDriver issues for a sweep so the
+    acquire -> VnaSweepResult path can be exercised without a real server.
     """
 
-    def test_demo_sweep(self):
-        pytest.importorskip("vna")
+    def __init__(self, npoints: int = 51) -> None:
+        self.n = npoints
+        self.commands: list[str] = []
+        self.closed = False
+
+    def query(self, cmd: str) -> str:
+        self.commands.append(cmd)
+        c = cmd.strip().upper()
+        return {
+            "*IDN?": "PicoTech,PicoVNA 106,10080,5.3.1",
+            "SENSE:FREQUENCY:START?": "0.3 MHz",
+            "SENSE:FREQUENCY:STOP?": "6000 MHz",
+            "SENSE:SWEEP:POINTS?": str(self.n),
+        }.get(c, "OK")
+
+    def query_ascii_values(self, cmd: str) -> list[float]:
+        self.commands.append(cmd)
+        # Real part 0.1, imag part 0.2 -> a non-trivial complex value.
+        return [0.2 if cmd.strip().upper().endswith("IMAG") else 0.1] * self.n
+
+    def close(self) -> None:
+        self.closed = True
+
+
+class TestRealPicoVnaDriverScpi:
+    """Exercises the SCPI driver against a fake transport -- no hardware/server."""
+
+    def test_sweep_via_scpi_transport(self):
         from src.instruments.vna.real import RealPicoVnaDriver
 
-        driver = RealPicoVnaDriver(demo=True)
+        fake = _FakeScpi(npoints=51)
+        driver = RealPicoVnaDriver(transport=fake)
         driver.connect()
         try:
             assert driver.is_calibrated() is True
             result = driver.sweep(VnaConfig(num_points=51))
+
             assert len(result.frequencies_hz) == 51
+            assert len(result.s21) == 51
             assert np.iscomplexobj(result.s21)
-            assert result.instrument_info["demo"] == "true"
+            # Complex value reconstructed from REAL (0.1) + IMAG (0.2j).
+            assert result.s21[0] == pytest.approx(0.1 + 0.2j)
+            # Axis reconstructed from START/STOP/POINTS, with MHz units honoured.
+            assert result.frequencies_hz[0] == pytest.approx(0.3e6)
+            assert result.frequencies_hz[-1] == pytest.approx(6e9)
+            assert result.instrument_info["transport"] == "scpi"
+            assert "PicoVNA 106" in result.instrument_info["instrument"]
+        finally:
+            driver.close()
+        # Connecting set the ASCII format and triggered a sweep.
+        assert "FORMAT ASCII" in fake.commands
+        assert "INIT" in fake.commands
+        # Released the transport: no longer reports ready.
+        assert driver.is_calibrated() is False
+
+    def test_construct_without_server(self):
+        """Constructing the driver must not open a socket or launch a server."""
+        from src.instruments.vna.real import RealPicoVnaDriver
+
+        driver = RealPicoVnaDriver()  # no connect() -> no socket / no launch
+        assert driver.is_calibrated() is False  # not connected yet
+
+    def test_applies_calibration_file(self, tmp_path):
+        """A .cal path is loaded over SCPI (MMEM:CD + MMEM:APPLY:CAL) on connect."""
+        from src.instruments.vna.real import RealPicoVnaDriver
+
+        cal = tmp_path / "myunit.cal"
+        cal.write_text("dummy cal")
+        fake = _FakeScpi()
+        driver = RealPicoVnaDriver(transport=fake, calibration_file=str(cal))
+        driver.connect()
+        try:
+            assert any(c.startswith("MMEM:CD") for c in fake.commands)
+            assert any("MMEM:APPLY:CAL" in c and "myunit.cal" in c for c in fake.commands)
+            result = driver.sweep(VnaConfig())
+            assert result.instrument_info["calibration"] == "user"
+            assert result.instrument_info["calibration_file"] == "myunit.cal"
         finally:
             driver.close()
 
-    def test_module_imports_without_sdk(self):
-        """Importing/constructing the driver must not require the SDK."""
+    def test_missing_calibration_file_raises(self):
+        """A wrong .cal path fails fast with a clear error (the common mistake)."""
         from src.instruments.vna.real import RealPicoVnaDriver
 
-        driver = RealPicoVnaDriver(demo=True)  # no connect() -> no vendor import
-        assert driver.is_calibrated() is False  # not connected yet
+        driver = RealPicoVnaDriver(transport=_FakeScpi(), calibration_file=r"C:\nope\missing.cal")
+        with pytest.raises(RuntimeError, match="not found"):
+            driver.connect()
 
 
 class TestWriteS2p:
@@ -240,6 +305,16 @@ class TestRegistry:
         monkeypatch.setenv(HARDWARE_ENV_VAR, "1")
         assert isinstance(get_serdes_driver(transport=NullI2C()), RealSerdesDriver)
         assert isinstance(get_vna_driver(), RealPicoVnaDriver)
+
+    def test_real_vna_tolerates_forwarded_kwargs(self, monkeypatch):
+        # Regression: the acquisition controller forwards cable_length_mm (a
+        # simulator-only knob) to get_vna_driver, so the real PicoVNA driver
+        # must accept and ignore it rather than crashing on construction.
+        from src.instruments.vna.real import RealPicoVnaDriver
+
+        monkeypatch.setenv(HARDWARE_ENV_VAR, "1")
+        driver = get_vna_driver(cable_length_mm=500.0)
+        assert isinstance(driver, RealPicoVnaDriver)
 
     def test_real_serdes_connect_rejects_wrong_ids(self):
         # NullI2C returns 0x00 for every register, so connect() must fail the
@@ -305,6 +380,95 @@ class TestSerialPorts:
             list_ports, "comports", lambda: [SimpleNamespace(device="COM9", description="")]
         )
         assert list_serial_ports()[0].description == "COM9"
+
+
+class TestListVnaDevices:
+    """list_vna_devices() drives the VNA page's connection check.
+
+    The PicoVNA is an FTDI USB device, not a COM port, so presence is detected
+    via Windows PnP (by Pico's USB vendor ID), independent of the PicoVNA 5 SDK.
+    These tests stub the PnP subprocess so they run on any OS.
+    """
+
+    @staticmethod
+    def _stub_pnp(monkeypatch, stdout):
+        """Make the PnP query return canned stdout, as `powershell` would."""
+        from types import SimpleNamespace
+
+        from src.instruments.vna import real
+
+        def fake_run(*_a, **_k):
+            return SimpleNamespace(stdout=stdout, returncode=0)
+
+        monkeypatch.setattr(real.subprocess, "run", fake_run)
+
+    def test_parses_present_device(self, monkeypatch):
+        from src.instruments.vna.real import list_vna_devices
+
+        self._stub_pnp(monkeypatch, "USB\\VID_0CE9&PID_1500\\PW10080A|PicoVNA Series Analyzer\r\n")
+        devices = list_vna_devices(demo=False)
+        assert len(devices) == 1
+        assert devices[0].serial == "PW10080A"
+        assert devices[0].description == "PicoVNA Series Analyzer"
+
+    def test_empty_when_no_device(self, monkeypatch):
+        from src.instruments.vna.real import list_vna_devices
+
+        self._stub_pnp(monkeypatch, "")
+        assert list_vna_devices(demo=False) == []
+
+    def test_empty_when_powershell_missing(self, monkeypatch):
+        from src.instruments.vna import real
+        from src.instruments.vna.real import list_vna_devices
+
+        def boom(*_a, **_k):
+            raise FileNotFoundError("powershell")
+
+        monkeypatch.setattr(real.subprocess, "run", boom)
+        assert list_vna_devices(demo=False) == []
+
+    def test_demo_reports_demo_device(self, monkeypatch):
+        from src.instruments.vna.driver import VnaDeviceInfo
+        from src.instruments.vna.real import list_vna_devices
+
+        # Demo short-circuits before any PnP query, so no instrument is needed.
+        self._stub_pnp(monkeypatch, "")
+        assert list_vna_devices(demo=True) == [VnaDeviceInfo("demo", "PicoVNA demo device")]
+
+    def test_env_var_enables_demo(self, monkeypatch):
+        from src.instruments.vna.real import DEMO_ENV_VAR, list_vna_devices
+
+        monkeypatch.setenv(DEMO_ENV_VAR, "1")
+        assert list_vna_devices()[0].serial == "demo"
+
+
+class TestVnaCaptureAvailable:
+    """vna_capture_available() gates the VNA page's Capture button.
+
+    Capture needs a SCPI server: available if one is already reachable, or if
+    vnaserver.exe is on disk (connect() can launch it).
+    """
+
+    def test_true_when_server_reachable(self, monkeypatch):
+        from src.instruments.vna import real
+
+        monkeypatch.setattr(real, "_server_reachable", lambda *a, **k: True)
+        monkeypatch.setattr(real, "find_vnaserver_exe", lambda: None)
+        assert real.vna_capture_available() is True
+
+    def test_true_when_server_exe_found(self, monkeypatch):
+        from src.instruments.vna import real
+
+        monkeypatch.setattr(real, "_server_reachable", lambda *a, **k: False)
+        monkeypatch.setattr(real, "find_vnaserver_exe", lambda: r"C:\Pico\vnaserver.exe")
+        assert real.vna_capture_available() is True
+
+    def test_false_when_neither(self, monkeypatch):
+        from src.instruments.vna import real
+
+        monkeypatch.setattr(real, "_server_reachable", lambda *a, **k: False)
+        monkeypatch.setattr(real, "find_vnaserver_exe", lambda: None)
+        assert real.vna_capture_available() is False
 
 
 class TestRealSerdesDemo:

@@ -315,6 +315,43 @@ class TestSessionControllers:
         assert result.eyes
         assert all(eye.bins == 8 for eye in result.eyes)
 
+    def test_vna_capture_forwards_calibration_file(self, monkeypatch):
+        """A chosen .cal reaches the driver factory; None is omitted."""
+        import src.acquire.controllers.sessions as sessions
+
+        class _RecordingDriver:
+            def connect(self):
+                pass
+
+            def is_calibrated(self):
+                return True
+
+            def sweep(self, config):
+                return "RESULT"
+
+            def close(self):
+                pass
+
+        seen: dict = {}
+
+        def fake_get_vna_driver(simulate=None, **kwargs):
+            seen.clear()
+            seen["simulate"] = simulate
+            seen.update(kwargs)
+            return _RecordingDriver()
+
+        monkeypatch.setattr(sessions, "get_vna_driver", fake_get_vna_driver)
+
+        cal = r"C:\cal\myunit.cal"
+        assert run_vna_capture(750.0, simulate=False, calibration_file=cal) == "RESULT"
+        assert seen["calibration_file"] == cal
+        assert seen["cable_length_mm"] == 750.0
+        assert seen["simulate"] is False
+
+        # No cal file -> the factory call omits it.
+        run_vna_capture(750.0, simulate=True)
+        assert "calibration_file" not in seen
+
     def test_vna_capture_and_save(self, test_repo: Path):
         result = run_vna_capture(750.0, simulate=True)
         ref = save_vna_session(
