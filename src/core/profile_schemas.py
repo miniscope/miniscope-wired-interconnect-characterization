@@ -46,9 +46,7 @@ class CableProfile(BaseModel):
     )
     manufacturer: str = ""
     part_number: str = ""
-    mouser_part_number: str = Field(
-        default="", description="Mouser order number, for reordering"
-    )
+    mouser_part_number: str = Field(default="", description="Mouser order number, for reordering")
     digikey_part_number: str = Field(
         default="", description="Digi-Key order number, for reordering"
     )
