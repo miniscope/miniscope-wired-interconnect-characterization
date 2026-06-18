@@ -17,11 +17,6 @@ import matplotlib.pyplot as plt
 
 from src.instruments.types import EyeDiagram, MarginSweep, VnaSweepResult
 from src.processing.eye import eye_figure
-from src.processing.vna import (
-    characteristic_impedance,
-    sparams_to_abcd,
-    summarize_characteristic_impedance,
-)
 
 
 def _fig_to_png(fig) -> bytes:
@@ -97,57 +92,4 @@ def render_sparameters(result: VnaSweepResult, xscale: str = "log") -> bytes:
         ax.set_ylabel("Magnitude (dB)")
         ax.set_xscale(xscale)
         ax.grid(True, alpha=0.3, which="both")
-    return _fig_to_png(fig)
-
-
-def _result_z0_real(result: VnaSweepResult) -> np.ndarray:
-    """Re(Z0(f)) of the sweep, via S -> ABCD -> Z0 = sqrt(B/C)."""
-    abcd = sparams_to_abcd(
-        result.s11, result.s21, result.s12, result.s22, z_ref=result.ref_impedance_ohm
-    )
-    return np.real(characteristic_impedance(abcd))
-
-
-def summary_impedance(result: VnaSweepResult) -> float | None:
-    """Single characteristic impedance (ohms): the mid-band median of Re(Z0).
-
-    The same robust estimate the offline metric uses
-    (`summarize_characteristic_impedance`), so the capture-page readout and the
-    processed `vna_metrics.csv` report the same number. None if no usable
-    points exist.
-    """
-    return summarize_characteristic_impedance(_result_z0_real(result))
-
-
-def render_impedance(result: VnaSweepResult, xscale: str = "log") -> bytes:
-    """Characteristic impedance Re(Z0) vs frequency, with the mid-band summary.
-
-    Z0 = sqrt(B/C) after converting the measured S-parameters to ABCD. Deep
-    S21 nulls make Z0 spike, so the y-axis is clamped around the median. A
-    dashed line marks the single reported value -- the median of Re(Z0) over
-    the mid-band -- and a faint 50 ohm line anchors the eye. ``xscale`` selects
-    the frequency axis: "log" (default) or "linear".
-    """
-    z0 = _result_z0_real(result)
-    f_mhz = result.frequencies_hz / 1e6
-
-    fig, ax = plt.subplots(figsize=(6, 3.5))
-    ax.plot(f_mhz, z0, lw=1)
-
-    finite = np.isfinite(z0) & (z0 > 0)
-    if finite.any():
-        center = float(np.median(z0[finite]))
-        ax.set_ylim(0, max(2.0 * center, 100.0))
-
-    ax.axhline(50.0, color="0.7", lw=1, ls=":", label="50 Ω reference")
-    summary = summarize_characteristic_impedance(z0)
-    if summary is not None:
-        ax.axhline(summary, color="C3", lw=1.2, ls="--", label=f"Z₀ ≈ {summary:.1f} Ω (mid-band)")
-    ax.legend(loc="upper right", fontsize=8)
-
-    ax.set_xlabel("Frequency (MHz)")
-    ax.set_ylabel("Re(Z₀) (Ω)")
-    ax.set_title("Characteristic impedance (Z₀ = √(B/C) from ABCD)")
-    ax.set_xscale(xscale)
-    ax.grid(True, alpha=0.3, which="both")
     return _fig_to_png(fig)
