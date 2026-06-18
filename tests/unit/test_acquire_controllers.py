@@ -38,6 +38,10 @@ class TestProfileControllers:
         assert fields["name"].required
         assert fields["characteristic_impedance_ohm"].python_type == "float"
         assert fields["tags"].python_type == "list[str]"
+        # Distributor order numbers surface as optional text inputs.
+        assert fields["mouser_part_number"].python_type == "str"
+        assert not fields["mouser_part_number"].required
+        assert fields["digikey_part_number"].python_type == "str"
 
     def test_list_profile_summaries(self, test_repo: Path):
         summaries = list_profile_summaries(test_repo)

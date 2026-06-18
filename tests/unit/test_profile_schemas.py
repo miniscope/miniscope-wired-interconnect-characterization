@@ -45,6 +45,17 @@ class TestCableProfile:
         with pytest.raises(ValidationError):
             CableProfile.model_validate(make_profile_kwargs(characteristic_impedance_ohm=-50))
 
+    def test_distributor_part_numbers(self):
+        """Mouser/Digi-Key order numbers are optional and round-trip."""
+        profile = CableProfile.model_validate(make_profile_kwargs())
+        assert profile.mouser_part_number == ""
+        assert profile.digikey_part_number == ""
+        profile = CableProfile.model_validate(
+            make_profile_kwargs(mouser_part_number="123-ABC", digikey_part_number="XYZ-456")
+        )
+        assert profile.mouser_part_number == "123-ABC"
+        assert profile.digikey_part_number == "XYZ-456"
+
     def test_no_measured_values_allowed(self):
         """Profiles are static specs: extra (e.g. measured) fields are rejected."""
         with pytest.raises(ValidationError):
