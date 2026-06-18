@@ -46,6 +46,12 @@ class CableProfile(BaseModel):
     )
     manufacturer: str = ""
     part_number: str = ""
+    mouser_part_number: str = Field(
+        default="", description="Mouser order number, for reordering"
+    )
+    digikey_part_number: str = Field(
+        default="", description="Digi-Key order number, for reordering"
+    )
     characteristic_impedance_ohm: float | None = Field(
         default=None,
         description="Nominal characteristic impedance from the datasheet",
