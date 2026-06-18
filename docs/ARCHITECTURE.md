@@ -242,9 +242,15 @@ Resolved since the original design:
   complex S-parameters, reported as a mid-band median (band edges are
   distorted by connector/fixture effects). The Touchstone parser retains
   complex S-parameters for this.
-- **Real VNA driver** (`src/instruments/vna/real.py`) is implemented against
-  the cross-platform PicoVNA 5 Python API (`vna` package). It is demo-first:
-  `RealPicoVnaDriver(demo=True)` opens the SDK's simulated device, so the
-  whole acquire -> .s2p -> pipeline path runs with no hardware and no licence.
-  The bench bring-up steps that need the real 106 (calibration application,
-  confirming the complex accessor) are listed in the module docstring.
+- **Real VNA driver** (`src/instruments/vna/real.py`) drives the PicoVNA 5 over
+  its **SCPI interface** (TCP, default 127.0.0.1:5025), not the native `vna`
+  Python binding -- that binding ships no loadable Windows extension and targets
+  only CPython 3.8-3.11. connect() auto-launches the bundled `vnaserver.exe`
+  (discovering the unit's serial via `lsvna.exe` for `--instrument`) when no
+  server is already serving SCPI, or attaches to a running PicoVNA 5 software
+  instance. The SCPI transport is injectable for tests (no hardware needed); the
+  sweep config (freq/points/power/bandwidth) is governed by the instrument's
+  loaded calibration, so `VnaConfig` is advisory and the driver reads the actual
+  axis back. For fully offline development use `SimulatedVnaDriver` (the registry
+  selects it whenever `simulate` is true). Bench bring-up notes are in the
+  module docstring.

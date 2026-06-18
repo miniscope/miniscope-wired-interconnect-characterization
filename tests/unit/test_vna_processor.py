@@ -10,7 +10,27 @@ import pytest
 from src.core.loading import load_session
 from src.measurement_types.loader import load_definition
 from src.processing.touchstone import TouchstoneData
-from src.processing.vna import ProcessVNA, estimate_characteristic_impedance
+from src.processing.vna import (
+    ProcessVNA,
+    characteristic_impedance,
+    estimate_characteristic_impedance,
+    sparams_to_abcd,
+    summarize_characteristic_impedance,
+)
+
+
+def _line_sparams(z0: float, ref: float, n: int = 101):
+    """Complex S-parameters of an ideal lossless line of impedance z0 in a `ref` system.
+
+    Reciprocal (S12 == S21), so it exercises both the ABCD determinant identity
+    and the Z0 = sqrt(B/C) recovery.
+    """
+    freqs = np.linspace(1e6, 1e9, n)
+    theta = 2 * np.pi * freqs / freqs[-1]  # arbitrary electrical-length sweep
+    gamma = (z0 - ref) / (z0 + ref)
+    s11 = gamma * (1 - np.exp(-2j * theta)) / (1 - gamma**2 * np.exp(-2j * theta))
+    s21 = (1 - gamma**2) * np.exp(-1j * theta) / (1 - gamma**2 * np.exp(-2j * theta))
+    return freqs, s11, s21
 
 
 class TestProcessVNA:
@@ -148,18 +168,8 @@ class TestProcessVNA:
 
 class TestCharacteristicImpedance:
     def _matched_line(self, z0: float, ref: float, n: int = 101) -> TouchstoneData:
-        """Ideal lossless line of impedance z0 referenced to `ref` ohms.
-
-        For a matched line (z0 == ref) S11 = 0 and S21 = e^{-j theta}; we
-        synthesize a small reflection when z0 != ref so the ABCD extraction
-        has something to recover.
-        """
-        freqs = np.linspace(1e6, 1e9, n)
-        theta = 2 * np.pi * freqs / freqs[-1]  # arbitrary electrical length sweep
-        # Reflection coefficient of a z0 line in a `ref` system (real z0).
-        gamma = (z0 - ref) / (z0 + ref)
-        s11 = gamma * (1 - np.exp(-2j * theta)) / (1 - gamma**2 * np.exp(-2j * theta))
-        s21 = (1 - gamma**2) * np.exp(-1j * theta) / (1 - gamma**2 * np.exp(-2j * theta))
+        """Ideal lossless line of impedance z0 referenced to `ref` ohms."""
+        freqs, s11, s21 = _line_sparams(z0, ref, n)
         return TouchstoneData(
             frequencies_hz=freqs,
             s11_db=20 * np.log10(np.abs(s11) + 1e-15),
@@ -190,3 +200,44 @@ class TestCharacteristicImpedance:
             s22_db=np.array([-10.0]),
         )
         assert estimate_characteristic_impedance(ts) is None
+
+
+class TestAbcd:
+    def test_reciprocal_line_determinant_is_one(self):
+        """A reciprocal 2-port (S12 == S21) has ABCD determinant AD - BC = 1."""
+        _, s11, s21 = _line_sparams(z0=75.0, ref=50.0)
+        abcd = sparams_to_abcd(s11, s21, s21, s11, z_ref=50.0)
+        det = abcd.a * abcd.d - abcd.b * abcd.c
+        np.testing.assert_allclose(det, 1.0, atol=1e-9)
+
+    def test_characteristic_impedance_recovers_line_z0(self):
+        """Z0 = sqrt(B/C) recovers the synthesized line's impedance."""
+        _, s11, s21 = _line_sparams(z0=75.0, ref=50.0)
+        abcd = sparams_to_abcd(s11, s21, s21, s11, z_ref=50.0)
+        z0 = np.real(characteristic_impedance(abcd))
+        finite = np.isfinite(z0) & (z0 > 0)
+        assert np.median(z0[finite]) == pytest.approx(75.0, rel=0.05)
+
+    def test_matches_legacy_profile(self):
+        """The ABCD path agrees with characteristic_impedance_profile end to end."""
+        from src.processing.vna import characteristic_impedance_profile
+
+        ts = TestCharacteristicImpedance()._matched_line(z0=75.0, ref=50.0)
+        abcd = sparams_to_abcd(ts.s11, ts.s21, ts.s12, ts.s22, z_ref=ts.ref_impedance)
+        np.testing.assert_allclose(
+            characteristic_impedance(abcd), characteristic_impedance_profile(ts), equal_nan=True
+        )
+
+
+class TestSummarizeCharacteristicImpedance:
+    def test_recovers_line_z0(self):
+        _, s11, s21 = _line_sparams(z0=75.0, ref=50.0)
+        z0 = np.real(characteristic_impedance(sparams_to_abcd(s11, s21, s21, s11, z_ref=50.0)))
+        assert summarize_characteristic_impedance(z0) == pytest.approx(75.0, rel=0.05)
+
+    def test_ignores_nonfinite_and_nonpositive(self):
+        z0 = np.array([np.nan, -3.0, 50.0, 50.0, np.inf, 50.0])
+        assert summarize_characteristic_impedance(z0) == pytest.approx(50.0)
+
+    def test_none_when_no_usable_points(self):
+        assert summarize_characteristic_impedance(np.array([np.nan, -1.0, 0.0])) is None

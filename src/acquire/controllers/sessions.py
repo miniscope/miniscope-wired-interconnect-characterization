@@ -189,9 +189,19 @@ def run_vna_capture(
     cable_length_mm: float,
     config: VnaConfig | None = None,
     simulate: bool | None = None,
+    calibration_file: str | None = None,
 ) -> VnaSweepResult:
-    """Run one VNA sweep (blocking)."""
-    driver = get_vna_driver(simulate=simulate, cable_length_mm=cable_length_mm)
+    """Run one VNA sweep (blocking).
+
+    `calibration_file` (hardware only) is a PicoVNA 5 .cal applied before the
+    sweep, so the capture uses a known calibration rather than whatever the
+    connected server happens to have loaded. None leaves the server's current
+    calibration in place; the simulator ignores it.
+    """
+    kwargs: dict = {"cable_length_mm": cable_length_mm}
+    if calibration_file:
+        kwargs["calibration_file"] = calibration_file
+    driver = get_vna_driver(simulate=simulate, **kwargs)
     driver.connect()
     try:
         if not driver.is_calibrated():

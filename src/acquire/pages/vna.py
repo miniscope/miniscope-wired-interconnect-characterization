@@ -6,19 +6,32 @@ from nicegui import run, ui
 
 from src.acquire.controllers.sessions import run_vna_capture, save_vna_session
 from src.acquire.pages.components import header, png_source, protocol_panel, require_operator
-from src.acquire.plots import render_attenuation
+from src.acquire.plots import (
+    render_attenuation,
+    render_impedance,
+    render_sparameters,
+    summary_impedance,
+)
 from src.acquire.state import STATE
 from src.core.session_schemas import parse_condition_dir
 from src.instruments.registry import use_hardware
 from src.instruments.types import VnaSweepResult
-from src.instruments.vna.real import list_vna_devices, vna_sdk_available
+from src.instruments.vna.real import list_vna_devices, vna_capture_available
 
 CALIBRATION_TYPES = ["SOLT", "TRL", "electronic_cal", "other"]
 
 
 def _probe_vna() -> tuple[list, bool]:
-    """Detect the PicoVNA and whether its SDK is installed (run off the UI thread)."""
-    return list_vna_devices(), vna_sdk_available()
+    """Detect the PicoVNA and whether a SCPI capture server is available (off the UI thread)."""
+    return list_vna_devices(), vna_capture_available()
+
+
+def _impedance_readout_text(result: VnaSweepResult) -> str:
+    """One-line characteristic-impedance summary (mid-band median of Re(Z₀))."""
+    value = summary_impedance(result)
+    if value is None:
+        return "Characteristic impedance (Z₀): n/a"
+    return f"Characteristic impedance (Z₀): ~{value:.1f} Ω (mid-band median)"
 
 
 @ui.page("/measure/vna/{profile_id}/{condition}")
@@ -37,13 +50,14 @@ def vna_page(profile_id: str, condition: str) -> None:
 
     # Connection check (hardware mode only). The PicoVNA is an FTDI USB device,
     # not a COM port, so we enumerate it via the OS (by Pico's USB vendor ID)
-    # rather than listing serial ports. Capture additionally needs the PicoVNA 5
-    # SDK, so we report three distinct states -- not connected / connected but
-    # no SDK / ready -- and only enable Capture in the last. The simulator needs
-    # no instrument, so this is skipped in simulate mode. Mirrors the SerDes
-    # page's serial-port check.
+    # rather than listing serial ports. Capture additionally needs a PicoVNA 5
+    # SCPI server, so we report three distinct states -- not connected /
+    # connected but no server / ready -- and only enable Capture in the last.
+    # The simulator needs no instrument, so this is skipped in simulate mode.
+    # Mirrors the SerDes page's serial-port check.
     hardware = use_hardware(STATE.simulate)
     vna_status = None
+    calibration_file_input = None
 
     async def refresh_vna() -> None:
         # The detection runs a hardware/OS probe, so do it off the UI thread
@@ -52,16 +66,17 @@ def vna_page(profile_id: str, condition: str) -> None:
         capture_button.disable()
         vna_status.text = "Checking for VNA..."
         vna_status.classes(replace="text-gray-600 text-sm")
-        devices, sdk_ok = await run.io_bound(_probe_vna)
+        devices, server_ok = await run.io_bound(_probe_vna)
         if not devices:
             vna_status.text = "No VNA detected. Connect the PicoVNA, then click Refresh."
             vna_status.classes(replace="text-red-600 text-sm")
             return
         device = devices[0]
-        if not sdk_ok:
+        if not server_ok:
             vna_status.text = (
-                f"{device.description} detected ({device.serial}), but the PicoVNA 5 "
-                "SDK isn't installed -- capture needs it. See src/instruments/vna/real.py."
+                f"{device.description} detected ({device.serial}), but no PicoVNA 5 SCPI "
+                "server is available -- capture needs it. Start the PicoVNA 5 software, "
+                "or install it so vnaserver.exe can be launched."
             )
             vna_status.classes(replace="text-amber-700 text-sm")
             return
@@ -70,6 +85,17 @@ def vna_page(profile_id: str, condition: str) -> None:
         capture_button.enable()
 
     if hardware:
+        # Optional .cal applied before the sweep (via SCPI MMEM:APPLY:CAL) so the
+        # capture uses a known calibration instead of whatever the server has
+        # loaded. Empty -> use the server's current calibration.
+        calibration_file_input = (
+            ui.input(
+                label="Calibration file (.cal) -- optional",
+                placeholder=r"C:\Users\...\your_cal.cal",
+            )
+            .props("outlined dense")
+            .classes("w-full")
+        )
         with ui.row().classes("items-center gap-2"):
             ui.button("Refresh", icon="refresh", on_click=refresh_vna).props("outline")
             vna_status = ui.label("").classes("text-sm")
@@ -83,14 +109,21 @@ def vna_page(profile_id: str, condition: str) -> None:
         status_label.text = "Sweeping..."
         capture_button.disable()
         try:
+            cal_file = (calibration_file_input.value or None) if calibration_file_input else None
             result: VnaSweepResult = await run.io_bound(
-                run_vna_capture, sim_length_mm, None, STATE.simulate
+                run_vna_capture, sim_length_mm, None, STATE.simulate, cal_file
             )
             shared["result"] = result
             preview.clear()
             with preview:
+                ui.image(png_source(render_sparameters(result))).classes("w-full max-w-2xl")
                 ui.image(png_source(render_attenuation(result))).classes("w-full max-w-2xl")
-            status_label.text = "Capture complete -- review the attenuation curve, then save."
+                ui.image(png_source(render_impedance(result))).classes("w-full max-w-2xl")
+                ui.label(_impedance_readout_text(result)).classes("text-sm text-gray-700")
+            status_label.text = (
+                "Capture complete -- review the S-parameters, attenuation, and "
+                "characteristic impedance, then save."
+            )
             save_button.enable()
         except Exception as e:
             status_label.text = f"Capture failed: {e}"
