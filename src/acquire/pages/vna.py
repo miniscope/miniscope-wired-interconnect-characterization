@@ -9,7 +9,7 @@ from nicegui import run, ui
 
 from src.acquire.controllers.sessions import run_vna_capture, save_vna_session
 from src.acquire.pages.components import header, png_source, protocol_panel, require_operator
-from src.acquire.plots import render_attenuation, render_sparameters
+from src.acquire.plots import render_attenuation, render_sparameters, summary_impedance
 from src.acquire.state import STATE
 from src.core.session_schemas import parse_condition_dir
 from src.instruments.registry import use_hardware
@@ -30,6 +30,14 @@ def _preview_images(result: VnaSweepResult, xscale: str) -> tuple[bytes, bytes]:
         render_sparameters(result, xscale=xscale),
         render_attenuation(result, xscale=xscale),
     )
+
+
+def _impedance_readout_text(result: VnaSweepResult) -> str:
+    """One-line characteristic-impedance summary (mid-band median of Re(Z₀))."""
+    value = summary_impedance(result)
+    if value is None:
+        return "Characteristic impedance (Z₀): not available for this sweep."
+    return f"Characteristic impedance (Z₀) ≈ {value:.1f} Ω (median over the mid-band)."
 
 
 @ui.page("/measure/vna/{profile_id}/{condition}")
@@ -149,6 +157,7 @@ def vna_page(profile_id: str, condition: str) -> None:
         with preview:
             ui.image(png_source(sparams_png)).classes("w-full max-w-2xl")
             ui.image(png_source(atten_png)).classes("w-full max-w-2xl")
+            ui.label(_impedance_readout_text(result)).classes("text-sm text-gray-700")
 
     with ui.row().classes("items-center gap-2 mt-2"):
         ui.label("Frequency axis:").classes("text-sm text-gray-700")

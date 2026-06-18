@@ -17,6 +17,11 @@ import matplotlib.pyplot as plt
 
 from src.instruments.types import EyeDiagram, MarginSweep, VnaSweepResult
 from src.processing.eye import eye_figure
+from src.processing.vna import (
+    characteristic_impedance,
+    sparams_to_abcd,
+    summarize_characteristic_impedance,
+)
 
 
 def _fig_to_png(fig) -> bytes:
@@ -93,3 +98,17 @@ def render_sparameters(result: VnaSweepResult, xscale: str = "log") -> bytes:
         ax.set_xscale(xscale)
         ax.grid(True, alpha=0.3, which="both")
     return _fig_to_png(fig)
+
+
+def summary_impedance(result: VnaSweepResult) -> float | None:
+    """Single characteristic impedance (ohms): the mid-band median of Re(Z0).
+
+    Z0 = sqrt(B/C) from the measured S-parameters (via the ABCD matrix), then
+    the same robust mid-band median the offline metric uses
+    (`summarize_characteristic_impedance`), so the capture readout and the
+    processed `vna_metrics.csv` agree. None if no usable points exist.
+    """
+    abcd = sparams_to_abcd(
+        result.s11, result.s21, result.s12, result.s22, z_ref=result.ref_impedance_ohm
+    )
+    return summarize_characteristic_impedance(np.real(characteristic_impedance(abcd)))
