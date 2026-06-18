@@ -59,24 +59,28 @@ def render_margin(sweep: MarginSweep) -> bytes:
     return _fig_to_png(fig)
 
 
-def render_attenuation(result: VnaSweepResult) -> bytes:
-    """Attenuation (|S21| in dB, sign-flipped) vs frequency."""
+def render_attenuation(result: VnaSweepResult, xscale: str = "log") -> bytes:
+    """Attenuation (|S21| in dB, sign-flipped) vs frequency.
+
+    ``xscale`` selects the frequency axis: "log" (default) or "linear".
+    """
     fig, ax = plt.subplots(figsize=(6, 3.5))
     attenuation_db = -20 * np.log10(np.maximum(np.abs(result.s21), 1e-12))
     ax.plot(result.frequencies_hz / 1e6, attenuation_db)
     ax.set_xlabel("Frequency (MHz)")
     ax.set_ylabel("Attenuation (dB)")
     ax.set_title("Cable attenuation (from S21)")
-    ax.set_xscale("log")
+    ax.set_xscale(xscale)
     ax.grid(True, alpha=0.3, which="both")
     return _fig_to_png(fig)
 
 
-def render_sparameters(result: VnaSweepResult) -> bytes:
+def render_sparameters(result: VnaSweepResult, xscale: str = "log") -> bytes:
     """The four S-parameters as a 2x2 grid (S11 S21 / S12 S22), magnitude in dB.
 
     Layout mirrors the PicoVNA 5 software: S11 top-left, S21 top-right,
-    S12 bottom-left, S22 bottom-right.
+    S12 bottom-left, S22 bottom-right. ``xscale`` selects the frequency axis:
+    "log" (default) or "linear".
     """
     f_mhz = result.frequencies_hz / 1e6
     fig, axs = plt.subplots(2, 2, figsize=(8, 6))
@@ -91,7 +95,7 @@ def render_sparameters(result: VnaSweepResult) -> bytes:
         ax.set_title(label)
         ax.set_xlabel("Frequency (MHz)")
         ax.set_ylabel("Magnitude (dB)")
-        ax.set_xscale("log")
+        ax.set_xscale(xscale)
         ax.grid(True, alpha=0.3, which="both")
     return _fig_to_png(fig)
 
@@ -115,13 +119,14 @@ def summary_impedance(result: VnaSweepResult) -> float | None:
     return summarize_characteristic_impedance(_result_z0_real(result))
 
 
-def render_impedance(result: VnaSweepResult) -> bytes:
+def render_impedance(result: VnaSweepResult, xscale: str = "log") -> bytes:
     """Characteristic impedance Re(Z0) vs frequency, with the mid-band summary.
 
     Z0 = sqrt(B/C) after converting the measured S-parameters to ABCD. Deep
     S21 nulls make Z0 spike, so the y-axis is clamped around the median. A
     dashed line marks the single reported value -- the median of Re(Z0) over
-    the mid-band -- and a faint 50 ohm line anchors the eye.
+    the mid-band -- and a faint 50 ohm line anchors the eye. ``xscale`` selects
+    the frequency axis: "log" (default) or "linear".
     """
     z0 = _result_z0_real(result)
     f_mhz = result.frequencies_hz / 1e6
@@ -143,6 +148,6 @@ def render_impedance(result: VnaSweepResult) -> bytes:
     ax.set_xlabel("Frequency (MHz)")
     ax.set_ylabel("Re(Z₀) (Ω)")
     ax.set_title("Characteristic impedance (Z₀ = √(B/C) from ABCD)")
-    ax.set_xscale("log")
+    ax.set_xscale(xscale)
     ax.grid(True, alpha=0.3, which="both")
     return _fig_to_png(fig)

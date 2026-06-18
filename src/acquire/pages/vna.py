@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import tempfile
+from pathlib import Path
+
 from nicegui import run, ui
 
 from src.acquire.controllers.sessions import run_vna_capture, save_vna_session
@@ -34,6 +37,15 @@ def _impedance_readout_text(result: VnaSweepResult) -> str:
     return f"Characteristic impedance (Z₀): ~{value:.1f} Ω (mid-band median)"
 
 
+def _preview_images(result: VnaSweepResult, xscale: str) -> tuple[bytes, bytes, bytes]:
+    """Render the three preview PNGs at the given frequency scale (off the UI thread)."""
+    return (
+        render_sparameters(result, xscale=xscale),
+        render_attenuation(result, xscale=xscale),
+        render_impedance(result, xscale=xscale),
+    )
+
+
 @ui.page("/measure/vna/{profile_id}/{condition}")
 def vna_page(profile_id: str, condition: str) -> None:
     header(f"VNA -- {profile_id} @ {condition}")
@@ -57,7 +69,10 @@ def vna_page(profile_id: str, condition: str) -> None:
     # Mirrors the SerDes page's serial-port check.
     hardware = use_hardware(STATE.simulate)
     vna_status = None
-    calibration_file_input = None
+
+    # result: the last sweep, re-rendered on the Log/Linear toggle; cal_file:
+    # the local path of an uploaded .calx to apply, or None for the server's cal.
+    shared: dict = {"result": None, "cal_file": None}
 
     async def refresh_vna() -> None:
         # The detection runs a hardware/OS probe, so do it off the UI thread
@@ -85,41 +100,89 @@ def vna_page(profile_id: str, condition: str) -> None:
         capture_button.enable()
 
     if hardware:
-        # Optional .cal applied before the sweep (via SCPI MMEM:APPLY:CAL) so the
+        # Optional .calx applied before the sweep (via SCPI MMEM:APPLY:CAL) so the
         # capture uses a known calibration instead of whatever the server has
-        # loaded. Empty -> use the server's current calibration.
-        calibration_file_input = (
-            ui.input(
-                label="Calibration file (.cal) -- optional",
-                placeholder=r"C:\Users\...\your_cal.cal",
+        # loaded. The SCPI server reads the file from its own (local) disk, so we
+        # save the uploaded bytes to a temp file and hand the driver that path.
+        # No upload -> use the server's current calibration.
+        ui.label(
+            "Calibration (.calx) -- optional. Upload one to apply before the sweep; "
+            "otherwise the server's current calibration is used."
+        ).classes("text-sm text-gray-600")
+
+        def _on_cal_upload(e) -> None:
+            dest_dir = Path(tempfile.gettempdir()) / "miniscope_vna_cal"
+            dest_dir.mkdir(parents=True, exist_ok=True)
+            dest = dest_dir / e.name
+            dest.write_bytes(e.content.read())
+            shared["cal_file"] = str(dest)
+            cal_status.text = f"Will apply: {e.name}"
+            cal_status.classes(replace="text-sm text-green-700")
+
+        def _clear_cal() -> None:
+            shared["cal_file"] = None
+            cal_upload.reset()
+            cal_status.text = "Using the server's current calibration."
+            cal_status.classes(replace="text-sm text-gray-600")
+
+        with ui.row().classes("items-center gap-2"):
+            cal_upload = (
+                ui.upload(on_upload=_on_cal_upload, auto_upload=True, max_files=1)
+                .props("accept=.calx")
+                .classes("max-w-xs")
             )
-            .props("outlined dense")
-            .classes("w-full")
+            ui.button("Use server cal", icon="clear", on_click=_clear_cal).props("flat dense")
+        cal_status = ui.label("Using the server's current calibration.").classes(
+            "text-sm text-gray-600"
         )
+
         with ui.row().classes("items-center gap-2"):
             ui.button("Refresh", icon="refresh", on_click=refresh_vna).props("outline")
             vna_status = ui.label("").classes("text-sm")
 
     status_label = ui.label("").classes("text-gray-700")
-    preview = ui.column().classes("w-full")
 
-    shared: dict = {"result": None}
+    # The PicoVNA sweep is a single blocking SCPI call with no sub-steps, so an
+    # indeterminate (animated) bar -- shown only while sweeping -- signals
+    # "in progress" honestly, without a meaningful completion fraction.
+    sweep_progress = (
+        ui.linear_progress(show_value=False).props("indeterminate").classes("w-full max-w-2xl")
+    )
+    sweep_progress.set_visibility(False)
+
+    async def refresh_preview() -> None:
+        # Re-render the stored sweep at the selected frequency scale. Called by
+        # the Log/Linear toggle and after each capture; no-op before a capture.
+        result = shared["result"]
+        if result is None:
+            return
+        sparams_png, atten_png, imp_png = await run.io_bound(
+            _preview_images, result, freq_scale.value or "log"
+        )
+        preview.clear()
+        with preview:
+            ui.image(png_source(sparams_png)).classes("w-full max-w-2xl")
+            ui.image(png_source(atten_png)).classes("w-full max-w-2xl")
+            ui.image(png_source(imp_png)).classes("w-full max-w-2xl")
+            ui.label(_impedance_readout_text(result)).classes("text-sm text-gray-700")
+
+    with ui.row().classes("items-center gap-2 mt-2"):
+        ui.label("Frequency axis:").classes("text-sm text-gray-700")
+        freq_scale = ui.toggle(
+            {"log": "Log", "linear": "Linear"}, value="log", on_change=refresh_preview
+        ).props("dense")
+    preview = ui.column().classes("w-full")
 
     async def capture() -> None:
         status_label.text = "Sweeping..."
         capture_button.disable()
+        sweep_progress.set_visibility(True)
         try:
-            cal_file = (calibration_file_input.value or None) if calibration_file_input else None
             result: VnaSweepResult = await run.io_bound(
-                run_vna_capture, sim_length_mm, None, STATE.simulate, cal_file
+                run_vna_capture, sim_length_mm, None, STATE.simulate, shared["cal_file"]
             )
             shared["result"] = result
-            preview.clear()
-            with preview:
-                ui.image(png_source(render_sparameters(result))).classes("w-full max-w-2xl")
-                ui.image(png_source(render_attenuation(result))).classes("w-full max-w-2xl")
-                ui.image(png_source(render_impedance(result))).classes("w-full max-w-2xl")
-                ui.label(_impedance_readout_text(result)).classes("text-sm text-gray-700")
+            await refresh_preview()
             status_label.text = (
                 "Capture complete -- review the S-parameters, attenuation, and "
                 "characteristic impedance, then save."
@@ -129,6 +192,7 @@ def vna_page(profile_id: str, condition: str) -> None:
             status_label.text = f"Capture failed: {e}"
             ui.notify(f"Capture failed: {e}", type="negative", multi_line=True)
         finally:
+            sweep_progress.set_visibility(False)
             capture_button.enable()
 
     def save() -> None:

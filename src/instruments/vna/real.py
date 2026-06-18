@@ -33,7 +33,7 @@ Bench bring-up checklist (the parts only verifiable against a live server):
 3. Confirm the frequency-axis unit: ``SENSE:FREQUENCY:START?`` etc. return a
    value with a unit suffix (e.g. "0.3 MHz"); _parse_freq_hz reads the suffix.
    Verify the reconstructed axis matches the GUI for a known sweep.
-4. Confirm ``MMEM:CD`` / ``MMEM:APPLY:CAL`` path handling for a real .cal file
+4. Confirm ``MMEM:CD`` / ``MMEM:APPLY:CAL`` path handling for a real .calx file
    (Program Files paths contain spaces -- quoting may need adjusting).
 """
 
@@ -281,7 +281,7 @@ class RealPicoVnaDriver(VnaDriver):
         launch_server: True forces auto-launch, False forbids it (connect fails
             if nothing is reachable). None (default) auto-launches only when no
             server answers at host:port.
-        calibration_file: optional PicoVNA 5 user-calibration (.cal) to apply on
+        calibration_file: optional PicoVNA 5 user-calibration (.calx) to apply on
             connect via MMEM:APPLY:CAL.
         transport: an injected SCPI transport (for tests); when given, no socket
             is opened and no server is launched.
@@ -423,7 +423,7 @@ class RealPicoVnaDriver(VnaDriver):
 
         Calibration on the SCPI path lives in the PicoVNA 5 software: the
         operator performs/loads a SOLT (or other) calibration there as the
-        guided manual step the protocol requires, or this driver applies a .cal
+        guided manual step the protocol requires, or this driver applies a .calx
         file on connect. We can't second-guess the software's current cal over
         SCPI without a confirmed query, so once connected we treat the
         instrument as the operator's calibrated source. Not connected -> not
@@ -498,7 +498,7 @@ class RealPicoVnaDriver(VnaDriver):
         return mag * np.exp(1j * np.deg2rad(phase_deg))
 
     def _apply_calibration(self, calibration_file: str) -> None:
-        """Apply a PicoVNA 5 user calibration (.cal) via MMEM:CD + MMEM:APPLY:CAL.
+        """Apply a PicoVNA 5 user calibration (.calx) via MMEM:CD + MMEM:APPLY:CAL.
 
         The server reads the file from its own (local) filesystem, so the path
         is validated locally first to give a clear error on the common

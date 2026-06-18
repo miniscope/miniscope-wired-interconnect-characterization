@@ -47,6 +47,16 @@ class TestPlots:
         assert png.startswith(PNG_MAGIC)
         assert len(png) > 1000
 
+    def test_render_linear_frequency_axis(self):
+        # The Log/Linear toggle passes xscale through to each render function.
+        result = get_vna_driver(simulate=True).sweep(VnaConfig(num_points=21))
+        for png in (
+            render_sparameters(result, xscale="linear"),
+            render_attenuation(result, xscale="linear"),
+            render_impedance(result, xscale="linear"),
+        ):
+            assert png.startswith(PNG_MAGIC)
+
     def test_summary_impedance_is_single_value(self):
         result = get_vna_driver(simulate=True).sweep(VnaConfig(num_points=201))
         value = summary_impedance(result)

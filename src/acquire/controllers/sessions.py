@@ -193,7 +193,7 @@ def run_vna_capture(
 ) -> VnaSweepResult:
     """Run one VNA sweep (blocking).
 
-    `calibration_file` (hardware only) is a PicoVNA 5 .cal applied before the
+    `calibration_file` (hardware only) is a PicoVNA 5 .calx applied before the
     sweep, so the capture uses a known calibration rather than whatever the
     connected server happens to have loaded. None leaves the server's current
     calibration in place; the simulator ignores it.
