@@ -5,9 +5,78 @@
       "file": "pages/Coax_cable_characterization.wiki"
     },
     {
-      "title": "Coax_cable_characterization/coax_spi_sci_40awg",
-      "file": "pages/Coax_cable_characterization__coax_spi_sci_40awg.wiki"
+      "title": "Coax_cable_characterization/coax_molex_1000650128",
+      "file": "pages/Coax_cable_characterization__coax_molex_1000650128.wiki"
     }
   ],
-  "images": []
+  "images": [
+    {
+      "local_path": "derived/cross/quality_vs_length_3g.png",
+      "wiki_name": "CoaxCableChar_cross_quality_vs_length_3g.png"
+    },
+    {
+      "local_path": "derived/cross/quality_vs_length_6g.png",
+      "wiki_name": "CoaxCableChar_cross_quality_vs_length_6g.png"
+    },
+    {
+      "local_path": "derived/cross/miniscope_quality_miniscope_v4.png",
+      "wiki_name": "CoaxCableChar_cross_miniscope_quality_miniscope_v4.png"
+    },
+    {
+      "local_path": "derived/cross/supply_voltage_miniscope_v4.png",
+      "wiki_name": "CoaxCableChar_cross_supply_voltage_miniscope_v4.png"
+    },
+    {
+      "local_path": "derived/sessions/coax_molex_1000650128/1025mm/serdes/20260618_01/eye_fwd_3g.png",
+      "wiki_name": "CoaxCableChar_sessions_coax_molex_1000650128_1025mm_serdes_20260618_01_eye_fwd_3g.png"
+    },
+    {
+      "local_path": "derived/sessions/coax_molex_1000650128/1025mm/serdes/20260618_01/eye_fwd_6g.png",
+      "wiki_name": "CoaxCableChar_sessions_coax_molex_1000650128_1025mm_serdes_20260618_01_eye_fwd_6g.png"
+    },
+    {
+      "local_path": "derived/sessions/coax_molex_1000650128/1025mm/serdes/20260618_01/eye_rev_187m.png",
+      "wiki_name": "CoaxCableChar_sessions_coax_molex_1000650128_1025mm_serdes_20260618_01_eye_rev_187m.png"
+    },
+    {
+      "local_path": "derived/sessions/coax_molex_1000650128/170mm/serdes/20260618_01/eye_fwd_3g.png",
+      "wiki_name": "CoaxCableChar_sessions_coax_molex_1000650128_170mm_serdes_20260618_01_eye_fwd_3g.png"
+    },
+    {
+      "local_path": "derived/sessions/coax_molex_1000650128/170mm/serdes/20260618_01/eye_fwd_6g.png",
+      "wiki_name": "CoaxCableChar_sessions_coax_molex_1000650128_170mm_serdes_20260618_01_eye_fwd_6g.png"
+    },
+    {
+      "local_path": "derived/sessions/coax_molex_1000650128/170mm/serdes/20260618_01/eye_rev_187m.png",
+      "wiki_name": "CoaxCableChar_sessions_coax_molex_1000650128_170mm_serdes_20260618_01_eye_rev_187m.png"
+    },
+    {
+      "local_path": "derived/sessions/coax_molex_1000650128/500mm/serdes/20260618_01/eye_fwd_3g.png",
+      "wiki_name": "CoaxCableChar_sessions_coax_molex_1000650128_500mm_serdes_20260618_01_eye_fwd_3g.png"
+    },
+    {
+      "local_path": "derived/sessions/coax_molex_1000650128/500mm/serdes/20260618_01/eye_fwd_6g.png",
+      "wiki_name": "CoaxCableChar_sessions_coax_molex_1000650128_500mm_serdes_20260618_01_eye_fwd_6g.png"
+    },
+    {
+      "local_path": "derived/sessions/coax_molex_1000650128/500mm/serdes/20260618_01/eye_rev_187m.png",
+      "wiki_name": "CoaxCableChar_sessions_coax_molex_1000650128_500mm_serdes_20260618_01_eye_rev_187m.png"
+    },
+    {
+      "local_path": "derived/aggregated/serdes/serdes_eye_vs_length.png",
+      "wiki_name": "CoaxCableChar_aggregated_serdes_serdes_eye_vs_length.png"
+    },
+    {
+      "local_path": "derived/aggregated/serdes/serdes_margin_vs_length.png",
+      "wiki_name": "CoaxCableChar_aggregated_serdes_serdes_margin_vs_length.png"
+    },
+    {
+      "local_path": "derived/aggregated/vna/vna_comparison.png",
+      "wiki_name": "CoaxCableChar_aggregated_vna_vna_comparison.png"
+    },
+    {
+      "local_path": "derived/aggregated/vna/vna_impedance.png",
+      "wiki_name": "CoaxCableChar_aggregated_vna_vna_impedance.png"
+    }
+  ]
 }

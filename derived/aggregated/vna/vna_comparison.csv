@@ -1,0 +1,5 @@
+profile_id,condition,cable_length_mm,session_id,date,operator,vna_instrument,calibration_type,num_files,mean_max_insertion_loss_db,worst_max_insertion_loss_db,mean_min_return_loss_db
+coax_molex_1000650128,1025mm,1025.0,20260618_01,2026-06-18,Federico,PicoVNA 106,SOLT,1,-20.2075,-20.2075,-1.9475
+coax_molex_1000650128,1500mm,1500.0,20260618_01,2026-06-18,Federico,PicoVNA 106,SOLT,1,-23.584,-23.584,-2.9657
+coax_molex_1000650128,170mm,170.0,20260618_01,2026-06-18,Federico,PicoVNA 106,SOLT,1,-10.1116,-10.1116,-1.7694
+coax_molex_1000650128,500mm,500.0,20260618_01,2026-06-18,Federico,PicoVNA 106,SOLT,1,-14.851,-14.851,-1.5654

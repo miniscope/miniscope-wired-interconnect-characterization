@@ -1,0 +1,28 @@
+{
+  "session_id": "20260618_01",
+  "profile_id": "coax_molex_1000650128",
+  "cable_length_mm": 1025.0,
+  "condition": "1025mm",
+  "measurement_type": "vna",
+  "date": "2026-06-18",
+  "operator": "Federico",
+  "num_files": 1,
+  "mean_max_insertion_loss_db": -20.2075,
+  "worst_max_insertion_loss_db": -20.2075,
+  "mean_min_return_loss_db": -1.9475,
+  "worst_min_return_loss_db": -1.9475,
+  "mean_characteristic_impedance_ohm": 51.43,
+  "attenuation_db_by_hz": {
+    "1000000": 0.3497,
+    "10000000": 0.4549,
+    "100000000": 1.2114,
+    "500000000": 3.1094,
+    "750000000": 4.2173,
+    "1000000000": 7.702,
+    "1500000000": 5.7439,
+    "3000000000": 10.7336
+  },
+  "vna_instrument": "PicoVNA 106",
+  "calibration_type": "SOLT",
+  "port_impedance_ohm": 50.0
+}

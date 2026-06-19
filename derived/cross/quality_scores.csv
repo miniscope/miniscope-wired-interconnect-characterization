@@ -1,0 +1,10 @@
+profile_id,cable_length_mm,rate_gbps,worst_eye_area_ratio,worst_link_margin_mv,attenuation_db,quality_score,zone
+coax_molex_1000650128,170.0,0.1875,0.109375,90.0,10.1116,0.362634,not_recommended
+coax_molex_1000650128,170.0,3.0,0.223633,200.0,10.1116,0.188337,not_recommended
+coax_molex_1000650128,170.0,6.0,0.148438,100.0,10.1116,0.358259,not_recommended
+coax_molex_1000650128,500.0,0.1875,0.117676,110.0,14.851,0.27856,not_recommended
+coax_molex_1000650128,500.0,3.0,0.170654,50.0,14.851,0.419752,not_recommended
+coax_molex_1000650128,500.0,6.0,0.114502,180.0,14.851,0.137291,not_recommended
+coax_molex_1000650128,1025.0,0.1875,0.093018,150.0,20.2075,0.137207,not_recommended
+coax_molex_1000650128,1025.0,3.0,0.187012,50.0,20.2075,0.374805,not_recommended
+coax_molex_1000650128,1025.0,6.0,0.093018,290.0,20.2075,0.037207,not_recommended

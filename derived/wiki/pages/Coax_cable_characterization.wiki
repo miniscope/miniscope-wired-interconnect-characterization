@@ -7,12 +7,180 @@ This page summarizes measured performance of coaxial tether cables for Miniscope
 
 Each curve is one cable type. The score combines eye opening, link margin, and attenuation into a single 0-1 number; the shaded bands show the recommended (green), marginal (yellow), and not-recommended (red) regions.
 
+[[File:CoaxCableChar_cross_quality_vs_length_3g.png|640px|thumb|none|Cable quality vs length at 3 Gbps]]
+[[File:CoaxCableChar_cross_quality_vs_length_6g.png|640px|thumb|none|Cable quality vs length at 6 Gbps]]
+
+=== Summary table ===
+
+{| class="wikitable"
+|-
+! Cable
+! Length (mm)
+! Rate (Gbps)
+! Score
+! Recommendation
+|-
+| coax_molex_1000650128
+| 170
+| 0.1875
+| 0.362634
+| not_recommended
+|-
+| coax_molex_1000650128
+| 170
+| 3
+| 0.188337
+| not_recommended
+|-
+| coax_molex_1000650128
+| 170
+| 6
+| 0.358259
+| not_recommended
+|-
+| coax_molex_1000650128
+| 500
+| 0.1875
+| 0.27856
+| not_recommended
+|-
+| coax_molex_1000650128
+| 500
+| 3
+| 0.419752
+| not_recommended
+|-
+| coax_molex_1000650128
+| 500
+| 6
+| 0.137291
+| not_recommended
+|-
+| coax_molex_1000650128
+| 1025
+| 0.1875
+| 0.137207
+| not_recommended
+|-
+| coax_molex_1000650128
+| 1025
+| 3
+| 0.374805
+| not_recommended
+|-
+| coax_molex_1000650128
+| 1025
+| 6
+| 0.037207
+| not_recommended
+|}
+
+== Which cable works with my Miniscope? ==
+
+Each Miniscope runs its link at one rate, so these curves show cable quality at that rate. Curves marked ''projected'' are derived from the cable's measured attenuation rather than a direct eye measurement.
+
+[[File:CoaxCableChar_cross_miniscope_quality_miniscope_v4.png|640px|thumb|none|Cable quality vs length (miniscope_v4)]]
+{| class="wikitable"
+|-
+! Miniscope
+! Cable
+! Length (mm)
+! Rate (Gbps)
+! Score
+! Recommendation
+! Source
+|-
+| miniscope_v4
+| coax_molex_1000650128
+| 170
+| 1.5
+| 0.96967
+| works
+| projected_from_vna
+|-
+| miniscope_v4
+| coax_molex_1000650128
+| 500
+| 1.5
+| 0.815535
+| works
+| projected_from_vna
+|-
+| miniscope_v4
+| coax_molex_1000650128
+| 1025
+| 1.5
+| 0.789135
+| marginal
+| projected_from_vna
+|-
+| miniscope_v4
+| coax_molex_1000650128
+| 1500
+| 1.5
+| 0.73509
+| marginal
+| projected_from_vna
+|}
 
 == What supply voltage do I need? ==
 
 Thin coax drops voltage, so each cable and length has an allowable supply window: the minimum keeps the Miniscope above its regulator dropout at full load; the maximum stays under the regulator's input limit. The dotted line marks the USB 5 V rail for reference -- DAQs can also be powered from an adjustable supply anywhere in the window.
 
+[[File:CoaxCableChar_cross_supply_voltage_miniscope_v4.png|640px|thumb|none|Allowable supply voltage (miniscope_v4)]]
+{| class="wikitable"
+|-
+! Miniscope
+! Cable
+! Length (mm)
+! Min supply (V)
+! Max supply (V)
+! OK at 5 V (USB)?
+|-
+| miniscope_v4
+| coax_molex_1000650128
+| 170
+| 3.529
+| 5.515
+| True
+|-
+| miniscope_v4
+| coax_molex_1000650128
+| 500
+| 3.974
+| 5.545
+| True
+|-
+| miniscope_v4
+| coax_molex_1000650128
+| 1025
+| 4.682
+| 5.592
+| True
+|-
+| miniscope_v4
+| coax_molex_1000650128
+| 1500
+| 5.323
+| 5.635
+| False
+|}
+
+=== Longest usable cable on USB (5 V) power ===
+
+{| class="wikitable"
+|-
+! Miniscope
+! Cable
+! Supply (V)
+! Max length (mm)
+|-
+| miniscope_v4
+| coax_molex_1000650128
+| 5
+| 1260.6
+|}
 
 == Per-DUT details ==
 
-* [[Coax_cable_characterization/coax_spi_sci_40awg|coax_spi_sci_40awg]]
+* [[Coax_cable_characterization/coax_molex_1000650128|coax_molex_1000650128]]

@@ -1,0 +1,23 @@
+{
+  "session_id": "20260618_01",
+  "profile_id": "coax_molex_1000650128",
+  "cable_length_mm": 500.0,
+  "condition": "500mm",
+  "measurement_type": "resistance",
+  "date": "2026-06-18",
+  "operator": "Federico",
+  "num_measurements": 3,
+  "mean_resistance_ohm": 2.2476,
+  "std_resistance_ohm": 0.001375,
+  "min_resistance_ohm": 2.2464,
+  "max_resistance_ohm": 2.2491,
+  "median_resistance_ohm": 2.2473,
+  "mean_roundtrip_resistance_ohm_per_m": 4.4952,
+  "std_roundtrip_resistance_ohm_per_m": 0.00275,
+  "min_roundtrip_resistance_ohm_per_m": 4.4928,
+  "max_roundtrip_resistance_ohm_per_m": 4.4982,
+  "median_roundtrip_resistance_ohm_per_m": 4.4946,
+  "measurement_method": "lcr_shorted_loop",
+  "measurement_instrument": "LCR Probe",
+  "temperature_c": 25.0
+}

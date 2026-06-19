@@ -1,0 +1,2 @@
+profile_id,condition,cable_length_mm,session_id,date,operator,measurement_method,measurement_instrument,temperature_c,num_measurements,mean_resistance_ohm,std_resistance_ohm,min_resistance_ohm,max_resistance_ohm,median_resistance_ohm,mean_roundtrip_resistance_ohm_per_m,std_roundtrip_resistance_ohm_per_m
+coax_molex_1000650128,500mm,500.0,20260618_01,2026-06-18,Federico,lcr_shorted_loop,LCR Probe,25.0,3,2.2476,0.001375,2.2464,2.2491,2.2473,4.4952,0.00275
