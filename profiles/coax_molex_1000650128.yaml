@@ -1,0 +1,16 @@
+schema_version: '1.0'
+profile_type: cable
+profile_id: coax_molex_1000650128
+name: Molex 40 AWG Coax
+manufacturer: Molex
+part_number: '100065-0128'
+mouser_part_number: '538-100065-0128'
+digikey_part_number: ''
+characteristic_impedance_ohm: 50.0
+wire_gauge_awg: 40.0
+shield_type: Strand
+connector_type_a: SMA
+connector_type_b: SMA
+cable_type: coaxial
+notes: ''
+tags: []

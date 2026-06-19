@@ -1,0 +1,14 @@
+schema_version: '1.0'
+session_id: '20260618_01'
+profile_id: coax_molex_1000650128
+condition: 1500mm
+measurement_type: vna
+measurement_type_version: 1
+date: 2026-06-18
+operator: Federico
+notes: ''
+type_fields:
+  vna_instrument: PicoVNA 106
+  calibration_type: SOLT
+  port_impedance_ohm: 50.0
+cable_length_mm: 1500.0
