@@ -1,0 +1,14 @@
+schema_version: '1.0'
+session_id: '20260618_01'
+profile_id: coax_molex_1000650128
+condition: 500mm
+measurement_type: resistance
+measurement_type_version: 1
+date: 2026-06-18
+operator: Federico
+notes: ''
+type_fields:
+  measurement_instrument: LCR Probe
+  measurement_method: lcr_shorted_loop
+  temperature_c: 25.0
+cable_length_mm: 500.0
