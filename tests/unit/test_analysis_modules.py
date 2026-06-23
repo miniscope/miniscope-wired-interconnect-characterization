@@ -182,8 +182,13 @@ class TestQualityScore:
         assert score(inputs, config) == pytest.approx(0.0)
 
     def test_missing_metrics_renormalized(self, config):
-        """With only eye area available, score == eye area sub-score."""
-        inputs = QualityInputs(eye_area_ratio=0.5)
+        """With only eye area available, score == eye area sub-score.
+
+        The eye sub-score normalizes by eye_area_full_scale, so an eye filling
+        half the full-scale ratio yields a sub-score (and thus a score) of 0.5.
+        """
+        half_open = 0.5 * config.quality_score.references.eye_area_full_scale
+        inputs = QualityInputs(eye_area_ratio=half_open)
         assert score(inputs, config) == pytest.approx(0.5)
 
     def test_no_metrics_returns_none(self, config):

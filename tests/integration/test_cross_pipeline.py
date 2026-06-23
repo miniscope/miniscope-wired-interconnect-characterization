@@ -100,8 +100,11 @@ class TestCrossAnalysis:
         outputs = run_cross_analysis(analyzed_repo)
         df = pd.read_csv(outputs["quality_scores"])
 
-        # 1 profile x 2 lengths x 3 lanes (fwd 3G/6G + reverse 187.5M)
-        assert len(df) == 6
+        # 1 profile x 2 lengths x 2 scored forward rates (3G/6G). The 187.5 Mbps
+        # reverse channel is excluded from the quality score (it is low-rate,
+        # robust, and never the link bottleneck).
+        assert len(df) == 4
+        assert set(df["rate_gbps"]) == {3.0, 6.0}
         assert (df["quality_score"] >= 0).all()
         assert (df["quality_score"] <= 1).all()
         assert set(df["zone"]).issubset({"works", "marginal", "not_recommended"})

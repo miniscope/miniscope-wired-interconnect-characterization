@@ -13,9 +13,20 @@ quality_score:
     eye_area: 0.4
     link_margin: 0.4
     attenuation: 0.2
-  # Normalization references (metric value that maps to a score of 1.0).
+  # Normalization references for the sub-scores (see src/analysis/config.py).
   references:
-    link_margin_full_scale_mv: 200.0
+    # An eye never fills its bounding box: a wide-open, healthy eye occupies
+    # only ~0.2-0.3 of the EOM phase x voltage scan window. This is the eye-area
+    # ratio that maps to a perfect eye sub-score of 1.0; ratios above it
+    # saturate. Without it the eye term (weight 0.4) is structurally capped near
+    # 0.1 and NO cable can reach the "works" zone.
+    eye_area_full_scale: 0.25
+    # The forward link's TX start amplitude (registers.SER_TX_START_MV = 410):
+    # a margin floor sitting at full drive means zero headroom -> sub-score 0.
+    # (The reverse link starts lower at 250 mV, so its margin is mildly
+    # over-credited against this single scale -- acceptable; reverse is the slow,
+    # robust channel.)
+    link_margin_full_scale_mv: 410.0
     attenuation_full_scale_db: 20.0
 
 # Zones for the user-facing quality-vs-length plot.
@@ -23,7 +34,10 @@ quality_score:
 # score >= marginal         -> "may have issues"
 # score <  marginal         -> "not recommended"
 zones:
-  works: 0.8
+  # A clean cable on a healthy link tops out around 0.8 with the normalized
+  # sub-scores, so "works" sits just below that rather than demanding a
+  # near-perfect 0.8+ on every metric at once.
+  works: 0.75
   marginal: 0.5
 
 # Reference supply voltage for reporting (the USB 5 V rail). How a DAQ is

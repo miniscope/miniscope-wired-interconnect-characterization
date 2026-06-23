@@ -280,10 +280,21 @@ def _quality_table(consolidated: dict[str, dict], config: AnalysisConfig) -> pd.
         serdes_rows = data.get("serdes_by_length", [])
         vna_by_length = {r["cable_length_mm"]: r for r in data.get("vna_by_length", [])}
 
+        # Score only the characterized forward link rates (config.serdes_rates_gbps,
+        # e.g. 3 & 6 Gbps). The 187.5 Mbps reverse control channel is excluded on
+        # purpose: it is low-rate and robust, never the link bottleneck, and its
+        # link-margin algorithm runs stricter -- so it would drag the score down
+        # without reflecting real usability. It is still measured and shown in the
+        # per-cable SerDes detail table, just not in the headline quality number.
+        scored_rates = {float(rate) for rate in config.serdes_rates_gbps}
+
         # Group serdes rows by (length, rate), take worst case across channels
         by_length_rate: dict[tuple[float, float], list[dict]] = {}
         for r in serdes_rows:
-            key = (r["cable_length_mm"], float(r["rate_gbps"]))
+            rate = float(r["rate_gbps"])
+            if rate not in scored_rates:
+                continue
+            key = (r["cable_length_mm"], rate)
             by_length_rate.setdefault(key, []).append(r)
 
         for (length_mm, rate), combos in sorted(by_length_rate.items()):
@@ -294,11 +305,18 @@ def _quality_table(consolidated: dict[str, dict], config: AnalysisConfig) -> pd.
                 c["mean_link_margin_mv"] for c in combos if c.get("mean_link_margin_mv") is not None
             ]
 
+            # Attenuation at the link's own Nyquist fundamental (rate/2) -- the
+            # same quantity the projected path uses -- NOT the worst-case
+            # broadband insertion loss, which penalizes a cable for loss far
+            # above its link frequency (a short coax can show ~10 dB at 3 GHz
+            # while losing <1 dB at its actual rate). None (Nyquist outside the
+            # swept span) drops the term and renormalizes the remaining weights.
             vna_row = vna_by_length.get(length_mm)
             attenuation_db = None
-            if vna_row and vna_row.get("mean_max_insertion_loss_db") is not None:
-                # Insertion loss is negative dB; attenuation is its magnitude
-                attenuation_db = abs(vna_row["mean_max_insertion_loss_db"])
+            if vna_row:
+                attenuation_db = attenuation_at_hz(
+                    vna_row.get("attenuation_db_by_hz", {}), nyquist_hz(rate)
+                )
 
             inputs = QualityInputs(
                 eye_area_ratio=min(eye_areas) if eye_areas else None,
