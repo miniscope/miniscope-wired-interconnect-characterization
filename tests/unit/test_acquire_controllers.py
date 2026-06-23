@@ -23,6 +23,7 @@ from src.acquire.controllers.sessions import (
     read_serdes_link_status,
     record_resistance_session,
     run_serdes_capture,
+    run_serdes_margins,
     run_vna_capture,
     save_serdes_session,
     save_vna_session,
@@ -240,6 +241,76 @@ class TestSessionControllers:
         )
         assert ref.measurement_type == "serdes"
         assert (ref.path / "session_manifest.csv").exists()
+
+    def test_serdes_margins_repeat_and_append(self, test_repo: Path):
+        """A margins-only repeat yields sweeps that append onto a prior capture."""
+        from src.instruments.serdes.driver import SerdesConfig
+        from src.instruments.types import group_margins_by_lane
+
+        result = run_serdes_capture(750.0, simulate=True)
+        assert len(result.eyes) == 3
+        assert len(result.margins) == 3  # one sweep per lane
+
+        events: list[ProgressEvent] = []
+        new_margins = run_serdes_margins(
+            750.0,
+            progress=events.append,
+            simulate=True,
+            config=SerdesConfig(margin_iterations=2),
+        )
+        # No eye steps: 2 sweeps per lane, one progress event each.
+        assert len(new_margins) == 6
+        assert len(events) == 6
+
+        # Appending deepens the per-lane statistics; the eye count is untouched.
+        result.margins.extend(new_margins)
+        assert len(result.eyes) == 3
+        for _lane, sweeps in group_margins_by_lane(result.margins):
+            assert len(sweeps) == 3  # original 1 + 2 repeats
+
+        # Still saves as a valid serdes session after the repeat.
+        ref = save_serdes_session(
+            test_repo,
+            "test_cable",
+            750.0,
+            result,
+            operator="Federico",
+            notes="",
+            serdes_device="Sim GMSL2",
+        )
+        assert (ref.path / "session_manifest.csv").exists()
+
+    def test_serdes_margins_forwards_port(self, monkeypatch):
+        """run_serdes_margins forwards the chosen port and omits None."""
+        import src.acquire.controllers.sessions as sessions
+
+        class _RecordingDriver:
+            def connect(self):
+                pass
+
+            def sweep_margins_only(self, config=None, progress=None):
+                return "MARGINS"
+
+            def close(self):
+                pass
+
+        seen: dict = {}
+
+        def fake_get_serdes_driver(simulate=None, **kwargs):
+            seen.clear()
+            seen["simulate"] = simulate
+            seen.update(kwargs)
+            return _RecordingDriver()
+
+        monkeypatch.setattr(sessions, "get_serdes_driver", fake_get_serdes_driver)
+
+        assert run_serdes_margins(750.0, port="COM5", simulate=False) == "MARGINS"
+        assert seen["port"] == "COM5"
+        assert seen["cable_length_mm"] == 750.0
+        assert seen["simulate"] is False
+
+        run_serdes_margins(750.0, simulate=True)
+        assert "port" not in seen
 
     def test_serdes_capture_forwards_port(self, monkeypatch):
         """A chosen serial port reaches the driver factory; None is omitted."""

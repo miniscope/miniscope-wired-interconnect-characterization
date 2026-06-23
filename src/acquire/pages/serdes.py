@@ -9,6 +9,7 @@ from nicegui import run, ui
 from src.acquire.controllers.sessions import (
     read_serdes_link_status,
     run_serdes_capture,
+    run_serdes_margins,
     save_serdes_session,
 )
 from src.acquire.pages.components import header, png_source, protocol_panel, require_operator
@@ -288,11 +289,17 @@ def serdes_page(profile_id: str, condition: str) -> None:
             .classes("w-96")
         )
         # Repeat just the link-margin sweep this many times per lane (the eye is
-        # captured once); the results average out run-to-run noise.
+        # captured once); the results average out run-to-run noise. The same
+        # count drives "Repeat link margin", which adds this many more sweeps to
+        # an existing capture without re-taking the eye.
         iterations = (
             ui.number(label="Margin iterations", value=1, min=1, max=20, precision=0, step=1)
             .props("outlined")
             .classes("w-48")
+        )
+        iterations.tooltip(
+            "Margin sweeps per lane. Used by 'Go' (per full run) and "
+            "'Repeat link margin' (added on top, keeping the eye)."
         )
 
     status_label = ui.label("").classes("text-gray-700")
@@ -421,6 +428,7 @@ def serdes_page(profile_id: str, condition: str) -> None:
         margin_summary.clear()
         reset_banner.clear()
         save_button.disable()
+        repeat_button.disable()
         progress_bar.value = 0.0
         runs = selected_iterations()
         config = SerdesConfig(**RESOLUTION_PRESETS[resolution.value], margin_iterations=runs)
@@ -459,6 +467,8 @@ def serdes_page(profile_id: str, condition: str) -> None:
                 shared["result"] = result
                 status_label.text = "Capture complete -- review results, then save."
                 save_button.enable()
+                # Eye is captured -- the operator can now deepen just the margin.
+                repeat_button.enable()
         except Exception as e:
             status_label.text = f"Capture failed: {e}"
             ui.notify(f"Capture failed: {e}", type="negative", multi_line=True)
@@ -470,6 +480,95 @@ def serdes_page(profile_id: str, condition: str) -> None:
             # Re-enable Go for a retry, unless the link must be reset + re-checked.
             if not needs_reset:
                 go_button.enable()
+
+    async def repeat_margins() -> None:
+        """Run more link-margin sweeps and append them to the current capture.
+
+        Keeps the already-captured eye (the slow part) and adds
+        `selected_iterations()` more sweeps per lane; the per-lane average
+        re-derives across the pooled runs, so this just deepens the margin
+        statistics. The streamed previews and final view reuse the full-run path.
+        """
+        if shared["running"]:
+            return
+        existing = shared["result"]
+        if existing is None:
+            ui.notify("Run a full capture first", type="warning")
+            return
+        if hardware and not port_select.value:
+            ui.notify("Select a serial port first", type="warning")
+            return
+        shared["running"] = True
+        results.clear()
+        lane_grids.clear()
+        margin_summary.clear()
+        reset_banner.clear()
+        save_button.disable()
+        go_button.disable()
+        repeat_button.disable()
+        progress_bar.value = 0.0
+        runs = selected_iterations()
+        config = SerdesConfig(**RESOLUTION_PRESETS[resolution.value], margin_iterations=runs)
+        preset = resolution.value.split(" --")[0]
+        status_label.text = f"Repeating link-margin sweep ({preset}, {runs} more per lane)..."
+        needs_reset = False
+        try:
+            new_margins = await run.io_bound(
+                run_serdes_margins,
+                sim_length_mm,
+                on_progress,
+                STATE.simulate,
+                selected_port(),
+                config,
+            )
+            # Drop any previews still queued so the rebuilt (averaged) view wins.
+            with shared["lock"]:
+                shared["events"].clear()
+            # A repeat that drops lock is discarded: the device needs a power
+            # cycle and the new sweeps are compromised, but the earlier capture
+            # (eye + its margins) is untouched and stays saveable.
+            lost = any(
+                point.status in LOCK_LOSS_STATUSES
+                for sweep in new_margins
+                for point in sweep.points
+            )
+            if lost:
+                render_final_results(existing)
+                render_margin_summary(margin_summary, existing)
+                needs_reset = True
+                show_reset_needed()
+                status_label.text = (
+                    "Link lost lock during the repeat -- power-cycle the device and "
+                    "re-check the link. The added sweeps were discarded; the earlier "
+                    "capture is unchanged and still saveable."
+                )
+                save_button.enable()
+            else:
+                existing.margins.extend(new_margins)
+                render_final_results(existing)
+                render_margin_summary(margin_summary, existing)
+                status_label.text = (
+                    f"Added {runs} more margin iteration(s) per lane -- "
+                    "review results, then save."
+                )
+                save_button.enable()
+        except Exception as e:
+            # The earlier capture is untouched; let the operator save or retry.
+            status_label.text = f"Margin repeat failed: {e}"
+            ui.notify(f"Margin repeat failed: {e}", type="negative", multi_line=True)
+            render_final_results(existing)
+            render_margin_summary(margin_summary, existing)
+            save_button.enable()
+            if "lock" in str(e).lower():
+                needs_reset = True
+                show_reset_needed()
+        finally:
+            shared["running"] = False
+            # Re-enable Go (and another repeat) unless a reset + re-check is needed.
+            if not needs_reset:
+                go_button.enable()
+                if shared["result"] is not None:
+                    repeat_button.enable()
 
     def save() -> None:
         if not require_operator():
@@ -500,10 +599,16 @@ def serdes_page(profile_id: str, condition: str) -> None:
     with ui.row().classes("gap-2 mt-4"):
         check_button = ui.button("Check link", icon="cable", on_click=check_link).props("outline")
         go_button = ui.button("Go -- run full sequence", icon="play_arrow", on_click=go)
+        repeat_button = ui.button(
+            "Repeat link margin", icon="replay", on_click=repeat_margins
+        ).props("outline")
         save_button = ui.button("Save session", icon="save", on_click=save)
-        # Go is gated behind a successful "Check link"; Save behind a clean run.
+        # Go is gated behind a successful "Check link"; Repeat + Save behind a
+        # clean run (Repeat adds more margin sweeps, keeping the captured eye).
         go_button.disable()
         go_button.tooltip("Run a link check first")
+        repeat_button.disable()
+        repeat_button.tooltip("Run a full capture first; this adds more margin sweeps to it")
         save_button.disable()
 
     # Per-lane link-margin summary table, pinned at the bottom: one row per run
