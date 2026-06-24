@@ -237,9 +237,11 @@ def render_margin_summary(container, result) -> None:
             _summary_table("Link-margin summary", rows, iteration=False)
 
 
-# Margin-step statuses that mean the link dropped lock outright (as opposed to
-# the normal "errors" floor). After these the GMSL2 pair can stay stuck until
-# it is power-cycled, so the GUI flags them and blocks the save.
+# Margin-step statuses where the link dropped lock outright (vs the normal
+# "errors" floor). A margin sweep reaching one of these IS its measured floor --
+# valid data, not a failure -- so a completed capture surfaces it as a note but
+# does NOT block the save. (A genuinely stuck device makes the capture raise,
+# which is handled separately and does prompt a power-cycle + re-check.)
 LOCK_LOSS_STATUSES = frozenset({"lost_lock", "ser_unreachable"})
 
 
@@ -514,24 +516,21 @@ def serdes_page(profile_id: str, condition: str) -> None:
                 shared["events"].clear()
             render_final_results(result)
             render_margin_summary(margin_summary, result)
+            # The capture completed, so the device is functional and the recorded
+            # eye/margin data is valid -- including a margin sweep that reached its
+            # floor by dropping lock (lost_lock / ser_unreachable is the measured
+            # floor, not a failure). Always saveable; a genuinely stuck device
+            # would have raised instead (handled in the except branch).
+            shared["result"] = result
+            notes: list[str] = []
+            if result.no_link_lanes:
+                lanes_txt = ", ".join(lane.label for lane in result.no_link_lanes)
+                notes.append(f"{lanes_txt} did not link (scored 0)")
             if lock_was_lost(result):
-                # Incomplete/compromised run -- prompt for a reset, block the save.
-                needs_reset = True
-                show_reset_needed()
-                status_label.text = (
-                    "Link lost lock during the sweep -- power-cycle the device and "
-                    "re-check the link. This run was not saved."
-                )
-            else:
-                # Persist every raw margin run (append-only); the per-lane
-                # average shown above is re-derived in processing on read.
-                shared["result"] = result
-                no_link_note = ""
-                if result.no_link_lanes:
-                    lanes_txt = ", ".join(lane.label for lane in result.no_link_lanes)
-                    no_link_note = f" ({lanes_txt} did not link -- scored 0)"
-                status_label.text = f"Capture complete -- review results, then save.{no_link_note}"
-                save_button.enable()
+                notes.append("a margin sweep hit its lock-loss floor (the measured floor, normal)")
+            suffix = f" -- {'; '.join(notes)}" if notes else ""
+            status_label.text = f"Capture complete{suffix}. Review results, then save."
+            save_button.enable()
         except Exception as e:
             status_label.text = f"Capture failed: {e}"
             ui.notify(f"Capture failed: {e}", type="negative", multi_line=True)
