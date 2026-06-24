@@ -54,8 +54,10 @@ Measured round-trip resistivity: '''4.4952 ohm/m''' (single_length_ratio, n=1 le
 {| class="wikitable"
 |-
 ! Length (mm)
+! Lane
 ! Channel
 ! Rate (Gbps)
+! Links?
 ! Eye area
 ! Eye height (mV)
 ! Eye width (ps)
@@ -63,8 +65,10 @@ Measured round-trip resistivity: '''4.4952 ohm/m''' (single_length_ratio, n=1 le
 ! Sessions
 |-
 | 170
+| fwd_3g
 | forward
 | 3
+| True
 | 0.223633
 | 196.875
 | 
@@ -72,8 +76,10 @@ Measured round-trip resistivity: '''4.4952 ohm/m''' (single_length_ratio, n=1 le
 | 1
 |-
 | 170
+| fwd_6g
 | forward
 | 6
+| True
 | 0.148438
 | 177.188
 | 
@@ -81,8 +87,10 @@ Measured round-trip resistivity: '''4.4952 ohm/m''' (single_length_ratio, n=1 le
 | 1
 |-
 | 170
+| rev_187m
 | reverse
 | 0.1875
+| True
 | 0.109375
 | 68.906
 | 
@@ -90,8 +98,10 @@ Measured round-trip resistivity: '''4.4952 ohm/m''' (single_length_ratio, n=1 le
 | 1
 |-
 | 500
+| fwd_3g
 | forward
 | 3
+| True
 | 0.170654
 | 118.125
 | 
@@ -99,8 +109,10 @@ Measured round-trip resistivity: '''4.4952 ohm/m''' (single_length_ratio, n=1 le
 | 1
 |-
 | 500
+| fwd_6g
 | forward
 | 6
+| True
 | 0.114502
 | 137.812
 | 
@@ -108,8 +120,10 @@ Measured round-trip resistivity: '''4.4952 ohm/m''' (single_length_ratio, n=1 le
 | 1
 |-
 | 500
+| rev_187m
 | reverse
 | 0.1875
+| True
 | 0.117676
 | 78.75
 | 
@@ -117,8 +131,10 @@ Measured round-trip resistivity: '''4.4952 ohm/m''' (single_length_ratio, n=1 le
 | 1
 |-
 | 1025
+| fwd_3g
 | forward
 | 3
+| True
 | 0.187012
 | 187.031
 | 
@@ -126,8 +142,10 @@ Measured round-trip resistivity: '''4.4952 ohm/m''' (single_length_ratio, n=1 le
 | 1
 |-
 | 1025
+| fwd_6g
 | forward
 | 6
+| True
 | 0.093018
 | 118.125
 | 
@@ -135,8 +153,10 @@ Measured round-trip resistivity: '''4.4952 ohm/m''' (single_length_ratio, n=1 le
 | 1
 |-
 | 1025
+| rev_187m
 | reverse
 | 0.1875
+| True
 | 0.093018
 | 59.062
 | 

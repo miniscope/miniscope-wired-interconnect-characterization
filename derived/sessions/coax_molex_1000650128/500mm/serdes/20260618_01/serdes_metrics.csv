@@ -1,4 +1,4 @@
-lane_id,channel,rate_gbps,eye_csv,eye_area_ratio,zero_error_fraction,eye_height_mv,eye_width_ui,eye_png,margin_csv,link_margin_mv,error_onset_mv,num_margin_points,num_margin_runs
-fwd_3g,forward,3.0,eye_fwd_3g.csv,0.170654,0.151367,118.125,0.84375,eye_fwd_3g.png,margin_fwd_3g.csv,50.0,,37,3
-fwd_6g,forward,6.0,eye_fwd_6g.csv,0.114502,0.084717,137.812,0.71875,eye_fwd_6g.png,margin_fwd_6g.csv,180.0,170.0,28,3
-rev_187m,reverse,0.1875,eye_rev_187m.csv,0.117676,0.073242,78.75,2.0,eye_rev_187m.png,margin_rev_187m.csv,110.0,100.0,17,3
+lane_id,channel,rate_gbps,linked,eye_csv,eye_area_ratio,zero_error_fraction,eye_height_mv,eye_width_ui,eye_png,margin_csv,link_margin_mv,error_onset_mv,num_margin_points,num_margin_runs
+fwd_3g,forward,3.0,True,eye_fwd_3g.csv,0.170654,0.151367,118.125,0.84375,eye_fwd_3g.png,margin_fwd_3g.csv,50.0,,37,3
+fwd_6g,forward,6.0,True,eye_fwd_6g.csv,0.114502,0.084717,137.812,0.71875,eye_fwd_6g.png,margin_fwd_6g.csv,180.0,170.0,28,3
+rev_187m,reverse,0.1875,True,eye_rev_187m.csv,0.117676,0.073242,78.75,2.0,eye_rev_187m.png,margin_rev_187m.csv,110.0,100.0,17,3
