@@ -27,6 +27,20 @@ logger = logging.getLogger(__name__)
 
 EDIT_SUMMARY = "Automated update from miniscope-wired-interconnect-characterization"
 
+# MediaWiki rejects re-uploading a byte-identical file with this API error code.
+# It is benign -- the image on the wiki is already current -- so it must NOT
+# abort the publish; otherwise an unchanged plot (common: only the page text /
+# scores changed) would stop the far more important page-text update.
+_UNCHANGED_UPLOAD_CODE = "fileexists-no-change"
+
+
+def _is_unchanged_upload(exc: Exception) -> bool:
+    """True if an upload 'failed' only because the file is already up to date."""
+    if getattr(exc, "code", None) == _UNCHANGED_UPLOAD_CODE:
+        return True
+    args = getattr(exc, "args", ())
+    return bool(args) and args[0] == _UNCHANGED_UPLOAD_CODE
+
 
 class MediaWikiPublisher(BaseWikiPublisher):
     """Publishes pages + images from a rendered bundle directory."""
@@ -68,14 +82,22 @@ class MediaWikiPublisher(BaseWikiPublisher):
             if not local_path.exists():
                 logger.warning("Skipping missing image %s", local_path)
                 continue
-            with open(local_path, "rb") as f:
-                self._site.upload(
-                    f,
-                    filename=image["wiki_name"],
-                    description=EDIT_SUMMARY,
-                    ignore=True,  # overwrite existing versions
-                )
-            logger.info("Uploaded %s", image["wiki_name"])
+            try:
+                with open(local_path, "rb") as f:
+                    self._site.upload(
+                        f,
+                        filename=image["wiki_name"],
+                        description=EDIT_SUMMARY,
+                        ignore=True,  # overwrite existing versions
+                    )
+                logger.info("Uploaded %s", image["wiki_name"])
+            except Exception as exc:
+                # An unchanged image is already current -- don't let MediaWiki's
+                # 'fileexists-no-change' error abort the page-text updates below.
+                if _is_unchanged_upload(exc):
+                    logger.info("Image %s already current (unchanged)", image["wiki_name"])
+                else:
+                    raise
 
         for page in manifest.get("pages", []):
             text = (payload_dir / page["file"]).read_text(encoding="utf-8")

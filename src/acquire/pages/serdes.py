@@ -22,6 +22,8 @@ from src.instruments.serdes.pico_bridge import list_serial_ports
 from src.instruments.types import (
     FORWARD_3G,
     FORWARD_6G,
+    REVERSE_3G,
+    REVERSE_6G,
     EyeDiagram,
     MarginSweep,
     ProgressEvent,
@@ -34,6 +36,10 @@ from src.processing.serdes import average_margin_sweeps
 # Forward lanes the 'Check link' probe reports per-rate lock for; the reverse
 # control channel is excluded (it is not scored and rides on the forward link).
 PROBED_FORWARD_LANES = (FORWARD_3G, FORWARD_6G)
+# A forward rate that won't lock takes its reverse measurement down with it (the
+# 187.5 Mbps reverse channel rides on the forward link), so skipping a forward
+# lane also skips the reverse lane measured under that rate.
+REVERSE_FOR_FORWARD = {FORWARD_3G: REVERSE_3G, FORWARD_6G: REVERSE_6G}
 
 # Capture-resolution presets for the full sequence. Wall-clock is dominated by
 # the eye grid (eye_bins -> ~bins^2 points at ~0.1 s each over the serial
@@ -409,6 +415,27 @@ def serdes_page(profile_id: str, condition: str) -> None:
         except (TypeError, ValueError):
             return 1
 
+    def capture_config(runs: int) -> SerdesConfig:
+        """Build the capture config, honoring the last link check.
+
+        A capture trusts the check's per-rate result rather than re-probing each
+        lane (the re-probe is unreliable on a marginal high rate): each forward
+        rate that didn't lock -- plus the reverse channel measured under it -- is
+        passed as skip_lanes, so those are recorded no-link without being
+        measured. The link check gates "Go", so this reflects the latest check.
+        """
+        skip: list[SerdesLane] = []
+        for fwd in nolink_lanes:
+            skip.append(fwd)
+            rev = REVERSE_FOR_FORWARD.get(fwd)
+            if rev is not None:
+                skip.append(rev)
+        return SerdesConfig(
+            **RESOLUTION_PRESETS[resolution.value],
+            margin_iterations=runs,
+            skip_lanes=tuple(skip),
+        )
+
     async def check_link() -> None:
         if hardware and not port_select.value:
             ui.notify("Select a serial port first", type="warning")
@@ -502,7 +529,7 @@ def serdes_page(profile_id: str, condition: str) -> None:
         log_nolink_button.disable()
         progress_bar.value = 0.0
         runs = selected_iterations()
-        config = SerdesConfig(**RESOLUTION_PRESETS[resolution.value], margin_iterations=runs)
+        config = capture_config(runs)
         preset = resolution.value.split(" --")[0]
         runs_note = f", {runs} margin iterations" if runs > 1 else ""
         status_label.text = f"Running full SerDes sequence ({preset}{runs_note})..."
@@ -580,7 +607,7 @@ def serdes_page(profile_id: str, condition: str) -> None:
         repeat_button.disable()
         progress_bar.value = 0.0
         runs = selected_iterations()
-        config = SerdesConfig(**RESOLUTION_PRESETS[resolution.value], margin_iterations=runs)
+        config = capture_config(runs)
         preset = resolution.value.split(" --")[0]
         status_label.text = f"Repeating link-margin sweep ({preset}, {runs} more per lane)..."
         needs_reset = False

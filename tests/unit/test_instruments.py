@@ -167,6 +167,32 @@ class TestSimulatedSerdesDriver:
         )
         assert FORWARD_6G not in transient.no_link_lanes
 
+    def test_capture_trusts_skip_lanes_over_reprobe(self):
+        """With skip_lanes from a link check, the capture records exactly those
+        as no-link and measures the rest -- without re-probing per lane.
+
+        Uses a SHORT cable (where link_locks would say every lane links) but
+        passes the 6 Gbps lanes as skip_lanes: they must still be skipped,
+        proving the capture trusts the check instead of re-probing.
+        """
+        driver = SimulatedSerdesDriver(cable_length_mm=1000.0)  # short: all would link
+        driver.connect()
+        result = driver.run_full_sequence(
+            config=SerdesConfig(eye_bins=16, skip_lanes=(FORWARD_6G, REVERSE_6G))
+        )
+        assert set(result.no_link_lanes) == {FORWARD_6G, REVERSE_6G}
+        assert {e.lane for e in result.eyes} == {FORWARD_3G, REVERSE_3G}
+
+    def test_empty_skip_lanes_measures_all_without_reprobe(self):
+        """skip_lanes=() means 'the check found everything links' -- measure all
+        lanes, with NO link_locks re-probe (even on a long cable where the live
+        probe would skip 6 Gbps)."""
+        driver = SimulatedSerdesDriver(cable_length_mm=2500.0)  # long: probe would skip 6G
+        driver.connect()
+        result = driver.run_full_sequence(config=SerdesConfig(eye_bins=16, skip_lanes=()))
+        assert result.no_link_lanes == []
+        assert len(result.eyes) == 4
+
     def test_margin_iterations_repeat_only_the_sweep(self, driver):
         """N margin iterations -> 1 eye + N margins per lane; progress stays sane."""
         events: list[ProgressEvent] = []
