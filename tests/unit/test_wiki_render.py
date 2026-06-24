@@ -44,6 +44,9 @@ class TestRenderWiki:
         assert "AUTO-GENERATED" in text
         assert "quality" in text.lower()
         assert "supply voltage" in text.lower()
+        # Supply-window feasibility is surfaced so a min>max (empty) window is
+        # not misread as a swapped reading.
+        assert "Feasible?" in text
         # Links to the per-profile page
         assert config.profile_page("test_cable") in text
         # Quality plots embedded per rate
@@ -104,3 +107,37 @@ class TestRenderWiki:
         """Rendering an unanalyzed repo yields pages without plots, not a crash."""
         outputs = render_wiki(test_repo)
         assert "upload_manifest" in outputs
+
+    def test_profile_page_explains_no_link(self, test_repo: Path):
+        """A no-link length gets an explanatory note so it is not misread as a
+        bad cable (the live 170 mm coax case)."""
+        from datetime import date
+
+        from src.core.session_writer import SessionMeta, write_serdes_session
+        from src.instruments.types import FORWARD_6G, SerdesResult
+
+        write_serdes_session(
+            test_repo,
+            "test_cable",
+            1500.0,
+            SerdesResult(no_link_lanes=[FORWARD_6G]),
+            SessionMeta(
+                operator="t", date=date.today(), notes="", type_fields={"serdes_device": "x"}
+            ),
+        )
+        run_full_pipeline(test_repo)
+
+        config = load_wiki_config(test_repo / "config" / "wiki.yaml")
+        outputs = render_wiki(test_repo)
+        text = outputs[f"page_{config.profile_page('test_cable')}"].read_text(encoding="utf-8")
+
+        assert "Links? = False" in text
+        assert "too clean" in text
+
+    def test_profile_page_no_note_without_no_link(self, analyzed_repo: Path):
+        """The all-linked fixture cable shows no no-link note."""
+        outputs = render_wiki(analyzed_repo)
+        config = load_wiki_config(analyzed_repo / "config" / "wiki.yaml")
+        text = outputs[f"page_{config.profile_page('test_cable')}"].read_text(encoding="utf-8")
+
+        assert "too clean" not in text

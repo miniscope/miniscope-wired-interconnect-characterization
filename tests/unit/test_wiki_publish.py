@@ -53,11 +53,12 @@ class _ApiError(Exception):
 
 
 class _FakeSite:
-    """Records uploads + page saves; can be told to fail every upload."""
+    """Records uploads + page saves + purges; can be told to fail every upload."""
 
     def __init__(self, upload_error: Exception | None = None) -> None:
         self.uploaded: list[str] = []
         self.saved: list[tuple[str, str]] = []
+        self.purged: list[str] = []
         self._upload_error = upload_error
         self.pages = self._Pages(self.saved)
 
@@ -65,6 +66,12 @@ class _FakeSite:
         self.uploaded.append(filename)
         if self._upload_error is not None:
             raise self._upload_error
+
+    def api(self, action, **kwargs):
+        if action == "purge":
+            titles = kwargs.get("titles", "")
+            self.purged.extend(t for t in titles.split("|") if t)
+        return {}
 
     class _Pages:
         def __init__(self, saved: list) -> None:
@@ -113,6 +120,34 @@ class TestMediaWikiPublisherUploads:
 
         with pytest.raises(Exception, match="badtoken"):
             pub.publish(analyzed_repo / "derived" / "wiki")
+
+    def test_publish_purges_files_and_pages(self, analyzed_repo: Path):
+        """Re-uploaded images keep their filename; without a purge the wiki
+        serves the old cached thumbnail. Every uploaded File and saved page
+        must be purged so the new plots actually appear."""
+        site = _FakeSite()
+        pub = self._publisher(analyzed_repo, site)
+
+        pub.publish(analyzed_repo / "derived" / "wiki")
+
+        assert site.uploaded and site.saved
+        for wiki_name in site.uploaded:
+            assert f"File:{wiki_name}" in site.purged
+        for title, _text in site.saved:
+            assert title in site.purged
+
+    def test_purge_failure_does_not_abort_publish(self, analyzed_repo: Path):
+        """A purge is best-effort -- if it raises, the publish still succeeds."""
+        site = _FakeSite()
+
+        def _boom(action, **kwargs):
+            raise RuntimeError("purge exploded")
+
+        site.api = _boom
+        pub = self._publisher(analyzed_repo, site)
+
+        pub.publish(analyzed_repo / "derived" / "wiki")  # must not raise
+        assert site.uploaded and site.saved
 
 
 class TestMediaWikiPublisherCredentials:

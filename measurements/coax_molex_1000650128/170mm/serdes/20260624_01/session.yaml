@@ -6,7 +6,11 @@ measurement_type: serdes
 measurement_type_version: 1
 date: 2026-06-24
 operator: Federico
-notes: ''
+notes: 'Forward link would not establish at 3 Gbps or 6 Gbps. Re-tested with replacement
+  cable and connectors with the same result, so this is a genuine no-link, not a bad
+  connection. Suspected cause: at 170 mm the channel loss is below the GMSL2 receiver''s
+  minimum (the link is "too clean" to lock) -- a minimum-cable-length effect rather than
+  a cable fault. The VNA attenuation at this length is unaffected and is still recorded.'
 type_fields:
   serdes_device: GMSL2
 cable_length_mm: 170.0
