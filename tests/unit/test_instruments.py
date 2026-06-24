@@ -533,6 +533,45 @@ class TestRealSerdesDemo:
             assert sweep.points  # the sweep produced points
             assert sweep.points[0].errors == 0  # clean at the high-amplitude start
 
+    def test_link_locks_stability_dwell_passes_for_stable_link(self):
+        """A 6 Gbps stability dwell passes when the link holds lock.
+
+        The demo bridge holds lock and collapses sleeps, so this returns True
+        immediately rather than actually waiting the dwell.
+        """
+        from src.instruments.serdes.real import RealSerdesDriver
+
+        driver = RealSerdesDriver(demo=True)
+        driver.connect()
+        assert driver.link_locks(FORWARD_6G, settle_s=5.0) is True
+        driver.close()
+
+    def test_link_locks_fails_when_link_drops_during_dwell(self):
+        """A link that locks but drops during the stability dwell reads no-link."""
+        from src.instruments.serdes import registers as R
+        from src.instruments.serdes.real import RealSerdesDriver
+
+        class DropsDuringDwell(RealSerdesDriver):
+            DWELL_S = 5.0  # distinct from every internal sleep duration
+
+            def __init__(self) -> None:
+                super().__init__(demo=True)
+                self._dropped = False
+
+                def drop_on_dwell(seconds: float) -> None:
+                    if seconds == self.DWELL_S:
+                        self._dropped = True
+
+                self._sleep = drop_on_dwell
+
+            def _is_locked(self, dev: int = R.DES_ADDR) -> bool:
+                return not self._dropped
+
+        driver = DropsDuringDwell()
+        driver.connect()  # locks fine initially (not yet dropped)
+        assert driver.link_locks(FORWARD_6G, settle_s=DropsDuringDwell.DWELL_S) is False
+        driver.close()
+
     def test_full_sequence_recovers_from_post_reset_nak(self):
         """capture_eye() leaves both chips mid-RESET_ALL, so the margin phase's
         first register access can NAK while they re-lock. The sequence must

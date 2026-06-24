@@ -164,19 +164,30 @@ class RealSerdesDriver(SerdesDriver):
             "des": decode(R.DES_ADDR),
         }
 
-    def link_locks(self, lane: SerdesLane) -> bool:
+    def link_locks(self, lane: SerdesLane, settle_s: float = 0.0) -> bool:
         """Switch to the lane's rate and report whether the link locks.
 
         Mirrors the relock sequence used at the top of ``sweep_margin`` so a
         transient post-reset NAK is tolerated; a genuine failure to acquire lock
         returns False (the no-link signal) rather than raising.
+
+        ``settle_s`` adds a stability dwell: after the link locks, hold the rate
+        for that long and require it to STILL be locked and error-free. A
+        marginal high-rate link can acquire lock momentarily and then drop or
+        start erroring, so the 6 Gbps probe uses this to avoid calling a flaky
+        link good.
         """
         self._ensure_clean_state()
         if lane.channel is SerdesChannel.FORWARD:
             self._set_forward_rate(lane.rate)
             self._ensure_clean_state()
         try:
-            return self._is_locked(R.DES_ADDR)
+            if not self._is_locked(R.DES_ADDR):
+                return False
+            if settle_s > 0:
+                self._sleep(settle_s)
+                return self._is_locked(R.DES_ADDR) and not self._has_error(R.DES_ADDR)
+            return True
         except OSError:
             return False
 

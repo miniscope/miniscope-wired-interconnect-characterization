@@ -76,7 +76,7 @@ class SerdesDriver(ABC):
         ...
 
     @abstractmethod
-    def link_locks(self, lane: SerdesLane) -> bool:
+    def link_locks(self, lane: SerdesLane, settle_s: float = 0.0) -> bool:
         """Whether the link establishes (locks) for this lane.
 
         For forward lanes the implementation must switch the link to the lane's
@@ -84,6 +84,12 @@ class SerdesDriver(ABC):
         cables that do not link at a given rate so they are recorded as no-link
         and scored 0, rather than capturing a garbage eye/margin. Must NOT raise
         on a failure to lock -- that is the expected signal; return False.
+
+        ``settle_s`` adds a stability dwell: after the link locks, hold the rate
+        for that long and require it to still be locked and error-free. A
+        marginal high-rate link can acquire lock momentarily, then drop or start
+        erroring, so a non-zero dwell avoids calling a flaky link good. 0 checks
+        immediately (the default, used by the capture path).
         """
         ...
 

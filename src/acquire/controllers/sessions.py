@@ -144,6 +144,7 @@ def check_serdes_links(
     cable_length_mm: float,
     simulate: bool | None = None,
     port: str | None = None,
+    six_gbps_stability_s: float = 5.0,
 ) -> dict:
     """Read link status and probe each forward rate's lock in one driver session.
 
@@ -153,6 +154,11 @@ def check_serdes_links(
     the no-link result (scored 0 downstream). Unlike ``read_serdes_link_status``
     this tolerates a link that never locks -- that is exactly what is being
     probed -- so a failure to lock yields ``False`` rather than raising.
+
+    The bench powers on at 3 Gbps (the robust default), so 3 Gbps is checked in
+    place; 6 Gbps is probed by switching up, holding for ``six_gbps_stability_s``
+    seconds to confirm a STABLE lock (not just a momentary one), then switching
+    back to the 3 Gbps default.
     """
     from src.instruments.types import FORWARD_3G, FORWARD_6G
 
@@ -169,10 +175,16 @@ def check_serdes_links(
             # The link may not establish at all; still probe per-rate below.
             out["status"] = None
         for lane in (FORWARD_3G, FORWARD_6G):
+            settle = six_gbps_stability_s if lane is FORWARD_6G else 0.0
             try:
-                out["locks"][lane.lane_id] = bool(driver.link_locks(lane))
+                out["locks"][lane.lane_id] = bool(driver.link_locks(lane, settle_s=settle))
             except Exception:
                 out["locks"][lane.lane_id] = False
+        # Leave the link at the 3 Gbps power-on default after the 6 Gbps test.
+        try:
+            driver.link_locks(FORWARD_3G)
+        except Exception:
+            pass
     finally:
         driver.close()
     return out
