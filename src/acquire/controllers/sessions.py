@@ -148,12 +148,18 @@ def check_serdes_links(
 ) -> dict:
     """Read link status and probe each forward rate's lock in one driver session.
 
-    Returns ``{"status": <link_status dict | None>, "locks": {lane_id: bool}}``.
-    ``status`` is None when the link cannot establish at all (e.g. a dead cable);
-    we still probe each forward rate so the 'Check link' flow can offer to log
-    the no-link result (scored 0 downstream). Unlike ``read_serdes_link_status``
-    this tolerates a link that never locks -- that is exactly what is being
-    probed -- so a failure to lock yields ``False`` rather than raising.
+    Returns ``{"status": <link_status dict | None>, "locks": {lane_id: bool},
+    "error": <str | None>}``. ``status`` is None when the link cannot establish
+    at all (e.g. a dead cable); we still probe each forward rate so the 'Check
+    link' flow can offer to log the no-link result (scored 0 downstream). Unlike
+    ``read_serdes_link_status`` this tolerates a link that never locks -- that is
+    exactly what is being probed -- so a failure to lock yields ``False`` rather
+    than raising.
+
+    ``error`` is set (and status/locks left empty) when the bench itself can't
+    be reached -- e.g. the serial port won't open. This function NEVER raises:
+    it runs on a worker thread (``run.io_bound``), which can swallow a raised
+    exception into a None result, so the failure is returned in-band instead.
 
     The bench powers on at 3 Gbps (the robust default), so 3 Gbps is checked in
     place; 6 Gbps is probed by switching up, holding for ``six_gbps_stability_s``
@@ -162,12 +168,13 @@ def check_serdes_links(
     """
     from src.instruments.types import FORWARD_3G, FORWARD_6G
 
-    kwargs: dict = {"cable_length_mm": cable_length_mm}
-    if port:
-        kwargs["port"] = port
-    driver = get_serdes_driver(simulate=simulate, **kwargs)
-    out: dict = {"status": None, "locks": {}}
+    out: dict = {"status": None, "locks": {}, "error": None}
+    driver = None
     try:
+        kwargs: dict = {"cable_length_mm": cable_length_mm}
+        if port:
+            kwargs["port"] = port
+        driver = get_serdes_driver(simulate=simulate, **kwargs)
         try:
             driver.connect()
             out["status"] = driver.link_status()
@@ -185,8 +192,16 @@ def check_serdes_links(
             driver.link_locks(FORWARD_3G)
         except Exception:
             pass
+    except Exception as e:
+        # Reaching the bench failed (e.g. serial port) -- a real error, distinct
+        # from a cable that simply won't link. Surface it rather than raise.
+        out["error"] = str(e) or e.__class__.__name__
     finally:
-        driver.close()
+        if driver is not None:
+            try:
+                driver.close()
+            except Exception:
+                pass
     return out
 
 

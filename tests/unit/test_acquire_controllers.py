@@ -323,6 +323,20 @@ class TestSessionControllers:
         assert long["locks"]["fwd_3g"] is True
         assert long["locks"]["fwd_6g"] is False
 
+    def test_check_serdes_links_surfaces_bench_error_in_band(self, monkeypatch):
+        """A bench-reach failure (e.g. serial port) is returned as 'error', not
+        raised -- run.io_bound can swallow a raised exception into a None result."""
+        import src.acquire.controllers.sessions as sessions
+
+        def boom(simulate=None, **kwargs):
+            raise OSError("could not open COM5")
+
+        monkeypatch.setattr(sessions, "get_serdes_driver", boom)
+        out = check_serdes_links(100.0, simulate=False, port="COM5")
+        assert out["error"] and "COM5" in out["error"]
+        assert out["status"] is None
+        assert out["locks"] == {}
+
     def test_serdes_capture_honors_resolution_config(self):
         """A custom SerdesConfig (resolution preset) flows through to the capture."""
         from src.instruments.serdes.driver import SerdesConfig

@@ -417,6 +417,17 @@ def serdes_page(profile_id: str, condition: str) -> None:
         finally:
             check_button.enable()
 
+        # check_serdes_links never raises (it runs on a worker thread, which can
+        # swallow exceptions to None); a bench-reach failure comes back as
+        # "error". Surface either as a failed check rather than crashing here.
+        error = checked.get("error") if checked else "no result returned from link check"
+        if error:
+            link_panel.clear()
+            with link_panel:
+                ui.label(f"Link check failed: {error}").classes("text-red-600")
+            ui.notify(f"Link check failed: {error}", type="negative", multi_line=True)
+            return
+
         status = checked.get("status")
         locks = checked.get("locks", {})
         link_panel.clear()
