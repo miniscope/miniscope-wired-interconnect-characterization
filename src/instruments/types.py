@@ -65,29 +65,57 @@ class SerdesRate(Enum):
 
 @dataclass(frozen=True)
 class SerdesLane:
-    """One physically valid (channel, rate) the characterization sweeps."""
+    """One lane the characterization sweeps.
+
+    A lane is a (channel, rate) pair, plus -- for the reverse control channel --
+    the forward-link rate it was measured under. The reverse channel is a fixed
+    187.5 Mbps back-channel that rides on the forward link, so its signal
+    integrity depends on the forward rate (crosstalk on the shared coax); it is
+    therefore characterized once per forward rate. ``forward_rate`` records which
+    forward context a reverse lane belongs to -- None for forward lanes and for
+    the legacy single reverse lane.
+    """
 
     channel: SerdesChannel
     rate: SerdesRate
+    forward_rate: SerdesRate | None = None
 
     @property
     def lane_id(self) -> str:
-        """Short, filename-safe id, e.g. ``fwd_6g`` / ``rev_187m``."""
-        prefix = "fwd" if self.channel is SerdesChannel.FORWARD else "rev"
-        return f"{prefix}_{self.rate.label}"
+        """Short, filename-safe id, e.g. ``fwd_6g`` / ``rev_187m_fwd3g``.
+
+        A reverse lane keeps its true 187.5 Mbps rate in the id and is tagged
+        with the forward-link context it was measured under (``rev_187m_fwd3g`` /
+        ``rev_187m_fwd6g``); a context-less reverse lane is the legacy
+        ``rev_187m``.
+        """
+        if self.channel is SerdesChannel.FORWARD:
+            return f"fwd_{self.rate.label}"
+        if self.forward_rate is not None:
+            return f"rev_{self.rate.label}_fwd{self.forward_rate.label}"
+        return f"rev_{self.rate.label}"
 
     @property
     def label(self) -> str:
-        """Compact human label, e.g. 'Forward 6 Gbps' / 'Reverse 187.5 Mbps'."""
-        return f"{self.channel.display} {self.rate.display}"
+        """Compact human label, e.g. 'Forward 6 Gbps' / 'Reverse 187.5 Mbps @ 6 Gbps'."""
+        base = f"{self.channel.display} {self.rate.display}"
+        if self.channel is SerdesChannel.REVERSE and self.forward_rate is not None:
+            return f"{base} @ {self.forward_rate.display}"
+        return base
 
 
-# The three lanes every SerDes session covers (the back channel is the fixed
-# low-rate control link, so it has exactly one rate, not two).
+# The lanes every SerDes session covers: the forward link at 3 and 6 Gbps, plus
+# the reverse 187.5 Mbps control channel characterized once under each forward
+# rate (it rides on the forward link, so a forward rate that won't lock takes
+# its reverse measurement down with it).
 FORWARD_3G = SerdesLane(SerdesChannel.FORWARD, SerdesRate.GBPS_3)
 FORWARD_6G = SerdesLane(SerdesChannel.FORWARD, SerdesRate.GBPS_6)
+REVERSE_3G = SerdesLane(SerdesChannel.REVERSE, SerdesRate.MBPS_187, forward_rate=SerdesRate.GBPS_3)
+REVERSE_6G = SerdesLane(SerdesChannel.REVERSE, SerdesRate.MBPS_187, forward_rate=SerdesRate.GBPS_6)
+# Legacy single reverse lane (no forward context) -- kept so older 3-lane
+# sessions written before the per-forward-rate split still read back.
 REVERSE_187M = SerdesLane(SerdesChannel.REVERSE, SerdesRate.MBPS_187)
-DEFAULT_LANES: tuple[SerdesLane, ...] = (FORWARD_3G, FORWARD_6G, REVERSE_187M)
+DEFAULT_LANES: tuple[SerdesLane, ...] = (FORWARD_3G, FORWARD_6G, REVERSE_3G, REVERSE_6G)
 
 
 @dataclass

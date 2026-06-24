@@ -178,8 +178,11 @@ class RealSerdesDriver(SerdesDriver):
         link good.
         """
         self._ensure_clean_state()
-        if lane.channel is SerdesChannel.FORWARD:
-            self._set_forward_rate(lane.rate)
+        # Forward lanes select their own rate; a reverse lane rides on its
+        # forward-link context (forward_rate), so set that first.
+        forward_rate = lane.rate if lane.channel is SerdesChannel.FORWARD else lane.forward_rate
+        if forward_rate is not None:
+            self._set_forward_rate(forward_rate)
             self._ensure_clean_state()
         try:
             if not self._is_locked(R.DES_ADDR):
@@ -266,9 +269,15 @@ class RealSerdesDriver(SerdesDriver):
 
     # ---- Eye capture (ported from gmsl2_eye_mapper.EyeMapper) ----------------
     def capture_eye(self, lane: SerdesLane, config: SerdesConfig) -> EyeDiagram:
-        if lane.channel is SerdesChannel.FORWARD:
-            self._set_forward_rate(lane.rate)
-        phase1_reg, phase0_reg = R.REG_DES_PHASE[lane.lane_id]
+        # Set the forward link to this lane's context (its own rate for a forward
+        # lane; the forward_rate it rides on for a reverse lane).
+        forward_rate = lane.rate if lane.channel is SerdesChannel.FORWARD else lane.forward_rate
+        if forward_rate is not None:
+            self._set_forward_rate(forward_rate)
+        # The reverse channel always uses the rev_187m eye-monitor phase
+        # registers, whatever forward context it was measured under.
+        phase_key = "rev_187m" if lane.channel is SerdesChannel.REVERSE else lane.lane_id
+        phase1_reg, phase0_reg = R.REG_DES_PHASE[phase_key]
 
         bins = config.eye_bins
         phase_inc = max(1, R.MAX_PHASE // bins)
@@ -424,8 +433,11 @@ class RealSerdesDriver(SerdesDriver):
         # register access here can NAK while they re-lock. Recover first (this
         # tolerates and retries transient I2C errors) before touching REG1.
         self._ensure_clean_state()
-        if lane.channel is SerdesChannel.FORWARD:
-            self._set_forward_rate(lane.rate)
+        # Forward lanes select their own rate; a reverse lane rides on its
+        # forward-link context (forward_rate).
+        forward_rate = lane.rate if lane.channel is SerdesChannel.FORWARD else lane.forward_rate
+        if forward_rate is not None:
+            self._set_forward_rate(forward_rate)
         self._ensure_clean_state()
 
         if lane.channel is SerdesChannel.REVERSE:

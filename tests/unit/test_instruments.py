@@ -9,6 +9,8 @@ from src.instruments import (
     DEFAULT_LANES,
     FORWARD_3G,
     FORWARD_6G,
+    REVERSE_3G,
+    REVERSE_6G,
     REVERSE_187M,
     ProgressEvent,
     SerdesRate,
@@ -88,13 +90,13 @@ class TestSimulatedSerdesDriver:
         events: list[ProgressEvent] = []
         result = driver.run_full_sequence(config=SerdesConfig(eye_bins=16), progress=events.append)
 
-        assert len(result.eyes) == 3
-        assert len(result.margins) == 3
+        assert len(result.eyes) == 4
+        assert len(result.margins) == 4
         assert {e.lane for e in result.eyes} == set(DEFAULT_LANES)
         assert REVERSE_187M.rate is SerdesRate.MBPS_187
 
-        # Progress: 6 events (eye + margin per lane), monotone, ends at 1.0
-        assert len(events) == 6
+        # Progress: 8 events (eye + margin for each of the 4 lanes), monotone, ends at 1.0
+        assert len(events) == 8
         fractions = [e.fraction for e in events]
         assert fractions == sorted(fractions)
         assert fractions[-1] == pytest.approx(1.0)
@@ -102,28 +104,35 @@ class TestSimulatedSerdesDriver:
         assert all(e.partial is not None for e in events)
 
     def test_link_locks_models_per_rate_failure(self):
-        """Short cables lock at both rates; a long cable fails to lock at 6 Gbps."""
+        """Short cables lock at both rates; a long cable fails to lock at 6 Gbps,
+        and its reverse-under-6G lane fails with it (rides on that forward link)."""
         short = SimulatedSerdesDriver(cable_length_mm=1000.0)
         assert short.link_locks(FORWARD_3G) is True
         assert short.link_locks(FORWARD_6G) is True
 
         long = SimulatedSerdesDriver(cable_length_mm=2500.0)
         assert long.link_locks(FORWARD_3G) is True  # 3G stays robust
-        assert long.link_locks(REVERSE_187M) is True  # reverse control channel robust
+        assert long.link_locks(REVERSE_3G) is True  # reverse under 3G forward: fine
         assert long.link_locks(FORWARD_6G) is False  # 6G too lossy to acquire
+        assert long.link_locks(REVERSE_6G) is False  # reverse rides on the failed 6G
 
     def test_run_full_sequence_records_no_link_lane(self):
-        """A lane that won't lock is recorded as no-link, with no eye/margin."""
+        """Lanes that won't lock are recorded as no-link, with no eye/margin.
+
+        On a long cable both the 6 Gbps forward link and the reverse channel
+        measured under it fail to lock.
+        """
         driver = SimulatedSerdesDriver(cable_length_mm=2500.0)
         events: list[ProgressEvent] = []
         result = driver.run_full_sequence(config=SerdesConfig(eye_bins=16), progress=events.append)
 
-        assert result.no_link_lanes == [FORWARD_6G]
-        assert {e.lane for e in result.eyes} == {FORWARD_3G, REVERSE_187M}
-        assert all(m.lane is not FORWARD_6G for m in result.margins)
-        # Progress still advances cleanly to 1.0, and the skipped lane is announced.
+        assert result.no_link_lanes == [FORWARD_6G, REVERSE_6G]
+        assert {e.lane for e in result.eyes} == {FORWARD_3G, REVERSE_3G}
+        assert all(m.lane not in (FORWARD_6G, REVERSE_6G) for m in result.margins)
+        # Progress still advances cleanly to 1.0, and skipped lanes are announced.
         assert events[-1].fraction == pytest.approx(1.0)
         assert any(e.stage == "nolink:fwd_6g" for e in events)
+        assert any(e.stage == "nolink:rev_187m_fwd6g" for e in events)
 
     def test_margin_iterations_repeat_only_the_sweep(self, driver):
         """N margin iterations -> 1 eye + N margins per lane; progress stays sane."""
@@ -133,13 +142,13 @@ class TestSimulatedSerdesDriver:
         )
 
         # Eye captured once per lane, margin swept three times per lane.
-        assert len(result.eyes) == 3
-        assert len(result.margins) == 9
+        assert len(result.eyes) == 4
+        assert len(result.margins) == 12
         for lane in DEFAULT_LANES:
             assert sum(m.lane == lane for m in result.margins) == 3
 
-        # 3 lanes x (1 eye + 3 margins) = 12 events, monotone, ending at 1.0.
-        assert len(events) == 12
+        # 4 lanes x (1 eye + 3 margins) = 16 events, monotone, ending at 1.0.
+        assert len(events) == 16
         fractions = [e.fraction for e in events]
         assert fractions == sorted(fractions)
         assert fractions[-1] == pytest.approx(1.0)
@@ -616,8 +625,8 @@ class TestRealSerdesDemo:
         result = driver.run_full_sequence(config=SerdesConfig(eye_bins=8))
         driver.close()
 
-        assert len(result.eyes) == 3
-        assert len(result.margins) == 3
+        assert len(result.eyes) == 4
+        assert len(result.margins) == 4
 
     def test_link_status_retries_through_transient_nak(self):
         """A freshly-connected link can NAK a status read once; link_status must

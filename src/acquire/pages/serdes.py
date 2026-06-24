@@ -51,8 +51,15 @@ def _status_chip(ok: bool, ok_text: str, bad_text: str) -> None:
 
 
 def lane_section_title(lane: SerdesLane) -> str:
-    """Section heading for a lane's results, e.g. 'Forward link -- 6 Gbps'."""
-    return f"{lane.channel.display} link -- {lane.rate.display}"
+    """Section heading for a lane's results, e.g. 'Forward link -- 6 Gbps'.
+
+    For the reverse channel, which is captured once per forward rate, the
+    forward context is appended so the two 187.5 Mbps cards are distinguishable.
+    """
+    title = f"{lane.channel.display} link -- {lane.rate.display}"
+    if lane.forward_rate is not None:
+        title += f" (under {lane.forward_rate.display} forward)"
+    return title
 
 
 def _device_box(role: str, dev: dict) -> None:

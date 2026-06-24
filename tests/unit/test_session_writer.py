@@ -170,9 +170,9 @@ class TestWriteSerdesSession:
         )
 
         manifest = pd.read_csv(ref.path / "session_manifest.csv")
-        assert len(manifest) == 3
+        assert len(manifest) == 4  # fwd 3G/6G + reverse under each forward rate
         assert (ref.path / "eye_fwd_3g.csv").exists()
-        assert (ref.path / "margin_rev_187m.csv").exists()
+        assert (ref.path / "margin_rev_187m_fwd6g.csv").exists()
 
         pipeline_result = process_session(ref.path, test_repo)
         assert pipeline_result.validation.is_valid, pipeline_result.validation.errors
@@ -190,9 +190,9 @@ class TestWriteSerdesSession:
             resistance_meta(type_fields={"serdes_device": "Sim GMSL2"}),
         )
 
-        # All three lanes present; the 6G lane is flagged not linked.
+        # All four lanes present; the 6G lane is flagged not linked.
         manifest = pd.read_csv(ref.path / "session_manifest.csv")
-        assert len(manifest) == 3
+        assert len(manifest) == 4
         assert "linked" in manifest.columns
         linked = dict(zip(manifest["lane_id"], manifest["linked"], strict=True))
         assert linked["fwd_6g"] == 0

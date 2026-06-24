@@ -302,8 +302,10 @@ class WikiRenderer:
                     df,
                     {
                         "cable_length_mm": "Length (mm)",
+                        "lane_id": "Lane",
                         "channel": "Channel",
                         "rate_gbps": "Rate (Gbps)",
+                        "linked": "Links?",
                         "mean_eye_area_ratio": "Eye area",
                         "mean_eye_height_mv": "Eye height (mV)",
                         "mean_eye_width_ps": "Eye width (ps)",
@@ -468,8 +470,10 @@ class WikiRenderer:
                     df,
                     {
                         "condition": "Condition",
+                        "lane_id": "Lane",
                         "channel": "Channel",
                         "rate_gbps": "Rate (Gbps)",
+                        "linked": "Links?",
                         "mean_eye_area_ratio": "Eye area",
                         "mean_eye_height_mv": "Eye height (mV)",
                         "mean_eye_width_ps": "Eye width (ps)",

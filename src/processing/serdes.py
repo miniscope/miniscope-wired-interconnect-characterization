@@ -9,17 +9,31 @@ import pandas as pd
 
 from src.core.schemas import MeasurementDefinition
 from src.core.session_schemas import SessionRecord
-from src.instruments.types import DEFAULT_LANES, MarginPoint, MarginSweep, SerdesLane
+from src.instruments.types import (
+    DEFAULT_LANES,
+    REVERSE_187M,
+    MarginPoint,
+    MarginSweep,
+    SerdesLane,
+)
 from src.processing.base import BaseProcessor, session_header
 from src.processing.eye import extract_eye_opening, eye_figure, link_margin_metrics
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-# Every serdes session covers exactly these three lanes: the forward link at
-# 3 and 6 Gbps plus the fixed low-rate reverse control channel.
-EXPECTED_LANES = frozenset({"fwd_3g", "fwd_6g", "rev_187m"})
-_LANE_BY_ID = {lane.lane_id: lane for lane in DEFAULT_LANES}
+# Lane ids a serdes session may contain: the forward link at 3 and 6 Gbps, and
+# the reverse 187.5 Mbps control channel -- either the legacy single lane
+# (rev_187m) or, for newer sessions, one per forward context (rev_187m_fwd3g /
+# rev_187m_fwd6g). See validate_serdes_session for which combinations are valid.
+_LANE_BY_ID = {lane.lane_id: lane for lane in (*DEFAULT_LANES, REVERSE_187M)}
+EXPECTED_LANE_IDS = frozenset(_LANE_BY_ID)
+
+# A valid session always has both forward lanes, plus the reverse control
+# channel as EITHER the legacy single lane OR one lane per forward context.
+FORWARD_LANE_IDS = frozenset({"fwd_3g", "fwd_6g"})
+LEGACY_REVERSE_LANE_IDS = frozenset({"rev_187m"})
+PER_RATE_REVERSE_LANE_IDS = frozenset({"rev_187m_fwd3g", "rev_187m_fwd6g"})
 
 # Error-count ceiling for a lost-lock / unreachable margin step, used when
 # averaging repeated sweeps so a dropped run doesn't dominate the mean. Matches

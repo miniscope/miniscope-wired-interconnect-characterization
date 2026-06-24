@@ -52,14 +52,18 @@ class SimulatedSerdesDriver(SerdesDriver):
 
         The forward 6 Gbps link fails to lock on long cables (beyond ~2 m, where
         the channel is too lossy to acquire); the 3 Gbps forward link and the
-        low-rate reverse control channel stay robust. This lets the no-link path
-        (recorded + scored 0) be exercised against the simulator without hardware.
+        low-rate reverse control channel stay robust. A reverse lane rides on its
+        forward-link context, so reverse-under-6 G fails wherever 6 G forward
+        does. This lets the no-link path (recorded + scored 0) be exercised
+        against the simulator without hardware.
 
         ``settle_s`` (a real-hardware stability dwell) is ignored: the simulator
         is deterministic, so a lane that locks here stays locked.
         """
         length_m = self._cable_length_mm / 1000.0
-        if lane.rate is SerdesRate.GBPS_6 and length_m > 2.0:
+        # A reverse lane's lock follows the forward link it rides on.
+        effective_rate = lane.forward_rate or lane.rate
+        if effective_rate is SerdesRate.GBPS_6 and length_m > 2.0:
             return False
         return True
 

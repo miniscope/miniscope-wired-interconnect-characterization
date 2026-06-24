@@ -348,15 +348,22 @@ def validate_serdes_session(
     """
     SerDes-specific session validation.
 
-    Checks that session_manifest.csv covers exactly the three lanes
-    {fwd_3g, fwd_6g, rev_187m}, that every referenced eye + margin CSV exists,
-    and that those files have the expected raw structure:
+    Checks that session_manifest.csv covers both forward lanes {fwd_3g, fwd_6g}
+    plus the reverse control channel as EITHER the legacy single lane {rev_187m}
+    or one lane per forward context {rev_187m_fwd3g, rev_187m_fwd6g}, that every
+    referenced eye + margin CSV exists, and that those files have the expected
+    raw structure:
     - eye CSV: phase, vth, polarity, hits, errors (the deserializer EOM grid)
     - margin CSV: tx_amp_mv, code, rep, locked, errors, status
     """
     import csv as _csv
 
-    from src.processing.serdes import EXPECTED_LANES
+    from src.processing.serdes import (
+        EXPECTED_LANE_IDS,
+        FORWARD_LANE_IDS,
+        LEGACY_REVERSE_LANE_IDS,
+        PER_RATE_REVERSE_LANE_IDS,
+    )
 
     manifest_path = session_dir / "session_manifest.csv"
     try:
@@ -382,10 +389,10 @@ def validate_serdes_session(
                 except ValueError:
                     result.add_error(f"Row {i}: rate_gbps is not numeric: '{rate_raw}'")
 
-                if lane_id not in EXPECTED_LANES:
+                if lane_id not in EXPECTED_LANE_IDS:
                     result.add_error(
                         f"Row {i}: unexpected lane '{lane_id}'; "
-                        f"expected one of {sorted(EXPECTED_LANES)}"
+                        f"expected one of {sorted(EXPECTED_LANE_IDS)}"
                     )
                     continue
                 seen_lanes.append(lane_id)
@@ -415,8 +422,18 @@ def validate_serdes_session(
                             if not (session_dir / run).exists():
                                 result.add_error(f"Row {i}: margin run file not found: {run}")
 
-            for lane_id in sorted(EXPECTED_LANES - set(seen_lanes)):
-                result.add_error(f"Manifest missing lane: '{lane_id}'")
+            seen = set(seen_lanes)
+            for lane_id in sorted(FORWARD_LANE_IDS - seen):
+                result.add_error(f"Manifest missing forward lane: '{lane_id}'")
+            # Reverse coverage must be exactly the legacy single lane or exactly
+            # one lane per forward context -- not a mix, and not partial.
+            reverse_seen = seen & (LEGACY_REVERSE_LANE_IDS | PER_RATE_REVERSE_LANE_IDS)
+            if reverse_seen not in (LEGACY_REVERSE_LANE_IDS, PER_RATE_REVERSE_LANE_IDS):
+                result.add_error(
+                    "Manifest reverse channel must be either the legacy "
+                    f"{sorted(LEGACY_REVERSE_LANE_IDS)} or per-forward-rate "
+                    f"{sorted(PER_RATE_REVERSE_LANE_IDS)}; got {sorted(reverse_seen)}"
+                )
             if len(seen_lanes) != len(set(seen_lanes)):
                 result.add_error("Manifest contains duplicate lanes")
 
