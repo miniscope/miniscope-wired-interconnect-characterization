@@ -1,5 +1,5 @@
 miniscope_model,profile_id,cable_length_mm,rate_gbps,quality_score,zone,source,attenuation_db
 miniscope_v4,coax_molex_1000650128,170.0,1.5,0.96967,works,projected_from_vna,0.6066
 miniscope_v4,coax_molex_1000650128,500.0,1.5,0.815535,works,projected_from_vna,3.6893
-miniscope_v4,coax_molex_1000650128,1025.0,1.5,0.789135,marginal,projected_from_vna,4.2173
+miniscope_v4,coax_molex_1000650128,1025.0,1.5,0.789135,works,projected_from_vna,4.2173
 miniscope_v4,coax_molex_1000650128,1500.0,1.5,0.73509,marginal,projected_from_vna,5.2982

@@ -102,9 +102,14 @@ def _sorted_conditions(by_condition: dict) -> list[str]:
     return sorted(by_condition, key=_condition_sort_key)
 
 
-def _combo_sort_key(key: tuple[str, str, float]) -> tuple[tuple[float, str], str, float]:
-    condition, channel, rate = key
-    return (_condition_sort_key(condition), channel, rate)
+def _lane_sort_key(condition: str, sample: dict, lane_id: str) -> tuple:
+    """Order serdes rows by condition, then channel, then rate, then lane id."""
+    return (
+        _condition_sort_key(condition),
+        str(sample.get("channel")),
+        float(sample.get("rate_gbps") or 0.0),
+        lane_id,
+    )
 
 
 def _consolidate_resistance(entries: list[tuple[SessionRecord, dict]]) -> list[dict]:
@@ -164,24 +169,38 @@ def _consolidate_mass(entries: list[tuple[SessionRecord, dict]]) -> list[dict]:
 
 
 def _consolidate_serdes(entries: list[tuple[SessionRecord, dict]]) -> list[dict]:
-    """One row per (condition, channel, rate): pooled eye + margin stats."""
-    by_combo: dict[tuple[str, str, float], list[dict]] = defaultdict(list)
+    """One row per (condition, lane): pooled eye + margin stats.
+
+    Keyed by lane id, not (channel, rate), so the reverse channel's two records
+    -- the same 187.5 Mbps lane measured under 3 G and under 6 G forward -- stay
+    distinct (they share a channel and rate, differing only by forward context).
+    """
+    by_lane: dict[tuple[str, str], list[dict]] = defaultdict(list)
     length_by_condition: dict[str, float | None] = {}
     for session, summary in entries:
         length_by_condition[session.condition] = session.cable_length_mm
         for combo in summary.get("combos", []):
-            key = (session.condition, combo["channel"], float(combo["rate_gbps"]))
-            by_combo[key].append(combo)
+            key = (session.condition, str(combo["lane_id"]))
+            by_lane[key].append(combo)
 
     rows: list[dict] = []
-    for condition, channel, rate in sorted(by_combo, key=_combo_sort_key):
-        combos = by_combo[(condition, channel, rate)]
+    for condition, lane_id in sorted(
+        by_lane, key=lambda k: _lane_sort_key(k[0], by_lane[k][0], k[1])
+    ):
+        combos = by_lane[(condition, lane_id)]
+        sample = combos[0]
+        # A lane counts as linking if ANY session got a lock there; only an
+        # all-no-link history marks it not linked (scored 0). The metric means
+        # below already ignore no-link sessions (null metrics).
         row: dict = {
             "condition": condition,
             "cable_length_mm": length_by_condition[condition],
-            "channel": channel,
-            "rate_gbps": rate,
+            "lane_id": lane_id,
+            "channel": sample.get("channel"),
+            "rate_gbps": float(sample["rate_gbps"]),
             "n_sessions": len(combos),
+            "linked": any(c.get("linked", True) for c in combos),
+            "n_no_link_sessions": sum(1 for c in combos if not c.get("linked", True)),
         }
         for metric in [
             "eye_area_ratio",

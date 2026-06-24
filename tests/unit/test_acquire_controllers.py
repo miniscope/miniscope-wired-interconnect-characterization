@@ -20,6 +20,7 @@ from src.acquire.controllers.profiles import (
 )
 from src.acquire.controllers.protocols import load_protocol_markdown
 from src.acquire.controllers.sessions import (
+    check_serdes_links,
     read_serdes_link_status,
     record_resistance_session,
     run_serdes_capture,
@@ -227,8 +228,8 @@ class TestSessionControllers:
     def test_serdes_capture_and_save(self, test_repo: Path):
         events: list[ProgressEvent] = []
         result = run_serdes_capture(750.0, progress=events.append, simulate=True)
-        assert len(result.eyes) == 3
-        assert len(events) == 6
+        assert len(result.eyes) == 4
+        assert len(events) == 8
 
         ref = save_serdes_session(
             test_repo,
@@ -248,8 +249,8 @@ class TestSessionControllers:
         from src.instruments.types import group_margins_by_lane
 
         result = run_serdes_capture(750.0, simulate=True)
-        assert len(result.eyes) == 3
-        assert len(result.margins) == 3  # one sweep per lane
+        assert len(result.eyes) == 4  # fwd 3G/6G + reverse under each forward rate
+        assert len(result.margins) == 4  # one sweep per lane
 
         events: list[ProgressEvent] = []
         new_margins = run_serdes_margins(
@@ -258,13 +259,13 @@ class TestSessionControllers:
             simulate=True,
             config=SerdesConfig(margin_iterations=2),
         )
-        # No eye steps: 2 sweeps per lane, one progress event each.
-        assert len(new_margins) == 6
-        assert len(events) == 6
+        # No eye steps: 2 sweeps per lane across 4 lanes, one progress event each.
+        assert len(new_margins) == 8
+        assert len(events) == 8
 
         # Appending deepens the per-lane statistics; the eye count is untouched.
         result.margins.extend(new_margins)
-        assert len(result.eyes) == 3
+        assert len(result.eyes) == 4
         for _lane, sweeps in group_margins_by_lane(result.margins):
             assert len(sweeps) == 3  # original 1 + 2 repeats
 
@@ -381,6 +382,31 @@ class TestSessionControllers:
         assert status["connected"] is True
         assert status["simulated"] is True
         assert "ser" not in status
+
+    def test_check_serdes_links_reports_per_rate_lock(self):
+        """check_serdes_links returns link status + per-forward-rate lock; a long
+        cable shows 6 Gbps not locking (the no-link signal)."""
+        short = check_serdes_links(1000.0, simulate=True)
+        assert short["status"] is not None
+        assert short["locks"] == {"fwd_3g": True, "fwd_6g": True}
+
+        long = check_serdes_links(2500.0, simulate=True)
+        assert long["locks"]["fwd_3g"] is True
+        assert long["locks"]["fwd_6g"] is False
+
+    def test_check_serdes_links_surfaces_bench_error_in_band(self, monkeypatch):
+        """A bench-reach failure (e.g. serial port) is returned as 'error', not
+        raised -- run.io_bound can swallow a raised exception into a None result."""
+        import src.acquire.controllers.sessions as sessions
+
+        def boom(simulate=None, **kwargs):
+            raise OSError("could not open COM5")
+
+        monkeypatch.setattr(sessions, "get_serdes_driver", boom)
+        out = check_serdes_links(100.0, simulate=False, port="COM5")
+        assert out["error"] and "COM5" in out["error"]
+        assert out["status"] is None
+        assert out["locks"] == {}
 
     def test_serdes_capture_honors_resolution_config(self):
         """A custom SerdesConfig (resolution preset) flows through to the capture."""

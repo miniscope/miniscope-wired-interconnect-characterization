@@ -46,7 +46,9 @@ def score(inputs: QualityInputs, config: AnalysisConfig) -> float | None:
     Compute the consolidated quality score in [0, 1].
 
     Per-metric sub-scores (each 0-1, 1 = best):
-    - eye_area_ratio is already a 0-1 fraction of the unit interval
+    - eye area: 1 at eye_area_full_scale (a wide-open eye), 0 at a closed eye.
+      The raw ratio is the open fraction of the EOM scan window, which tops out
+      well below 1.0, so it is divided by the full-scale reference before use.
     - link margin: 1 at 0 mV floor, 0 at link_margin_full_scale_mv
     - attenuation: 1 at 0 dB, 0 at attenuation_full_scale_db
 
@@ -58,7 +60,8 @@ def score(inputs: QualityInputs, config: AnalysisConfig) -> float | None:
     components: list[tuple[float, float]] = []  # (weight, sub_score)
 
     if inputs.eye_area_ratio is not None:
-        components.append((weights.eye_area, _clamp01(inputs.eye_area_ratio)))
+        sub = _clamp01(inputs.eye_area_ratio / refs.eye_area_full_scale)
+        components.append((weights.eye_area, sub))
 
     if inputs.link_margin_mv is not None:
         sub = _clamp01(1.0 - inputs.link_margin_mv / refs.link_margin_full_scale_mv)

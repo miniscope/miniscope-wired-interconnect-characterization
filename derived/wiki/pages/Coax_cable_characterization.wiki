@@ -22,56 +22,38 @@ Each curve is one cable type. The score combines eye opening, link margin, and a
 |-
 | coax_molex_1000650128
 | 170
-| 0.1875
-| 0.362634
-| not_recommended
-|-
-| coax_molex_1000650128
-| 170
 | 3
-| 0.188337
-| not_recommended
+| 0.755191
+| works
 |-
 | coax_molex_1000650128
 | 170
 | 6
-| 0.358259
-| not_recommended
-|-
-| coax_molex_1000650128
-| 500
-| 0.1875
-| 0.27856
-| not_recommended
+| 0.696274
+| marginal
 |-
 | coax_molex_1000650128
 | 500
 | 3
-| 0.419752
-| not_recommended
+| 0.795122
+| works
 |-
 | coax_molex_1000650128
 | 500
 | 6
-| 0.137291
-| not_recommended
-|-
-| coax_molex_1000650128
-| 1025
-| 0.1875
-| 0.137207
-| not_recommended
+| 0.55489
+| marginal
 |-
 | coax_molex_1000650128
 | 1025
 | 3
-| 0.374805
-| not_recommended
+| 0.793
+| works
 |-
 | coax_molex_1000650128
 | 1025
 | 6
-| 0.037207
+| 0.358566
 | not_recommended
 |}
 
@@ -111,7 +93,7 @@ Each Miniscope runs its link at one rate, so these curves show cable quality at 
 | 1025
 | 1.5
 | 0.789135
-| marginal
+| works
 | projected_from_vna
 |-
 | miniscope_v4

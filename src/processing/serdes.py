@@ -9,17 +9,31 @@ import pandas as pd
 
 from src.core.schemas import MeasurementDefinition
 from src.core.session_schemas import SessionRecord
-from src.instruments.types import DEFAULT_LANES, MarginPoint, MarginSweep, SerdesLane
+from src.instruments.types import (
+    DEFAULT_LANES,
+    REVERSE_187M,
+    MarginPoint,
+    MarginSweep,
+    SerdesLane,
+)
 from src.processing.base import BaseProcessor, session_header
 from src.processing.eye import extract_eye_opening, eye_figure, link_margin_metrics
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-# Every serdes session covers exactly these three lanes: the forward link at
-# 3 and 6 Gbps plus the fixed low-rate reverse control channel.
-EXPECTED_LANES = frozenset({"fwd_3g", "fwd_6g", "rev_187m"})
-_LANE_BY_ID = {lane.lane_id: lane for lane in DEFAULT_LANES}
+# Lane ids a serdes session may contain: the forward link at 3 and 6 Gbps, and
+# the reverse 187.5 Mbps control channel -- either the legacy single lane
+# (rev_187m) or, for newer sessions, one per forward context (rev_187m_fwd3g /
+# rev_187m_fwd6g). See validate_serdes_session for which combinations are valid.
+_LANE_BY_ID = {lane.lane_id: lane for lane in (*DEFAULT_LANES, REVERSE_187M)}
+EXPECTED_LANE_IDS = frozenset(_LANE_BY_ID)
+
+# A valid session always has both forward lanes, plus the reverse control
+# channel as EITHER the legacy single lane OR one lane per forward context.
+FORWARD_LANE_IDS = frozenset({"fwd_3g", "fwd_6g"})
+LEGACY_REVERSE_LANE_IDS = frozenset({"rev_187m"})
+PER_RATE_REVERSE_LANE_IDS = frozenset({"rev_187m_fwd3g", "rev_187m_fwd6g"})
 
 # Error-count ceiling for a lost-lock / unreachable margin step, used when
 # averaging repeated sweeps so a dropped run doesn't dominate the mean. Matches
@@ -36,6 +50,19 @@ def _read_iterations(mrow) -> int:
         return max(1, int(raw))
     except (ValueError, TypeError):
         return 1
+
+
+def _read_linked(mrow) -> bool:
+    """Whether the lane established a link; True for legacy rows without the column.
+
+    A lane recorded as not linked (linked=0) carries no eye/margin data and is
+    scored 0 (not_recommended) downstream, so a non-linking cable stays visible
+    rather than vanishing from the results.
+    """
+    raw = mrow.get("linked")
+    if raw is None or (isinstance(raw, float) and pd.isna(raw)):
+        return True
+    return str(raw).strip() not in ("0", "false", "False", "")
 
 
 def read_margin_sweep(csv_path: Path, lane: SerdesLane) -> MarginSweep:
@@ -143,15 +170,27 @@ class ProcessSerdes(BaseProcessor):
             lane_id = str(mrow["lane_id"]).strip()
             channel = str(mrow["channel"]).strip()
             rate_gbps = float(mrow["rate_gbps"])
-            metrics: dict = {"lane_id": lane_id, "channel": channel, "rate_gbps": rate_gbps}
+            linked = _read_linked(mrow)
+            metrics: dict = {
+                "lane_id": lane_id,
+                "channel": channel,
+                "rate_gbps": rate_gbps,
+                "linked": linked,
+            }
 
             eye_csv = str(mrow["eye_csv"]).strip()
             metrics["eye_csv"] = eye_csv
-            metrics.update(self._eye_metrics(session_dir / eye_csv))
+            eye_metrics, has_eye = self._eye_metrics(session_dir / eye_csv)
+            metrics.update(eye_metrics)
 
-            eye_png = output_dir / f"{Path(eye_csv).stem}.png"
-            self._render_eye_png(session_dir / eye_csv, channel, lane_id, eye_png)
-            metrics["eye_png"] = eye_png.name
+            # No-link / uncaptured lanes have a header-only grid: skip the PNG
+            # and leave the metrics null rather than rendering a blank eye.
+            if has_eye:
+                eye_png = output_dir / f"{Path(eye_csv).stem}.png"
+                self._render_eye_png(session_dir / eye_csv, channel, lane_id, eye_png)
+                metrics["eye_png"] = eye_png.name
+            else:
+                metrics["eye_png"] = None
 
             margin_csv = str(mrow["margin_csv"]).strip()
             metrics["margin_csv"] = margin_csv
@@ -178,16 +217,29 @@ class ProcessSerdes(BaseProcessor):
             "serdes_summary_json": summary_path,
         }
 
-    def _eye_metrics(self, eye_csv_path: Path) -> dict:
-        """Eye-opening metrics for one lane's raw EOM grid."""
+    _EYE_METRIC_KEYS = ("eye_area_ratio", "zero_error_fraction", "eye_height_mv", "eye_width_ui")
+
+    def _eye_metrics(self, eye_csv_path: Path) -> tuple[dict, bool]:
+        """Eye-opening metrics for one lane's raw EOM grid.
+
+        Returns ``(metrics, has_data)``. A header-only grid (a no-link or
+        uncaptured lane) yields null metrics and ``has_data=False`` -- null,
+        not zero, so the lane is treated as "not characterized" downstream
+        rather than as a fully-closed eye.
+        """
         df = pd.read_csv(eye_csv_path)
         df.columns = df.columns.str.strip()
-        return extract_eye_opening(
-            df["phase"].to_numpy(),
-            df["vth"].to_numpy(),
-            df["polarity"].to_numpy(),
-            df["errors"].to_numpy(),
-            df["hits"].to_numpy(),
+        if df.empty:
+            return ({key: None for key in self._EYE_METRIC_KEYS}, False)
+        return (
+            extract_eye_opening(
+                df["phase"].to_numpy(),
+                df["vth"].to_numpy(),
+                df["polarity"].to_numpy(),
+                df["errors"].to_numpy(),
+                df["hits"].to_numpy(),
+            ),
+            True,
         )
 
     def _render_eye_png(
@@ -237,6 +289,7 @@ class ProcessSerdes(BaseProcessor):
                         "lane_id",
                         "channel",
                         "rate_gbps",
+                        "linked",
                         "eye_area_ratio",
                         "zero_error_fraction",
                         "eye_height_mv",

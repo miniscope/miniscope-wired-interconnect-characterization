@@ -9,6 +9,8 @@ from src.instruments import (
     DEFAULT_LANES,
     FORWARD_3G,
     FORWARD_6G,
+    REVERSE_3G,
+    REVERSE_6G,
     REVERSE_187M,
     MarginSweep,
     ProgressEvent,
@@ -89,18 +91,81 @@ class TestSimulatedSerdesDriver:
         events: list[ProgressEvent] = []
         result = driver.run_full_sequence(config=SerdesConfig(eye_bins=16), progress=events.append)
 
-        assert len(result.eyes) == 3
-        assert len(result.margins) == 3
+        assert len(result.eyes) == 4
+        assert len(result.margins) == 4
         assert {e.lane for e in result.eyes} == set(DEFAULT_LANES)
         assert REVERSE_187M.rate is SerdesRate.MBPS_187
 
-        # Progress: 6 events (eye + margin per lane), monotone, ends at 1.0
-        assert len(events) == 6
+        # Progress: 8 events (eye + margin for each of the 4 lanes), monotone, ends at 1.0
+        assert len(events) == 8
         fractions = [e.fraction for e in events]
         assert fractions == sorted(fractions)
         assert fractions[-1] == pytest.approx(1.0)
         # Live-preview partials attached
         assert all(e.partial is not None for e in events)
+
+    def test_link_locks_models_per_rate_failure(self):
+        """Short cables lock at both rates; a long cable fails to lock at 6 Gbps,
+        and its reverse-under-6G lane fails with it (rides on that forward link)."""
+        short = SimulatedSerdesDriver(cable_length_mm=1000.0)
+        assert short.link_locks(FORWARD_3G) is True
+        assert short.link_locks(FORWARD_6G) is True
+
+        long = SimulatedSerdesDriver(cable_length_mm=2500.0)
+        assert long.link_locks(FORWARD_3G) is True  # 3G stays robust
+        assert long.link_locks(REVERSE_3G) is True  # reverse under 3G forward: fine
+        assert long.link_locks(FORWARD_6G) is False  # 6G too lossy to acquire
+        assert long.link_locks(REVERSE_6G) is False  # reverse rides on the failed 6G
+
+    def test_run_full_sequence_records_no_link_lane(self):
+        """Lanes that won't lock are recorded as no-link, with no eye/margin.
+
+        On a long cable both the 6 Gbps forward link and the reverse channel
+        measured under it fail to lock.
+        """
+        driver = SimulatedSerdesDriver(cable_length_mm=2500.0)
+        events: list[ProgressEvent] = []
+        result = driver.run_full_sequence(config=SerdesConfig(eye_bins=16), progress=events.append)
+
+        assert result.no_link_lanes == [FORWARD_6G, REVERSE_6G]
+        assert {e.lane for e in result.eyes} == {FORWARD_3G, REVERSE_3G}
+        assert all(m.lane not in (FORWARD_6G, REVERSE_6G) for m in result.margins)
+        # Progress still advances cleanly to 1.0, and skipped lanes are announced.
+        assert events[-1].fraction == pytest.approx(1.0)
+        assert any(e.stage == "nolink:fwd_6g" for e in events)
+        assert any(e.stage == "nolink:rev_187m_fwd6g" for e in events)
+
+    def test_capture_gate_applies_stability_dwell(self):
+        """A lane that only locks momentarily is recorded no-link, not measured.
+
+        Regression for the 2 m cable: 6 Gbps passed an instant lock check, so the
+        capture ran its eye/margin (and the reverse-under-6G) on a link that did
+        not actually hold. The capture gate must use the stability dwell.
+        """
+
+        class MomentaryLock6G(SimulatedSerdesDriver):
+            """6 Gbps 'locks' only on an instant check (settle_s == 0); any dwell
+            reveals it does not hold."""
+
+            def link_locks(self, lane, settle_s=0.0):
+                if lane.rate is SerdesRate.GBPS_6 or lane.forward_rate is SerdesRate.GBPS_6:
+                    return settle_s == 0.0
+                return True
+
+        driver = MomentaryLock6G(cable_length_mm=1000.0)
+        driver.connect()
+
+        # With the dwell, the unstable 6 Gbps lanes are caught and skipped.
+        result = driver.run_full_sequence(config=SerdesConfig(eye_bins=16, link_lock_settle_s=5.0))
+        assert set(result.no_link_lanes) == {FORWARD_6G, REVERSE_6G}
+        assert all(e.lane not in (FORWARD_6G, REVERSE_6G) for e in result.eyes)
+        assert all(m.lane not in (FORWARD_6G, REVERSE_6G) for m in result.margins)
+
+        # Without a dwell the momentary lock slips through -- the original bug.
+        transient = driver.run_full_sequence(
+            config=SerdesConfig(eye_bins=16, link_lock_settle_s=0.0)
+        )
+        assert FORWARD_6G not in transient.no_link_lanes
 
     def test_margin_iterations_repeat_only_the_sweep(self, driver):
         """N margin iterations -> 1 eye + N margins per lane; progress stays sane."""
@@ -110,13 +175,13 @@ class TestSimulatedSerdesDriver:
         )
 
         # Eye captured once per lane, margin swept three times per lane.
-        assert len(result.eyes) == 3
-        assert len(result.margins) == 9
+        assert len(result.eyes) == 4
+        assert len(result.margins) == 12
         for lane in DEFAULT_LANES:
             assert sum(m.lane == lane for m in result.margins) == 3
 
-        # 3 lanes x (1 eye + 3 margins) = 12 events, monotone, ending at 1.0.
-        assert len(events) == 12
+        # 4 lanes x (1 eye + 3 margins) = 16 events, monotone, ending at 1.0.
+        assert len(events) == 16
         fractions = [e.fraction for e in events]
         assert fractions == sorted(fractions)
         assert fractions[-1] == pytest.approx(1.0)
@@ -543,6 +608,65 @@ class TestRealSerdesDemo:
             assert sweep.points  # the sweep produced points
             assert sweep.points[0].errors == 0  # clean at the high-amplitude start
 
+    def test_link_locks_stability_dwell_passes_for_stable_link(self):
+        """A 6 Gbps stability dwell passes when the link holds lock.
+
+        The demo bridge holds lock and collapses sleeps, so this returns True
+        immediately rather than actually waiting the dwell.
+        """
+        from src.instruments.serdes.real import RealSerdesDriver
+
+        driver = RealSerdesDriver(demo=True)
+        driver.connect()
+        assert driver.link_locks(FORWARD_6G, settle_s=5.0) is True
+        driver.close()
+
+    def test_link_locks_fails_when_link_drops_during_dwell(self):
+        """A link that locks but drops during the stability dwell reads no-link."""
+        from src.instruments.serdes import registers as R
+        from src.instruments.serdes.real import RealSerdesDriver
+
+        class DropsDuringDwell(RealSerdesDriver):
+            DWELL_S = 5.0  # distinct from every internal sleep duration
+
+            def __init__(self) -> None:
+                super().__init__(demo=True)
+                self._dropped = False
+
+                def drop_on_dwell(seconds: float) -> None:
+                    if seconds == self.DWELL_S:
+                        self._dropped = True
+
+                self._sleep = drop_on_dwell
+
+            def _is_locked(self, dev: int = R.DES_ADDR) -> bool:
+                return not self._dropped
+
+        driver = DropsDuringDwell()
+        driver.connect()  # locks fine initially (not yet dropped)
+        assert driver.link_locks(FORWARD_6G, settle_s=DropsDuringDwell.DWELL_S) is False
+        driver.close()
+
+    def test_link_locks_rejects_lock_at_wrong_rate(self):
+        """A 6 Gbps request satisfied only by reverting to 3 Gbps is NOT a lock.
+
+        Regression for the 2 m cable: the recovery path brought the link back up
+        at the 3 Gbps strap default, and a bare lock check let the capture run
+        the 6 Gbps eye/margin on a link that had fallen back to 3 Gbps.
+        """
+        from src.instruments.serdes.real import RealSerdesDriver
+
+        class LinkRevertsTo3G(RealSerdesDriver):
+            # The cable can't hold 6 Gbps, so every rate request lands at 3 Gbps.
+            def _set_forward_rate(self, rate):
+                super()._set_forward_rate(SerdesRate.GBPS_3)
+
+        driver = LinkRevertsTo3G(demo=True)
+        driver.connect()
+        assert driver.link_locks(FORWARD_3G) is True  # genuinely at 3 Gbps
+        assert driver.link_locks(FORWARD_6G) is False  # locked, but at 3 Gbps not 6 Gbps
+        driver.close()
+
     def test_full_sequence_recovers_from_post_reset_nak(self):
         """capture_eye() leaves both chips mid-RESET_ALL, so the margin phase's
         first register access can NAK while they re-lock. The sequence must
@@ -587,8 +711,8 @@ class TestRealSerdesDemo:
         result = driver.run_full_sequence(config=SerdesConfig(eye_bins=8))
         driver.close()
 
-        assert len(result.eyes) == 3
-        assert len(result.margins) == 3
+        assert len(result.eyes) == 4
+        assert len(result.margins) == 4
 
     def test_link_status_retries_through_transient_nak(self):
         """A freshly-connected link can NAK a status read once; link_status must

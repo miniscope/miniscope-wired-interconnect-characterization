@@ -47,6 +47,26 @@ class SimulatedSerdesDriver(SerdesDriver):
             "cable_length_mm": self._cable_length_mm,
         }
 
+    def link_locks(self, lane: SerdesLane, settle_s: float = 0.0) -> bool:
+        """Model whether the link establishes for this lane.
+
+        The forward 6 Gbps link fails to lock on long cables (beyond ~2 m, where
+        the channel is too lossy to acquire); the 3 Gbps forward link and the
+        low-rate reverse control channel stay robust. A reverse lane rides on its
+        forward-link context, so reverse-under-6 G fails wherever 6 G forward
+        does. This lets the no-link path (recorded + scored 0) be exercised
+        against the simulator without hardware.
+
+        ``settle_s`` (a real-hardware stability dwell) is ignored: the simulator
+        is deterministic, so a lane that locks here stays locked.
+        """
+        length_m = self._cable_length_mm / 1000.0
+        # A reverse lane's lock follows the forward link it rides on.
+        effective_rate = lane.forward_rate or lane.rate
+        if effective_rate is SerdesRate.GBPS_6 and length_m > 2.0:
+            return False
+        return True
+
     def _quality(self, lane: SerdesLane) -> tuple[float, float]:
         """(eye open fraction, margin error-onset mV) for one lane."""
         length_m = self._cable_length_mm / 1000.0

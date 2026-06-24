@@ -1,5 +1,6 @@
 """Tests for session writers: the app's only path for creating data."""
 
+import json
 from datetime import date
 from pathlib import Path
 
@@ -17,6 +18,7 @@ from src.core.session_writer import (
 )
 from src.instruments.lcr.driver import ResistanceReading
 from src.instruments.registry import get_serdes_driver, get_vna_driver
+from src.instruments.types import FORWARD_6G, SerdesResult
 from src.instruments.vna.driver import VnaConfig
 from src.pipeline import process_session
 
@@ -168,13 +170,46 @@ class TestWriteSerdesSession:
         )
 
         manifest = pd.read_csv(ref.path / "session_manifest.csv")
-        assert len(manifest) == 3
+        assert len(manifest) == 4  # fwd 3G/6G + reverse under each forward rate
         assert (ref.path / "eye_fwd_3g.csv").exists()
-        assert (ref.path / "margin_rev_187m.csv").exists()
+        assert (ref.path / "margin_rev_187m_fwd6g.csv").exists()
 
         pipeline_result = process_session(ref.path, test_repo)
         assert pipeline_result.validation.is_valid, pipeline_result.validation.errors
         assert "serdes_summary_json" in pipeline_result.outputs
+
+    def test_no_link_session_roundtrip(self, test_repo: Path):
+        """A no-link lane writes linked=0 with header-only files, validates, and
+        processes to a linked=False combo with null metrics."""
+        result = SerdesResult(no_link_lanes=[FORWARD_6G])
+        ref = write_serdes_session(
+            test_repo,
+            "test_cable",
+            2000.0,
+            result,
+            resistance_meta(type_fields={"serdes_device": "Sim GMSL2"}),
+        )
+
+        # All four lanes present; the 6G lane is flagged not linked.
+        manifest = pd.read_csv(ref.path / "session_manifest.csv")
+        assert len(manifest) == 4
+        assert "linked" in manifest.columns
+        linked = dict(zip(manifest["lane_id"], manifest["linked"], strict=True))
+        assert linked["fwd_6g"] == 0
+        assert linked["fwd_3g"] == 1  # probed-linked but uncaptured
+
+        # Header-only eye/margin for the no-link lane (file exists, no data rows).
+        assert (ref.path / "eye_fwd_6g.csv").exists()
+        assert pd.read_csv(ref.path / "eye_fwd_6g.csv").empty
+
+        # Validates and processes; the 6G combo is linked=False with null metrics.
+        pipeline_result = process_session(ref.path, test_repo)
+        assert pipeline_result.validation.is_valid, pipeline_result.validation.errors
+        summary = json.loads(pipeline_result.outputs["serdes_summary_json"].read_text())
+        combos = {c["lane_id"]: c for c in summary["combos"]}
+        assert combos["fwd_6g"]["linked"] is False
+        assert combos["fwd_6g"]["eye_area_ratio"] is None
+        assert combos["fwd_6g"]["link_margin_mv"] is None
 
 
 class TestWriteVnaSession:

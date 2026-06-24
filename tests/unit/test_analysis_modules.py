@@ -182,8 +182,13 @@ class TestQualityScore:
         assert score(inputs, config) == pytest.approx(0.0)
 
     def test_missing_metrics_renormalized(self, config):
-        """With only eye area available, score == eye area sub-score."""
-        inputs = QualityInputs(eye_area_ratio=0.5)
+        """With only eye area available, score == eye area sub-score.
+
+        The eye sub-score normalizes by eye_area_full_scale, so an eye filling
+        half the full-scale ratio yields a sub-score (and thus a score) of 0.5.
+        """
+        half_open = 0.5 * config.quality_score.references.eye_area_full_scale
+        inputs = QualityInputs(eye_area_ratio=half_open)
         assert score(inputs, config) == pytest.approx(0.5)
 
     def test_no_metrics_returns_none(self, config):
@@ -201,3 +206,48 @@ class TestQualityScore:
         assert zone(config.zones.works, config) == "works"
         assert zone(config.zones.marginal, config) == "marginal"
         assert zone(config.zones.marginal - 0.01, config) == "not_recommended"
+
+
+class TestQualityTableLinkStates:
+    """How _quality_table treats no-link vs linked-but-uncharacterized lanes."""
+
+    def _serdes_row(self, rate, *, linked, eye=None, margin=None):
+        return {
+            "cable_length_mm": 1000.0,
+            "channel": "forward",
+            "rate_gbps": rate,
+            "linked": linked,
+            "mean_eye_area_ratio": eye,
+            "mean_link_margin_mv": margin,
+        }
+
+    def test_no_link_rate_scored_zero(self, config):
+        from src.analysis.cross import _quality_table
+
+        consolidated = {
+            "c": {"serdes_by_length": [self._serdes_row(6.0, linked=False)], "vna_by_length": []}
+        }
+        df = _quality_table(consolidated, config)
+        row = df[(df["cable_length_mm"] == 1000.0) & (df["rate_gbps"] == 6.0)].iloc[0]
+        assert row["quality_score"] == 0.0
+        assert row["zone"] == "not_recommended"
+
+    def test_linked_but_uncharacterized_dropped_even_with_vna(self, config):
+        """A linked lane with no eye/margin is not scored from attenuation alone."""
+        from src.analysis.cross import _quality_table
+
+        consolidated = {
+            "c": {
+                "serdes_by_length": [self._serdes_row(3.0, linked=True)],  # null eye + margin
+                "vna_by_length": [
+                    {
+                        "cable_length_mm": 1000.0,
+                        # spans the 3 Gbps Nyquist (1.5 GHz)
+                        "attenuation_db_by_hz": {"1000000000": 1.0, "2000000000": 2.0},
+                    }
+                ],
+            }
+        }
+        df = _quality_table(consolidated, config)
+        # The only lane is dropped (no eye/margin), so no measured row at all.
+        assert df.empty

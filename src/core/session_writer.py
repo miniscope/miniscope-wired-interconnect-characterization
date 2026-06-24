@@ -28,7 +28,13 @@ from src.core.session_schemas import length_dir_name
 from src.core.session_validator import validate_session
 from src.instruments.balance.driver import MassReading
 from src.instruments.lcr.driver import ResistanceReading
-from src.instruments.types import SerdesResult, VnaSweepResult, group_margins_by_lane
+from src.instruments.types import (
+    DEFAULT_LANES,
+    SerdesLane,
+    SerdesResult,
+    VnaSweepResult,
+    group_margins_by_lane,
+)
 from src.instruments.vna.driver import write_s2p
 from src.measurement_types.registry import MeasurementTypeRegistry
 
@@ -259,20 +265,26 @@ def write_serdes_session(
         lane.lane_id: sweeps for lane, sweeps in group_margins_by_lane(result.margins)
     }
 
-    manifest_rows: list[dict[str, str]] = []
-    for eye in result.eyes:
-        lane = eye.lane
+    eyes_by_lane = {eye.lane.lane_id: eye for eye in result.eyes}
+    no_link_ids = {lane.lane_id for lane in result.no_link_lanes}
+
+    def write_eye_csv(lane: SerdesLane) -> str:
+        """Write a lane's raw EOM grid; header-only when the lane has no eye."""
+        eye = eyes_by_lane.get(lane.lane_id)
         eye_csv = f"eye_{lane.lane_id}.csv"
         with open(ref.path / eye_csv, "w", newline="") as f:
             writer = csv.writer(f)
             writer.writerow(["phase", "vth", "polarity", "hits", "errors"])
-            for ph, vt, pol, hit, err in zip(
-                eye.phase, eye.vth, eye.polarity, eye.hits, eye.errors, strict=True
-            ):
-                writer.writerow([int(ph), int(vt), int(pol), int(hit), int(err)])
+            if eye is not None:
+                for ph, vt, pol, hit, err in zip(
+                    eye.phase, eye.vth, eye.polarity, eye.hits, eye.errors, strict=True
+                ):
+                    writer.writerow([int(ph), int(vt), int(pol), int(hit), int(err)])
+        return eye_csv
 
+    def write_margin_csvs(lane: SerdesLane) -> tuple[str, int]:
+        """Write a lane's raw margin run(s); one header-only run when it has none."""
         margin_csv = f"margin_{lane.lane_id}.csv"
-        # At least one (possibly empty) run so the manifest's margin_csv resolves.
         runs = [s.points for s in margins_by_lane.get(lane.lane_id, [])] or [[]]
         run_files = [margin_csv] + [
             f"margin_{lane.lane_id}_run{i}.csv" for i in range(2, len(runs) + 1)
@@ -285,7 +297,19 @@ def write_serdes_session(
                     writer.writerow(
                         [p.tx_amplitude_mv, p.code, p.rep, int(p.locked), p.errors, p.status]
                     )
+        return margin_csv, len(runs)
 
+    # A serdes session always covers the three default lanes (the validator
+    # enforces this), so write a row for each. Per lane:
+    #   - captured           -> linked=1, real eye + margin data
+    #   - no_link_lanes       -> linked=0, header-only files (scored 0 downstream)
+    #   - neither (e.g. a link-check-only record where this lane did link but was
+    #     not captured) -> linked=1, header-only files; processing yields null
+    #     metrics, so it is dropped from scoring until a real capture covers it.
+    manifest_rows: list[dict[str, str]] = []
+    for lane in DEFAULT_LANES:
+        eye_csv = write_eye_csv(lane)
+        margin_csv, n_runs = write_margin_csvs(lane)
         manifest_rows.append(
             {
                 "lane_id": lane.lane_id,
@@ -293,7 +317,8 @@ def write_serdes_session(
                 "rate_gbps": f"{lane.rate.gbps:g}",
                 "eye_csv": eye_csv,
                 "margin_csv": margin_csv,
-                "margin_iterations": str(len(runs)),
+                "margin_iterations": str(n_runs),
+                "linked": "0" if lane.lane_id in no_link_ids else "1",
             }
         )
 
@@ -305,6 +330,7 @@ def write_serdes_session(
             "eye_csv",
             "margin_csv",
             "margin_iterations",
+            "linked",
         ]
         writer = csv.DictWriter(f, fieldnames=fieldnames)
         writer.writeheader()

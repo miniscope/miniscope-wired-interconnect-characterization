@@ -19,10 +19,20 @@ class QualityWeights(BaseModel):
 
 
 class QualityReferences(BaseModel):
-    """Normalization references: the metric value that maps to a score of 0."""
+    """Normalization references for the per-metric sub-scores.
+
+    ``link_margin_full_scale_mv`` and ``attenuation_full_scale_db`` are the
+    metric values that map to a sub-score of 0 (worst). ``eye_area_full_scale``
+    is the opposite end: the eye-area ratio that maps to a sub-score of 1
+    (best). An eye never fills its bounding box, so a wide-open, healthy eye
+    occupies only a fraction of the EOM scan window -- this reference is well
+    below 1.0, and feeding the raw ratio in unnormalized would cap the eye
+    term far below its weight.
+    """
 
     model_config = ConfigDict(extra="forbid")
 
+    eye_area_full_scale: float = Field(gt=0, le=1.0)
     link_margin_full_scale_mv: float = Field(gt=0)
     attenuation_full_scale_db: float = Field(gt=0)
 
