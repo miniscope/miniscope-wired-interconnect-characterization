@@ -176,6 +176,11 @@ class RealSerdesDriver(SerdesDriver):
         marginal high-rate link can acquire lock momentarily and then drop or
         start erroring, so the 6 Gbps probe uses this to avoid calling a flaky
         link good.
+
+        Crucially this confirms the link is locked AT THE REQUESTED RATE, not
+        merely "locked": when a high rate fails, the recovery path can bring the
+        link back up by reverting to the strap default (3 Gbps), and a bare lock
+        check would then wrongly pass a 6 Gbps request.
         """
         self._ensure_clean_state()
         # Forward lanes select their own rate; a reverse lane rides on its
@@ -185,14 +190,30 @@ class RealSerdesDriver(SerdesDriver):
             self._set_forward_rate(forward_rate)
             self._ensure_clean_state()
         try:
-            if not self._is_locked(R.DES_ADDR):
+            if not self._locked_at(forward_rate):
                 return False
             if settle_s > 0:
                 self._sleep(settle_s)
-                return self._is_locked(R.DES_ADDR) and not self._has_error(R.DES_ADDR)
+                return self._locked_at(forward_rate)
             return True
         except OSError:
             return False
+
+    def _locked_at(self, forward_rate: SerdesRate | None) -> bool:
+        """Locked and error-free, AND -- for a specific forward rate -- actually
+        AT that rate.
+
+        ``_ensure_clean_state`` can recover a link that failed at a high rate by
+        resetting to the strap default (3 Gbps) and locking there, so a bare lock
+        check would wrongly pass a 6 Gbps request. Verify the deserializer's
+        RX_RATE matches what we asked for.
+        """
+        if not self._is_locked(R.DES_ADDR) or self._has_error(R.DES_ADDR):
+            return False
+        if forward_rate is None:
+            return True
+        expected = R.RATE_CODE_3G if forward_rate is SerdesRate.GBPS_3 else R.RATE_CODE_6G
+        return (self._read_settle(R.DES_ADDR, R.REG_REG1) & 0x03) == expected
 
     def close(self) -> None:
         for dev in (R.SER_ADDR, R.DES_ADDR):

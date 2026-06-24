@@ -613,6 +613,26 @@ class TestRealSerdesDemo:
         assert driver.link_locks(FORWARD_6G, settle_s=DropsDuringDwell.DWELL_S) is False
         driver.close()
 
+    def test_link_locks_rejects_lock_at_wrong_rate(self):
+        """A 6 Gbps request satisfied only by reverting to 3 Gbps is NOT a lock.
+
+        Regression for the 2 m cable: the recovery path brought the link back up
+        at the 3 Gbps strap default, and a bare lock check let the capture run
+        the 6 Gbps eye/margin on a link that had fallen back to 3 Gbps.
+        """
+        from src.instruments.serdes.real import RealSerdesDriver
+
+        class LinkRevertsTo3G(RealSerdesDriver):
+            # The cable can't hold 6 Gbps, so every rate request lands at 3 Gbps.
+            def _set_forward_rate(self, rate):
+                super()._set_forward_rate(SerdesRate.GBPS_3)
+
+        driver = LinkRevertsTo3G(demo=True)
+        driver.connect()
+        assert driver.link_locks(FORWARD_3G) is True  # genuinely at 3 Gbps
+        assert driver.link_locks(FORWARD_6G) is False  # locked, but at 3 Gbps not 6 Gbps
+        driver.close()
+
     def test_full_sequence_recovers_from_post_reset_nak(self):
         """capture_eye() leaves both chips mid-RESET_ALL, so the margin phase's
         first register access can NAK while they re-lock. The sequence must
