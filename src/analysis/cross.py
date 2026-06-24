@@ -323,6 +323,14 @@ def _quality_table(consolidated: dict[str, dict], config: AnalysisConfig) -> pd.
                 c["mean_link_margin_mv"] for c in combos if c.get("mean_link_margin_mv") is not None
             ]
 
+            # Linked but never characterized (no eye AND no margin) -- e.g. a
+            # link-check-only no-link record left this rate uncaptured. There is
+            # no SerDes signal to score, so drop it from the MEASURED table; it
+            # gets a score once a real capture covers it. (Scoring it from VNA
+            # attenuation alone is the projected path's job, not this one's.)
+            if not eye_areas and not margins:
+                continue
+
             # Attenuation at the link's own Nyquist fundamental (rate/2) -- the
             # same quantity the projected path uses -- NOT the worst-case
             # broadband insertion loss, which penalizes a cable for loss far
