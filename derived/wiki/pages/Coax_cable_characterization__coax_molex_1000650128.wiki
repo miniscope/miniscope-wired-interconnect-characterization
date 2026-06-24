@@ -68,33 +68,44 @@ Measured round-trip resistivity: '''4.4952 ohm/m''' (single_length_ratio, n=1 le
 | fwd_3g
 | forward
 | 3
-| True
-| 0.223633
-| 196.875
+| False
+| nan
+| nan
 | 
-| 200
+| nan
 | 1
 |-
 | 170
 | fwd_6g
 | forward
 | 6
-| True
-| 0.148438
-| 177.188
+| False
+| nan
+| nan
 | 
-| 100
+| nan
 | 1
 |-
 | 170
-| rev_187m
+| rev_187m_fwd3g
 | reverse
 | 0.1875
 | True
-| 0.109375
-| 68.906
+| nan
+| nan
 | 
-| 90
+| nan
+| 1
+|-
+| 170
+| rev_187m_fwd6g
+| reverse
+| 0.1875
+| True
+| nan
+| nan
+| 
+| nan
 | 1
 |-
 | 500
@@ -102,8 +113,8 @@ Measured round-trip resistivity: '''4.4952 ohm/m''' (single_length_ratio, n=1 le
 | forward
 | 3
 | True
-| 0.170654
-| 118.125
+| 0.186523
+| 127.969
 | 
 | 50
 | 1
@@ -113,19 +124,30 @@ Measured round-trip resistivity: '''4.4952 ohm/m''' (single_length_ratio, n=1 le
 | forward
 | 6
 | True
-| 0.114502
-| 137.812
+| 0.144287
+| 157.5
 | 
 | 180
 | 1
 |-
 | 500
-| rev_187m
+| rev_187m_fwd3g
 | reverse
 | 0.1875
 | True
-| 0.117676
-| 78.75
+| 0.25
+| 157.5
+| 
+| 170
+| 1
+|-
+| 500
+| rev_187m_fwd6g
+| reverse
+| 0.1875
+| True
+| 0.172363
+| 98.438
 | 
 | 110
 | 1
@@ -135,8 +157,8 @@ Measured round-trip resistivity: '''4.4952 ohm/m''' (single_length_ratio, n=1 le
 | forward
 | 3
 | True
-| 0.187012
-| 187.031
+| 0.172363
+| 177.188
 | 
 | 50
 | 1
@@ -146,35 +168,141 @@ Measured round-trip resistivity: '''4.4952 ohm/m''' (single_length_ratio, n=1 le
 | forward
 | 6
 | True
-| 0.093018
-| 118.125
+| 0.103271
+| 137.812
 | 
-| 290
+| 300
 | 1
 |-
 | 1025
-| rev_187m
+| rev_187m_fwd3g
 | reverse
 | 0.1875
 | True
-| 0.093018
-| 59.062
+| 0.25
+| 157.5
 | 
-| 150
+| 220
+| 1
+|-
+| 1025
+| rev_187m_fwd6g
+| reverse
+| 0.1875
+| True
+| 0.140625
+| 88.594
+| 
+| 110
+| 1
+|-
+| 1500
+| fwd_3g
+| forward
+| 3
+| True
+| 0.239014
+| 216.562
+| 
+| 50
+| 1
+|-
+| 1500
+| fwd_6g
+| forward
+| 6
+| True
+| 0.123291
+| 137.812
+| 
+| 300
+| 1
+|-
+| 1500
+| rev_187m_fwd3g
+| reverse
+| 0.1875
+| True
+| 0.25
+| 157.5
+| 
+| 110
+| 1
+|-
+| 1500
+| rev_187m_fwd6g
+| reverse
+| 0.1875
+| True
+| 0.133545
+| 88.594
+| 
+| 80
+| 1
+|-
+| 2400
+| fwd_3g
+| forward
+| 3
+| True
+| 0.21582
+| 216.562
+| 
+| 50
+| 1
+|-
+| 2400
+| fwd_6g
+| forward
+| 6
+| True
+| 0.076172
+| 98.438
+| 
+| nan
+| 1
+|-
+| 2400
+| rev_187m_fwd3g
+| reverse
+| 0.1875
+| True
+| 0.189697
+| 118.125
+| 
+| 170
+| 1
+|-
+| 2400
+| rev_187m_fwd6g
+| reverse
+| 0.1875
+| True
+| 0.086426
+| 49.219
+| 
+| 80
 | 1
 |}
 
 === Eye diagrams ===
 
-[[File:CoaxCableChar_sessions_coax_molex_1000650128_1025mm_serdes_20260618_01_eye_fwd_3g.png|420px|thumb|none|eye_fwd_3g (coax_molex_1000650128/1025mm/serdes/20260618_01)]]
-[[File:CoaxCableChar_sessions_coax_molex_1000650128_1025mm_serdes_20260618_01_eye_fwd_6g.png|420px|thumb|none|eye_fwd_6g (coax_molex_1000650128/1025mm/serdes/20260618_01)]]
-[[File:CoaxCableChar_sessions_coax_molex_1000650128_1025mm_serdes_20260618_01_eye_rev_187m.png|420px|thumb|none|eye_rev_187m (coax_molex_1000650128/1025mm/serdes/20260618_01)]]
-[[File:CoaxCableChar_sessions_coax_molex_1000650128_170mm_serdes_20260618_01_eye_fwd_3g.png|420px|thumb|none|eye_fwd_3g (coax_molex_1000650128/170mm/serdes/20260618_01)]]
-[[File:CoaxCableChar_sessions_coax_molex_1000650128_170mm_serdes_20260618_01_eye_fwd_6g.png|420px|thumb|none|eye_fwd_6g (coax_molex_1000650128/170mm/serdes/20260618_01)]]
-[[File:CoaxCableChar_sessions_coax_molex_1000650128_170mm_serdes_20260618_01_eye_rev_187m.png|420px|thumb|none|eye_rev_187m (coax_molex_1000650128/170mm/serdes/20260618_01)]]
-[[File:CoaxCableChar_sessions_coax_molex_1000650128_500mm_serdes_20260618_01_eye_fwd_3g.png|420px|thumb|none|eye_fwd_3g (coax_molex_1000650128/500mm/serdes/20260618_01)]]
-[[File:CoaxCableChar_sessions_coax_molex_1000650128_500mm_serdes_20260618_01_eye_fwd_6g.png|420px|thumb|none|eye_fwd_6g (coax_molex_1000650128/500mm/serdes/20260618_01)]]
-[[File:CoaxCableChar_sessions_coax_molex_1000650128_500mm_serdes_20260618_01_eye_rev_187m.png|420px|thumb|none|eye_rev_187m (coax_molex_1000650128/500mm/serdes/20260618_01)]]
+[[File:CoaxCableChar_sessions_coax_molex_1000650128_1025mm_serdes_20260624_01_eye_fwd_3g.png|420px|thumb|none|eye_fwd_3g (coax_molex_1000650128/1025mm/serdes/20260624_01)]]
+[[File:CoaxCableChar_sessions_coax_molex_1000650128_1025mm_serdes_20260624_01_eye_fwd_6g.png|420px|thumb|none|eye_fwd_6g (coax_molex_1000650128/1025mm/serdes/20260624_01)]]
+[[File:CoaxCableChar_sessions_coax_molex_1000650128_1025mm_serdes_20260624_01_eye_rev_187m_fwd3g.png|420px|thumb|none|eye_rev_187m_fwd3g (coax_molex_1000650128/1025mm/serdes/20260624_01)]]
+[[File:CoaxCableChar_sessions_coax_molex_1000650128_1025mm_serdes_20260624_01_eye_rev_187m_fwd6g.png|420px|thumb|none|eye_rev_187m_fwd6g (coax_molex_1000650128/1025mm/serdes/20260624_01)]]
+[[File:CoaxCableChar_sessions_coax_molex_1000650128_1500mm_serdes_20260624_01_eye_fwd_3g.png|420px|thumb|none|eye_fwd_3g (coax_molex_1000650128/1500mm/serdes/20260624_01)]]
+[[File:CoaxCableChar_sessions_coax_molex_1000650128_1500mm_serdes_20260624_01_eye_fwd_6g.png|420px|thumb|none|eye_fwd_6g (coax_molex_1000650128/1500mm/serdes/20260624_01)]]
+[[File:CoaxCableChar_sessions_coax_molex_1000650128_1500mm_serdes_20260624_01_eye_rev_187m_fwd3g.png|420px|thumb|none|eye_rev_187m_fwd3g (coax_molex_1000650128/1500mm/serdes/20260624_01)]]
+[[File:CoaxCableChar_sessions_coax_molex_1000650128_1500mm_serdes_20260624_01_eye_rev_187m_fwd6g.png|420px|thumb|none|eye_rev_187m_fwd6g (coax_molex_1000650128/1500mm/serdes/20260624_01)]]
+[[File:CoaxCableChar_sessions_coax_molex_1000650128_2400mm_serdes_20260624_01_eye_fwd_3g.png|420px|thumb|none|eye_fwd_3g (coax_molex_1000650128/2400mm/serdes/20260624_01)]]
+[[File:CoaxCableChar_sessions_coax_molex_1000650128_2400mm_serdes_20260624_01_eye_fwd_6g.png|420px|thumb|none|eye_fwd_6g (coax_molex_1000650128/2400mm/serdes/20260624_01)]]
+[[File:CoaxCableChar_sessions_coax_molex_1000650128_2400mm_serdes_20260624_01_eye_rev_187m_fwd3g.png|420px|thumb|none|eye_rev_187m_fwd3g (coax_molex_1000650128/2400mm/serdes/20260624_01)]]
+[[File:CoaxCableChar_sessions_coax_molex_1000650128_2400mm_serdes_20260624_01_eye_rev_187m_fwd6g.png|420px|thumb|none|eye_rev_187m_fwd6g (coax_molex_1000650128/2400mm/serdes/20260624_01)]]
+[[File:CoaxCableChar_sessions_coax_molex_1000650128_500mm_serdes_20260624_01_eye_fwd_3g.png|420px|thumb|none|eye_fwd_3g (coax_molex_1000650128/500mm/serdes/20260624_01)]]
+[[File:CoaxCableChar_sessions_coax_molex_1000650128_500mm_serdes_20260624_01_eye_fwd_6g.png|420px|thumb|none|eye_fwd_6g (coax_molex_1000650128/500mm/serdes/20260624_01)]]
+[[File:CoaxCableChar_sessions_coax_molex_1000650128_500mm_serdes_20260624_01_eye_rev_187m_fwd3g.png|420px|thumb|none|eye_rev_187m_fwd3g (coax_molex_1000650128/500mm/serdes/20260624_01)]]
+[[File:CoaxCableChar_sessions_coax_molex_1000650128_500mm_serdes_20260624_01_eye_rev_187m_fwd6g.png|420px|thumb|none|eye_rev_187m_fwd6g (coax_molex_1000650128/500mm/serdes/20260624_01)]]
 [[File:CoaxCableChar_aggregated_serdes_serdes_eye_vs_length.png|640px|thumb|none|Eye opening vs cable length]]
 [[File:CoaxCableChar_aggregated_serdes_serdes_margin_vs_length.png|640px|thumb|none|Link margin vs cable length]]
 
@@ -205,6 +333,11 @@ Measured round-trip resistivity: '''4.4952 ohm/m''' (single_length_ratio, n=1 le
 | 1500
 | -23.584
 | -23.584
+| 1
+|-
+| 2400
+| -33.5937
+| -33.5937
 | 1
 |}
 [[File:CoaxCableChar_aggregated_vna_vna_comparison.png|640px|thumb|none|Attenuation vs frequency]]

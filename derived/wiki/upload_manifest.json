@@ -27,40 +27,68 @@
       "wiki_name": "CoaxCableChar_cross_supply_voltage_miniscope_v4.png"
     },
     {
-      "local_path": "derived/sessions/coax_molex_1000650128/1025mm/serdes/20260618_01/eye_fwd_3g.png",
-      "wiki_name": "CoaxCableChar_sessions_coax_molex_1000650128_1025mm_serdes_20260618_01_eye_fwd_3g.png"
+      "local_path": "derived/sessions/coax_molex_1000650128/1025mm/serdes/20260624_01/eye_fwd_3g.png",
+      "wiki_name": "CoaxCableChar_sessions_coax_molex_1000650128_1025mm_serdes_20260624_01_eye_fwd_3g.png"
     },
     {
-      "local_path": "derived/sessions/coax_molex_1000650128/1025mm/serdes/20260618_01/eye_fwd_6g.png",
-      "wiki_name": "CoaxCableChar_sessions_coax_molex_1000650128_1025mm_serdes_20260618_01_eye_fwd_6g.png"
+      "local_path": "derived/sessions/coax_molex_1000650128/1025mm/serdes/20260624_01/eye_fwd_6g.png",
+      "wiki_name": "CoaxCableChar_sessions_coax_molex_1000650128_1025mm_serdes_20260624_01_eye_fwd_6g.png"
     },
     {
-      "local_path": "derived/sessions/coax_molex_1000650128/1025mm/serdes/20260618_01/eye_rev_187m.png",
-      "wiki_name": "CoaxCableChar_sessions_coax_molex_1000650128_1025mm_serdes_20260618_01_eye_rev_187m.png"
+      "local_path": "derived/sessions/coax_molex_1000650128/1025mm/serdes/20260624_01/eye_rev_187m_fwd3g.png",
+      "wiki_name": "CoaxCableChar_sessions_coax_molex_1000650128_1025mm_serdes_20260624_01_eye_rev_187m_fwd3g.png"
     },
     {
-      "local_path": "derived/sessions/coax_molex_1000650128/170mm/serdes/20260618_01/eye_fwd_3g.png",
-      "wiki_name": "CoaxCableChar_sessions_coax_molex_1000650128_170mm_serdes_20260618_01_eye_fwd_3g.png"
+      "local_path": "derived/sessions/coax_molex_1000650128/1025mm/serdes/20260624_01/eye_rev_187m_fwd6g.png",
+      "wiki_name": "CoaxCableChar_sessions_coax_molex_1000650128_1025mm_serdes_20260624_01_eye_rev_187m_fwd6g.png"
     },
     {
-      "local_path": "derived/sessions/coax_molex_1000650128/170mm/serdes/20260618_01/eye_fwd_6g.png",
-      "wiki_name": "CoaxCableChar_sessions_coax_molex_1000650128_170mm_serdes_20260618_01_eye_fwd_6g.png"
+      "local_path": "derived/sessions/coax_molex_1000650128/1500mm/serdes/20260624_01/eye_fwd_3g.png",
+      "wiki_name": "CoaxCableChar_sessions_coax_molex_1000650128_1500mm_serdes_20260624_01_eye_fwd_3g.png"
     },
     {
-      "local_path": "derived/sessions/coax_molex_1000650128/170mm/serdes/20260618_01/eye_rev_187m.png",
-      "wiki_name": "CoaxCableChar_sessions_coax_molex_1000650128_170mm_serdes_20260618_01_eye_rev_187m.png"
+      "local_path": "derived/sessions/coax_molex_1000650128/1500mm/serdes/20260624_01/eye_fwd_6g.png",
+      "wiki_name": "CoaxCableChar_sessions_coax_molex_1000650128_1500mm_serdes_20260624_01_eye_fwd_6g.png"
     },
     {
-      "local_path": "derived/sessions/coax_molex_1000650128/500mm/serdes/20260618_01/eye_fwd_3g.png",
-      "wiki_name": "CoaxCableChar_sessions_coax_molex_1000650128_500mm_serdes_20260618_01_eye_fwd_3g.png"
+      "local_path": "derived/sessions/coax_molex_1000650128/1500mm/serdes/20260624_01/eye_rev_187m_fwd3g.png",
+      "wiki_name": "CoaxCableChar_sessions_coax_molex_1000650128_1500mm_serdes_20260624_01_eye_rev_187m_fwd3g.png"
     },
     {
-      "local_path": "derived/sessions/coax_molex_1000650128/500mm/serdes/20260618_01/eye_fwd_6g.png",
-      "wiki_name": "CoaxCableChar_sessions_coax_molex_1000650128_500mm_serdes_20260618_01_eye_fwd_6g.png"
+      "local_path": "derived/sessions/coax_molex_1000650128/1500mm/serdes/20260624_01/eye_rev_187m_fwd6g.png",
+      "wiki_name": "CoaxCableChar_sessions_coax_molex_1000650128_1500mm_serdes_20260624_01_eye_rev_187m_fwd6g.png"
     },
     {
-      "local_path": "derived/sessions/coax_molex_1000650128/500mm/serdes/20260618_01/eye_rev_187m.png",
-      "wiki_name": "CoaxCableChar_sessions_coax_molex_1000650128_500mm_serdes_20260618_01_eye_rev_187m.png"
+      "local_path": "derived/sessions/coax_molex_1000650128/2400mm/serdes/20260624_01/eye_fwd_3g.png",
+      "wiki_name": "CoaxCableChar_sessions_coax_molex_1000650128_2400mm_serdes_20260624_01_eye_fwd_3g.png"
+    },
+    {
+      "local_path": "derived/sessions/coax_molex_1000650128/2400mm/serdes/20260624_01/eye_fwd_6g.png",
+      "wiki_name": "CoaxCableChar_sessions_coax_molex_1000650128_2400mm_serdes_20260624_01_eye_fwd_6g.png"
+    },
+    {
+      "local_path": "derived/sessions/coax_molex_1000650128/2400mm/serdes/20260624_01/eye_rev_187m_fwd3g.png",
+      "wiki_name": "CoaxCableChar_sessions_coax_molex_1000650128_2400mm_serdes_20260624_01_eye_rev_187m_fwd3g.png"
+    },
+    {
+      "local_path": "derived/sessions/coax_molex_1000650128/2400mm/serdes/20260624_01/eye_rev_187m_fwd6g.png",
+      "wiki_name": "CoaxCableChar_sessions_coax_molex_1000650128_2400mm_serdes_20260624_01_eye_rev_187m_fwd6g.png"
+    },
+    {
+      "local_path": "derived/sessions/coax_molex_1000650128/500mm/serdes/20260624_01/eye_fwd_3g.png",
+      "wiki_name": "CoaxCableChar_sessions_coax_molex_1000650128_500mm_serdes_20260624_01_eye_fwd_3g.png"
+    },
+    {
+      "local_path": "derived/sessions/coax_molex_1000650128/500mm/serdes/20260624_01/eye_fwd_6g.png",
+      "wiki_name": "CoaxCableChar_sessions_coax_molex_1000650128_500mm_serdes_20260624_01_eye_fwd_6g.png"
+    },
+    {
+      "local_path": "derived/sessions/coax_molex_1000650128/500mm/serdes/20260624_01/eye_rev_187m_fwd3g.png",
+      "wiki_name": "CoaxCableChar_sessions_coax_molex_1000650128_500mm_serdes_20260624_01_eye_rev_187m_fwd3g.png"
+    },
+    {
+      "local_path": "derived/sessions/coax_molex_1000650128/500mm/serdes/20260624_01/eye_rev_187m_fwd6g.png",
+      "wiki_name": "CoaxCableChar_sessions_coax_molex_1000650128_500mm_serdes_20260624_01_eye_rev_187m_fwd6g.png"
     },
     {
       "local_path": "derived/aggregated/serdes/serdes_eye_vs_length.png",

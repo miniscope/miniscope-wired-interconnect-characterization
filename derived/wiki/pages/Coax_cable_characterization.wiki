@@ -23,37 +23,61 @@ Each curve is one cable type. The score combines eye opening, link margin, and a
 | coax_molex_1000650128
 | 170
 | 3
-| 0.755191
-| works
+| 0
+| not_recommended
 |-
 | coax_molex_1000650128
 | 170
 | 6
-| 0.696274
-| marginal
+| 0
+| not_recommended
 |-
 | coax_molex_1000650128
 | 500
 | 3
-| 0.795122
+| 0.820512
 | works
 |-
 | coax_molex_1000650128
 | 500
 | 6
-| 0.55489
+| 0.602546
 | marginal
 |-
 | coax_molex_1000650128
 | 1025
 | 3
-| 0.793
+| 0.769561
 | works
 |-
 | coax_molex_1000650128
 | 1025
 | 6
-| 0.358566
+| 0.365215
+| not_recommended
+|-
+| coax_molex_1000650128
+| 1500
+| 3
+| 0.850145
+| works
+|-
+| coax_molex_1000650128
+| 1500
+| 6
+| 0.362717
+| not_recommended
+|-
+| coax_molex_1000650128
+| 2400
+| 3
+| 0.775445
+| works
+|-
+| coax_molex_1000650128
+| 2400
+| 6
+| 0.204632
 | not_recommended
 |}
 
@@ -103,6 +127,14 @@ Each Miniscope runs its link at one rate, so these curves show cable quality at 
 | 0.73509
 | marginal
 | projected_from_vna
+|-
+| miniscope_v4
+| coax_molex_1000650128
+| 2400
+| 1.5
+| 0.592595
+| marginal
+| projected_from_vna
 |}
 
 == What supply voltage do I need? ==
@@ -145,6 +177,13 @@ Thin coax drops voltage, so each cable and length has an allowable supply window
 | 1500
 | 5.323
 | 5.635
+| False
+|-
+| miniscope_v4
+| coax_molex_1000650128
+| 2400
+| 6.537
+| 5.716
 | False
 |}
 

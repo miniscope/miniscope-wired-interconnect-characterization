@@ -3,3 +3,4 @@ miniscope_v4,coax_molex_1000650128,170.0,4.4952,0.7642,3.529,5.515,True,5.0,True
 miniscope_v4,coax_molex_1000650128,500.0,4.4952,2.2476,3.974,5.545,True,5.0,True
 miniscope_v4,coax_molex_1000650128,1025.0,4.4952,4.6076,4.682,5.592,True,5.0,True
 miniscope_v4,coax_molex_1000650128,1500.0,4.4952,6.7428,5.323,5.635,True,5.0,False
+miniscope_v4,coax_molex_1000650128,2400.0,4.4952,10.7885,6.537,5.716,False,5.0,False
