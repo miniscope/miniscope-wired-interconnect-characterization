@@ -298,12 +298,38 @@ def _quality_table(consolidated: dict[str, dict], config: AnalysisConfig) -> pd.
             by_length_rate.setdefault(key, []).append(r)
 
         for (length_mm, rate), combos in sorted(by_length_rate.items()):
+            # A cable that never establishes a link at this rate is scored 0
+            # (not_recommended) outright, so it stays visible on the wiki rather
+            # than silently dropping out for lack of eye/margin data.
+            if not any(c.get("linked", True) for c in combos):
+                rows.append(
+                    {
+                        "profile_id": profile_id,
+                        "cable_length_mm": length_mm,
+                        "rate_gbps": rate,
+                        "worst_eye_area_ratio": None,
+                        "worst_link_margin_mv": None,
+                        "attenuation_db": None,
+                        "quality_score": 0.0,
+                        "zone": zone(0.0, config),
+                    }
+                )
+                continue
+
             eye_areas = [
                 c["mean_eye_area_ratio"] for c in combos if c.get("mean_eye_area_ratio") is not None
             ]
             margins = [
                 c["mean_link_margin_mv"] for c in combos if c.get("mean_link_margin_mv") is not None
             ]
+
+            # Linked but never characterized (no eye AND no margin) -- e.g. a
+            # link-check-only no-link record left this rate uncaptured. There is
+            # no SerDes signal to score, so drop it from the MEASURED table; it
+            # gets a score once a real capture covers it. (Scoring it from VNA
+            # attenuation alone is the projected path's job, not this one's.)
+            if not eye_areas and not margins:
+                continue
 
             # Attenuation at the link's own Nyquist fundamental (rate/2) -- the
             # same quantity the projected path uses -- NOT the worst-case

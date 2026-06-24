@@ -30,8 +30,11 @@ files:
     required: true
     description: >
       CSV with columns: lane_id (fwd_3g|fwd_6g|rev_187m), channel
-      (forward|reverse), rate_gbps, eye_csv, margin_csv. Exactly one row per
-      lane (3 rows total).
+      (forward|reverse), rate_gbps, eye_csv, margin_csv. Optional columns:
+      margin_iterations (repeat count, default 1) and linked (1|0, default 1 --
+      0 marks a lane the link never established, whose eye/margin files are
+      header-only and which is scored 0 downstream). Exactly one row per lane
+      (3 rows total).
 
   - name: eye_grid_files
     filename_pattern: "eye_*.csv"

@@ -31,6 +31,7 @@ from src.instruments.types import ProgressEvent, SerdesResult, VnaSweepResult
 from src.instruments.vna.driver import VnaConfig
 
 __all__ = [
+    "check_serdes_links",
     "delete_session",
     "read_serdes_link_status",
     "record_resistance_session",
@@ -137,6 +138,71 @@ def read_serdes_link_status(
         return driver.link_status()
     finally:
         driver.close()
+
+
+def check_serdes_links(
+    cable_length_mm: float,
+    simulate: bool | None = None,
+    port: str | None = None,
+    six_gbps_stability_s: float = 5.0,
+) -> dict:
+    """Read link status and probe each forward rate's lock in one driver session.
+
+    Returns ``{"status": <link_status dict | None>, "locks": {lane_id: bool},
+    "error": <str | None>}``. ``status`` is None when the link cannot establish
+    at all (e.g. a dead cable); we still probe each forward rate so the 'Check
+    link' flow can offer to log the no-link result (scored 0 downstream). Unlike
+    ``read_serdes_link_status`` this tolerates a link that never locks -- that is
+    exactly what is being probed -- so a failure to lock yields ``False`` rather
+    than raising.
+
+    ``error`` is set (and status/locks left empty) when the bench itself can't
+    be reached -- e.g. the serial port won't open. This function NEVER raises:
+    it runs on a worker thread (``run.io_bound``), which can swallow a raised
+    exception into a None result, so the failure is returned in-band instead.
+
+    The bench powers on at 3 Gbps (the robust default), so 3 Gbps is checked in
+    place; 6 Gbps is probed by switching up, holding for ``six_gbps_stability_s``
+    seconds to confirm a STABLE lock (not just a momentary one), then switching
+    back to the 3 Gbps default.
+    """
+    from src.instruments.types import FORWARD_3G, FORWARD_6G
+
+    out: dict = {"status": None, "locks": {}, "error": None}
+    driver = None
+    try:
+        kwargs: dict = {"cable_length_mm": cable_length_mm}
+        if port:
+            kwargs["port"] = port
+        driver = get_serdes_driver(simulate=simulate, **kwargs)
+        try:
+            driver.connect()
+            out["status"] = driver.link_status()
+        except Exception:
+            # The link may not establish at all; still probe per-rate below.
+            out["status"] = None
+        for lane in (FORWARD_3G, FORWARD_6G):
+            settle = six_gbps_stability_s if lane is FORWARD_6G else 0.0
+            try:
+                out["locks"][lane.lane_id] = bool(driver.link_locks(lane, settle_s=settle))
+            except Exception:
+                out["locks"][lane.lane_id] = False
+        # Leave the link at the 3 Gbps power-on default after the 6 Gbps test.
+        try:
+            driver.link_locks(FORWARD_3G)
+        except Exception:
+            pass
+    except Exception as e:
+        # Reaching the bench failed (e.g. serial port) -- a real error, distinct
+        # from a cable that simply won't link. Surface it rather than raise.
+        out["error"] = str(e) or e.__class__.__name__
+    finally:
+        if driver is not None:
+            try:
+                driver.close()
+            except Exception:
+                pass
+    return out
 
 
 def run_serdes_capture(

@@ -29,10 +29,11 @@ class TestValidateSerdesSession:
         assert result.is_valid, result.errors
 
     def test_missing_lane(self, bad_serdes_dir: Path):
+        """The bad fixture has the two forward lanes but no reverse channel."""
         result = ValidationResult()
         validate_serdes_session(bad_serdes_dir / "20250403_01", result)
         assert not result.is_valid
-        assert any("missing lane" in e and "rev_187m" in e for e in result.errors)
+        assert any("reverse channel" in e and "rev_187m" in e for e in result.errors)
 
     def test_bad_eye_columns(self, bad_serdes_dir: Path):
         result = ValidationResult()

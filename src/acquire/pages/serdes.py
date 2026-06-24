@@ -7,7 +7,7 @@ import threading
 from nicegui import run, ui
 
 from src.acquire.controllers.sessions import (
-    read_serdes_link_status,
+    check_serdes_links,
     run_serdes_capture,
     save_serdes_session,
 )
@@ -19,6 +19,8 @@ from src.instruments.registry import use_hardware
 from src.instruments.serdes.driver import SerdesConfig
 from src.instruments.serdes.pico_bridge import list_serial_ports
 from src.instruments.types import (
+    FORWARD_3G,
+    FORWARD_6G,
     EyeDiagram,
     MarginSweep,
     ProgressEvent,
@@ -27,6 +29,10 @@ from src.instruments.types import (
     group_margins_by_lane,
 )
 from src.processing.serdes import average_margin_sweeps
+
+# Forward lanes the 'Check link' probe reports per-rate lock for; the reverse
+# control channel is excluded (it is not scored and rides on the forward link).
+PROBED_FORWARD_LANES = (FORWARD_3G, FORWARD_6G)
 
 # Capture-resolution presets for the full sequence. Wall-clock is dominated by
 # the eye grid (eye_bins -> ~bins^2 points at ~0.1 s each over the serial
@@ -45,8 +51,15 @@ def _status_chip(ok: bool, ok_text: str, bad_text: str) -> None:
 
 
 def lane_section_title(lane: SerdesLane) -> str:
-    """Section heading for a lane's results, e.g. 'Forward link -- 6 Gbps'."""
-    return f"{lane.channel.display} link -- {lane.rate.display}"
+    """Section heading for a lane's results, e.g. 'Forward link -- 6 Gbps'.
+
+    For the reverse channel, which is captured once per forward rate, the
+    forward context is appended so the two 187.5 Mbps cards are distinguishable.
+    """
+    title = f"{lane.channel.display} link -- {lane.rate.display}"
+    if lane.forward_rate is not None:
+        title += f" (under {lane.forward_rate.display} forward)"
+    return title
 
 
 def _device_box(role: str, dev: dict) -> None:
@@ -111,6 +124,19 @@ def render_link_status(container, status: dict, cable_label: str = "") -> None:
         else:
             for key, value in status.items():
                 ui.label(f"{key}: {value}").classes("text-sm")
+
+
+def render_link_rates(container, locks: dict) -> None:
+    """Per-forward-rate lock chips: shows whether the link establishes at each
+    rate (3 Gbps, 6 Gbps), so a cable that links at one rate but not the other
+    is visible at check time. Appends to the container (does not clear it)."""
+    with container, ui.card().classes("w-full"):
+        ui.label("Forward link lock by rate").classes("text-sm font-semibold")
+        with ui.row().classes("items-center gap-4"):
+            for lane in PROBED_FORWARD_LANES:
+                with ui.row().classes("items-center gap-1"):
+                    ui.label(f"{lane.rate.display}:").classes("text-sm")
+                    _status_chip(bool(locks.get(lane.lane_id, False)), "locked", "no link")
 
 
 def margin_summary_row(sweep: MarginSweep) -> dict:
@@ -211,9 +237,11 @@ def render_margin_summary(container, result) -> None:
             _summary_table("Link-margin summary", rows, iteration=False)
 
 
-# Margin-step statuses that mean the link dropped lock outright (as opposed to
-# the normal "errors" floor). After these the GMSL2 pair can stay stuck until
-# it is power-cycled, so the GUI flags them and blocks the save.
+# Margin-step statuses where the link dropped lock outright (vs the normal
+# "errors" floor). A margin sweep reaching one of these IS its measured floor --
+# valid data, not a failure -- so a completed capture surfaces it as a note but
+# does NOT block the save. (A genuinely stuck device makes the capture raise,
+# which is handled separately and does prompt a power-cycle + re-check.)
 LOCK_LOSS_STATUSES = frozenset({"lost_lock", "ser_unreachable"})
 
 
@@ -303,6 +331,9 @@ def serdes_page(profile_id: str, condition: str) -> None:
     # (forward 3G, forward 6G, reverse), created on demand as previews arrive.
     results = ui.column().classes("w-full gap-3")
     lane_grids: dict[str, object] = {}
+    # Forward lanes the last link check found not locking; the "Log no-link"
+    # button records these as not-recommended (score 0) without a full capture.
+    nolink_lanes: list[SerdesLane] = []
 
     def show_reset_needed() -> None:
         """Warn that the link dropped lock and the device likely needs a power cycle."""
@@ -347,6 +378,15 @@ def serdes_page(profile_id: str, condition: str) -> None:
                     ui.image(png_source(render_margin(average_margin_sweeps(sweeps)))).classes(
                         "w-full"
                     )
+        # Lanes the link never established: shown as a clear no-link card; they
+        # are recorded and scored 0 downstream rather than dropped.
+        for lane in getattr(result, "no_link_lanes", []):
+            with lane_grid(lane), ui.column().classes("items-center gap-1 p-3"):
+                ui.icon("link_off").classes("text-red-600 text-3xl")
+                ui.label("No link -- scored 0").classes("text-red-700 font-bold")
+                ui.label("The link did not establish at this rate.").classes(
+                    "text-xs text-gray-600"
+                )
 
     # Shared between the worker thread and the UI timer
     shared: dict = {"events": [], "result": None, "running": False, "lock": threading.Lock()}
@@ -368,12 +408,14 @@ def serdes_page(profile_id: str, condition: str) -> None:
             return
         check_button.disable()
         reset_banner.clear()
+        log_nolink_button.disable()
+        nolink_lanes.clear()
         link_panel.clear()
         with link_panel:
             ui.label("Checking link...").classes("text-gray-600")
         try:
-            status = await run.io_bound(
-                read_serdes_link_status, sim_length_mm, STATE.simulate, selected_port()
+            checked = await run.io_bound(
+                check_serdes_links, sim_length_mm, STATE.simulate, selected_port()
             )
         except Exception as e:
             link_panel.clear()
@@ -383,9 +425,37 @@ def serdes_page(profile_id: str, condition: str) -> None:
             return
         finally:
             check_button.enable()
-        render_link_status(link_panel, status, cable_label)
-        # A successful check is the gate for running the full sequence.
-        go_button.enable()
+
+        # check_serdes_links never raises (it runs on a worker thread, which can
+        # swallow exceptions to None); a bench-reach failure comes back as
+        # "error". Surface either as a failed check rather than crashing here.
+        error = checked.get("error") if checked else "no result returned from link check"
+        if error:
+            link_panel.clear()
+            with link_panel:
+                ui.label(f"Link check failed: {error}").classes("text-red-600")
+            ui.notify(f"Link check failed: {error}", type="negative", multi_line=True)
+            return
+
+        status = checked.get("status")
+        locks = checked.get("locks", {})
+        link_panel.clear()
+        if status is not None:
+            render_link_status(link_panel, status, cable_label)
+        render_link_rates(link_panel, locks)
+
+        # Forward rate(s) that did not lock can be logged as no-link (scored 0).
+        nolink_lanes.extend(
+            lane for lane in PROBED_FORWARD_LANES if not locks.get(lane.lane_id, False)
+        )
+        if nolink_lanes:
+            log_nolink_button.enable()
+        # Go is the gate for a full capture: enabled once at least one forward
+        # rate locks. The capture records any non-locking lane as no-link itself.
+        if any(locks.get(lane.lane_id, False) for lane in PROBED_FORWARD_LANES):
+            go_button.enable()
+        else:
+            go_button.disable()
 
     def on_progress(event: ProgressEvent) -> None:
         # Called on the worker thread; the UI timer drains the queue.
@@ -421,6 +491,7 @@ def serdes_page(profile_id: str, condition: str) -> None:
         margin_summary.clear()
         reset_banner.clear()
         save_button.disable()
+        log_nolink_button.disable()
         progress_bar.value = 0.0
         runs = selected_iterations()
         config = SerdesConfig(**RESOLUTION_PRESETS[resolution.value], margin_iterations=runs)
@@ -445,20 +516,21 @@ def serdes_page(profile_id: str, condition: str) -> None:
                 shared["events"].clear()
             render_final_results(result)
             render_margin_summary(margin_summary, result)
+            # The capture completed, so the device is functional and the recorded
+            # eye/margin data is valid -- including a margin sweep that reached its
+            # floor by dropping lock (lost_lock / ser_unreachable is the measured
+            # floor, not a failure). Always saveable; a genuinely stuck device
+            # would have raised instead (handled in the except branch).
+            shared["result"] = result
+            notes: list[str] = []
+            if result.no_link_lanes:
+                lanes_txt = ", ".join(lane.label for lane in result.no_link_lanes)
+                notes.append(f"{lanes_txt} did not link (scored 0)")
             if lock_was_lost(result):
-                # Incomplete/compromised run -- prompt for a reset, block the save.
-                needs_reset = True
-                show_reset_needed()
-                status_label.text = (
-                    "Link lost lock during the sweep -- power-cycle the device and "
-                    "re-check the link. This run was not saved."
-                )
-            else:
-                # Persist every raw margin run (append-only); the per-lane
-                # average shown above is re-derived in processing on read.
-                shared["result"] = result
-                status_label.text = "Capture complete -- review results, then save."
-                save_button.enable()
+                notes.append("a margin sweep hit its lock-loss floor (the measured floor, normal)")
+            suffix = f" -- {'; '.join(notes)}" if notes else ""
+            status_label.text = f"Capture complete{suffix}. Review results, then save."
+            save_button.enable()
         except Exception as e:
             status_label.text = f"Capture failed: {e}"
             ui.notify(f"Capture failed: {e}", type="negative", multi_line=True)
@@ -497,13 +569,54 @@ def serdes_page(profile_id: str, condition: str) -> None:
         ui.notify(f"Saved session {ref.ref}", type="positive")
         ui.navigate.to(f"/profile/{profile_id}")
 
+    def log_no_link() -> None:
+        """Record the forward rate(s) that failed the last link check as no-link.
+
+        Writes a serdes session marking the failed lanes linked=0 (scored 0
+        downstream), so a cable that won't link stays visible on the wiki rather
+        than vanishing -- without running a full ~25-min capture. Lanes that did
+        link are recorded but left uncharacterized until a real capture covers them.
+        """
+        if not require_operator():
+            return
+        if not device.value:
+            ui.notify("Enter the SerDes device", type="warning")
+            return
+        if not nolink_lanes:
+            ui.notify("Run a link check that finds a no-link rate first", type="warning")
+            return
+        try:
+            ref = save_serdes_session(
+                STATE.repo_root,
+                profile_id,
+                condition,
+                SerdesResult(no_link_lanes=list(nolink_lanes)),
+                operator=STATE.operator,
+                notes=notes.value or "",
+                serdes_device=device.value,
+            )
+        except Exception as e:
+            ui.notify(f"Save failed: {e}", type="negative", multi_line=True)
+            return
+        lanes_txt = ", ".join(lane.label for lane in nolink_lanes)
+        ui.notify(f"Logged no-link ({lanes_txt}) -- session {ref.ref}", type="positive")
+        ui.navigate.to(f"/profile/{profile_id}")
+
     with ui.row().classes("gap-2 mt-4"):
         check_button = ui.button("Check link", icon="cable", on_click=check_link).props("outline")
         go_button = ui.button("Go -- run full sequence", icon="play_arrow", on_click=go)
+        log_nolink_button = ui.button("Log no-link", icon="link_off", on_click=log_no_link).props(
+            "outline color=red"
+        )
         save_button = ui.button("Save session", icon="save", on_click=save)
         # Go is gated behind a successful "Check link"; Save behind a clean run.
         go_button.disable()
         go_button.tooltip("Run a link check first")
+        # Enabled when a link check finds a forward rate that won't lock.
+        log_nolink_button.disable()
+        log_nolink_button.tooltip(
+            "Record a rate that won't lock as not-recommended (score 0), no full capture"
+        )
         save_button.disable()
 
     # Per-lane link-margin summary table, pinned at the bottom: one row per run
