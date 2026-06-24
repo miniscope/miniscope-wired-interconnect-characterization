@@ -1,4 +1,0 @@
-lane_id,channel,rate_gbps,eye_csv,margin_csv,margin_iterations
-fwd_3g,forward,3,eye_fwd_3g.csv,margin_fwd_3g.csv,3
-fwd_6g,forward,6,eye_fwd_6g.csv,margin_fwd_6g.csv,3
-rev_187m,reverse,0.1875,eye_rev_187m.csv,margin_rev_187m.csv,3

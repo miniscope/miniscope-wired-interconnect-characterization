@@ -1,0 +1,6 @@
+tx_amp_mv,code,rep,locked,errors,status
+250,25,0,1,0,ok
+240,24,0,1,0,ok
+230,23,0,1,0,ok
+220,22,0,1,0,ok
+210,21,0,0,-1,ser_unreachable
