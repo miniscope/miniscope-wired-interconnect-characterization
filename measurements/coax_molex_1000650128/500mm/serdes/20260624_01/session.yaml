@@ -1,0 +1,12 @@
+schema_version: '1.0'
+session_id: '20260624_01'
+profile_id: coax_molex_1000650128
+condition: 500mm
+measurement_type: serdes
+measurement_type_version: 1
+date: 2026-06-24
+operator: Federico
+notes: ''
+type_fields:
+  serdes_device: GMSL2
+cable_length_mm: 500.0
