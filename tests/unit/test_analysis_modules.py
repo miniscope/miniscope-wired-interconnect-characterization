@@ -251,3 +251,74 @@ class TestQualityTableLinkStates:
         df = _quality_table(consolidated, config)
         # The only lane is dropped (no eye/margin), so no measured row at all.
         assert df.empty
+
+
+class TestMiniscopeQualityNoLink:
+    """The projected-from-VNA path (e.g. the V4's 1.5 Gbps FPD-Link III) must
+    not report a cable as 'works' at a length where it failed to link at every
+    characterized rate -- low attenuation alone cannot confirm a link."""
+
+    def _scope_fpd(self) -> MiniscopeModel:
+        return MiniscopeModel(schema_version="1.0", model_id="v4_like", serdes_rate_gbps=1.5)
+
+    def test_no_link_length_overrides_projection(self, config):
+        import pandas as pd
+
+        from src.analysis.cross import _miniscope_quality_table
+
+        consolidated = {
+            "c": {
+                "serdes_by_length": [
+                    # 170 mm: no link at EITHER characterized rate -> flagged
+                    {"cable_length_mm": 170.0, "rate_gbps": 3.0, "linked": False},
+                    {"cable_length_mm": 170.0, "rate_gbps": 6.0, "linked": False},
+                    # 500 mm: links at 3 G -> projection is allowed here
+                    {"cable_length_mm": 500.0, "rate_gbps": 3.0, "linked": True},
+                ],
+                "vna_by_length": [
+                    {
+                        "cable_length_mm": 170.0,
+                        # low loss -> would otherwise project a high "works" score
+                        "attenuation_db_by_hz": {"500000000": 0.2, "1000000000": 0.4},
+                    },
+                    {
+                        "cable_length_mm": 500.0,
+                        "attenuation_db_by_hz": {"500000000": 1.0, "1000000000": 2.0},
+                    },
+                ],
+            }
+        }
+        df = _miniscope_quality_table(consolidated, pd.DataFrame(), [self._scope_fpd()], config)
+
+        at_170 = df[df["cable_length_mm"] == 170.0].iloc[0]
+        assert at_170["source"] == "no_link"
+        assert at_170["quality_score"] == 0.0
+        assert at_170["zone"] == "not_recommended"
+
+        at_500 = df[df["cable_length_mm"] == 500.0].iloc[0]
+        assert at_500["source"] == "projected_from_vna"
+        assert at_500["quality_score"] > 0
+
+    def test_links_at_some_rate_is_not_flagged(self, config):
+        """A length that links at 3 G but not 6 G still projects normally."""
+        import pandas as pd
+
+        from src.analysis.cross import _miniscope_quality_table
+
+        consolidated = {
+            "c": {
+                "serdes_by_length": [
+                    {"cable_length_mm": 800.0, "rate_gbps": 3.0, "linked": True},
+                    {"cable_length_mm": 800.0, "rate_gbps": 6.0, "linked": False},
+                ],
+                "vna_by_length": [
+                    {
+                        "cable_length_mm": 800.0,
+                        "attenuation_db_by_hz": {"500000000": 1.0, "1000000000": 2.0},
+                    }
+                ],
+            }
+        }
+        df = _miniscope_quality_table(consolidated, pd.DataFrame(), [self._scope_fpd()], config)
+        row = df[df["cable_length_mm"] == 800.0].iloc[0]
+        assert row["source"] == "projected_from_vna"

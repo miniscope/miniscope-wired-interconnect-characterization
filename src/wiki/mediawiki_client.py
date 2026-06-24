@@ -103,3 +103,29 @@ class MediaWikiPublisher(BaseWikiPublisher):
             text = (payload_dir / page["file"]).read_text(encoding="utf-8")
             self._site.pages[page["title"]].save(text, summary=EDIT_SUMMARY)
             logger.info("Saved page %s", page["title"])
+
+        # Re-uploaded plots keep their filename, so the wiki keeps serving the
+        # previously cached thumbnail (the 640px image embedded on the page) and
+        # the page looks unchanged even though the underlying File was overwritten.
+        # Purge the File pages (drops their stale thumbnails) and the content pages
+        # (forcelinkupdate re-renders them) so the new plots actually show up.
+        self._purge(
+            [f"File:{image['wiki_name']}" for image in manifest.get("images", [])]
+            + [page["title"] for page in manifest.get("pages", [])]
+        )
+
+    def _purge(self, titles: list[str]) -> None:
+        """Best-effort cache purge so re-uploaded images become visible.
+
+        A purge failure must never abort an otherwise-successful publish, so
+        every call is wrapped; titles are batched (the API caps a purge at 50
+        titles per call for non-bot accounts).
+        """
+        unique = list(dict.fromkeys(t for t in titles if t))
+        for start in range(0, len(unique), 50):
+            chunk = unique[start : start + 50]
+            try:
+                self._site.api("purge", titles="|".join(chunk), forcelinkupdate="1")
+                logger.info("Purged %d page(s)/file(s)", len(chunk))
+            except Exception as exc:
+                logger.warning("Cache purge failed for %s: %s", chunk, exc)

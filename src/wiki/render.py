@@ -61,6 +61,32 @@ def _image_ref(wiki_name: str, caption: str, width: int = 640) -> str:
     return f"[[File:{wiki_name}|{width}px|thumb|none|{caption}]]"
 
 
+# Shown under the SerDes table whenever some length/rate did not link. It
+# reframes a no-link as a measured result -- and, for short cables, as a
+# minimum-cable-length effect rather than a damaged cable -- so readers do not
+# misread a not-recommended short length as a bad cable.
+_NO_LINK_NOTE = (
+    "'''Why a length may show \"Links? = False\":''' the link did not "
+    "establish reliably at that rate on the bench, so it is scored 0 (not "
+    "recommended) for that rate -- this is a measured outcome, not a missing "
+    "measurement. A no-link at a ''short'' length does not mean the cable is "
+    "damaged: a GMSL2 receiver adapts its equalizer to the cable's loss, and a "
+    "very short, near-lossless cable can fall below the link's minimum "
+    'insertion-loss requirement (the channel is "too clean" for the receiver to '
+    "lock). In that regime a cable can be too short to link even though its "
+    "attenuation looks excellent -- the VNA attenuation for that length is still "
+    "valid and is reported below."
+)
+
+
+def _has_no_link(df: pd.DataFrame) -> bool:
+    """True if any row's 'linked' is falsey (CSV may give bools or strings)."""
+    if "linked" not in df.columns:
+        return False
+    linked = df["linked"].map(lambda v: str(v).strip().lower() in ("true", "1"))
+    return not bool(linked.all())
+
+
 class WikiRenderer:
     """Builds the page set + image manifest from derived/ outputs."""
 
@@ -169,6 +195,13 @@ class WikiRenderer:
             "limit. The dotted line marks the USB 5 V rail for reference -- DAQs "
             "can also be powered from an adjustable supply anywhere in the window.\n"
         )
+        parts.append(
+            "When the minimum exceeds the maximum the window is empty "
+            "(''Feasible? = No''): no single supply can hold the Miniscope above "
+            "dropout at full load and under its input limit at idle at the same "
+            "time, so the cable is too long/resistive for that model's current "
+            "range -- it is not a swapped reading.\n"
+        )
         for plot in sorted(cross_dir.glob("supply_voltage_*.png")):
             scope = plot.stem.replace("supply_voltage_", "")
             wiki_name = self._register_image(plot)
@@ -186,6 +219,7 @@ class WikiRenderer:
                         "cable_length_mm": "Length (mm)",
                         "v_supply_min": "Min supply (V)",
                         "v_supply_max": "Max supply (V)",
+                        "feasible": "Feasible?",
                         "reference_supply_ok": "OK at 5 V (USB)?",
                     },
                 )
@@ -314,6 +348,9 @@ class WikiRenderer:
                     },
                 )
             )
+
+            if _has_no_link(df):
+                parts.append("\n" + _NO_LINK_NOTE)
 
             parts.append("\n=== Eye diagrams ===\n")
             for png in sorted(

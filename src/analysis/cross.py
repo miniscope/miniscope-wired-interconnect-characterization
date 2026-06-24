@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import json
 import logging
+from collections import defaultdict
 from pathlib import Path
 
 import matplotlib
@@ -369,6 +370,33 @@ def _quality_table(consolidated: dict[str, dict], config: AnalysisConfig) -> pd.
     return pd.DataFrame(rows)
 
 
+def _no_link_lengths(
+    consolidated: dict[str, dict], scored_rates: set[float]
+) -> dict[str, set[float]]:
+    """
+    Per profile, the lengths that failed to establish a forward link at EVERY
+    characterized rate they were tested at (no lane locked at any of them).
+
+    A cable that won't link even at the lowest characterized rate has been
+    shown not to make a usable link at that length, so the projected-from-VNA
+    path must not report it as "works": VNA attenuation alone cannot confirm a
+    link, and a very short cable can be too low-loss for the receiver to lock
+    (see _miniscope_quality_table). A length that links at some rate but not a
+    higher one is NOT flagged -- it links, just not as fast.
+    """
+    out: dict[str, set[float]] = defaultdict(set)
+    for profile_id, data in consolidated.items():
+        linked_by_length: dict[float, list[bool]] = defaultdict(list)
+        for r in data.get("serdes_by_length", []):
+            if float(r["rate_gbps"]) not in scored_rates:
+                continue  # the 187.5 Mbps reverse channel never gates this
+            linked_by_length[r["cable_length_mm"]].append(bool(r.get("linked", True)))
+        for length_mm, flags in linked_by_length.items():
+            if flags and not any(flags):
+                out[profile_id].add(length_mm)
+    return out
+
+
 def _miniscope_quality_table(
     consolidated: dict[str, dict],
     quality_df: pd.DataFrame,
@@ -377,7 +405,7 @@ def _miniscope_quality_table(
 ) -> pd.DataFrame:
     """
     Quality-vs-length per miniscope, at THAT miniscope's link rate (ADR 0001
-    steps 2-3). Two co-equal sources, always tagged:
+    steps 2-3). Sources, always tagged:
 
     - "measured": the miniscope's rate has eye/link data (GMSL2 rates) --
       rows come straight from the per-rate quality table.
@@ -385,11 +413,16 @@ def _miniscope_quality_table(
       the score is computed from the cable's VNA attenuation interpolated at
       the link's Nyquist fundamental (rate/2), and only within the measured
       sweep span (never extrapolated).
+    - "no_link": the rate is projected, but the cable failed to link at every
+      characterized rate at this length, so it is reported not_recommended
+      (score 0) instead of an optimistic projection. We cannot claim a link
+      works on attenuation alone when the cable demonstrably would not link.
     """
     rows: list[dict] = []
     measured_rates: set[float] = (
         set(quality_df["rate_gbps"].astype(float)) if not quality_df.empty else set()
     )
+    no_link = _no_link_lengths(consolidated, {float(r) for r in config.serdes_rates_gbps})
 
     for miniscope in miniscopes:
         rate = miniscope.serdes_rate_gbps
@@ -415,7 +448,26 @@ def _miniscope_quality_table(
         # No eye data at this rate: project from VNA attenuation at Nyquist
         target_hz = nyquist_hz(rate)
         for profile_id, data in consolidated.items():
+            no_link_here = no_link.get(profile_id, set())
             for vna_row in data.get("vna_by_length", []):
+                length_mm = vna_row["cable_length_mm"]
+                # Direct no-link evidence overrides the optimistic projection: a
+                # cable that would not link at any characterized rate is reported
+                # not_recommended here too, rather than "works" off low attenuation.
+                if length_mm in no_link_here:
+                    rows.append(
+                        {
+                            "miniscope_model": miniscope.model_id,
+                            "profile_id": profile_id,
+                            "cable_length_mm": length_mm,
+                            "rate_gbps": rate,
+                            "quality_score": 0.0,
+                            "zone": zone(0.0, config),
+                            "source": "no_link",
+                            "attenuation_db": None,
+                        }
+                    )
+                    continue
                 attenuation = attenuation_at_hz(vna_row.get("attenuation_db_by_hz", {}), target_hz)
                 if attenuation is None:
                     continue
@@ -426,7 +478,7 @@ def _miniscope_quality_table(
                     {
                         "miniscope_model": miniscope.model_id,
                         "profile_id": profile_id,
-                        "cable_length_mm": vna_row["cable_length_mm"],
+                        "cable_length_mm": length_mm,
                         "rate_gbps": rate,
                         "quality_score": score_value,
                         "zone": zone(score_value, config),
@@ -452,7 +504,7 @@ def _plot_miniscope_quality(
     fig, ax = plt.subplots(figsize=(8, 5))
     _shade_quality_zones(ax, config)
 
-    projected = bool((scope_df["source"] == "projected_from_vna").any())
+    projected = bool((scope_df["source"] != "measured").any())
     for profile_id, group in scope_df.groupby("profile_id"):
         group = group.sort_values("cable_length_mm")
         ax.plot(
@@ -551,10 +603,16 @@ def _plot_supply_voltage(
                 alpha=0.6,
                 label=f"{profile_id} (max supply)",
             )
+            # Shade the usable window ONLY where it is feasible (floor <= ceiling).
+            # Past the crossover the window is empty; filling there would draw an
+            # inverted band (the "messed up" plot), so mask it out and let the
+            # floor/ceiling lines simply cross to show where it becomes infeasible.
             ax.fill_between(
                 group["cable_length_mm"],
                 group["v_supply_min"],
                 ceiling,
+                where=group["v_supply_min"] <= ceiling,
+                interpolate=True,
                 color=line.get_color(),
                 alpha=0.10,
             )
