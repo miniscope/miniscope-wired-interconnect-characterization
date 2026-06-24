@@ -176,12 +176,17 @@ def _consolidate_serdes(entries: list[tuple[SessionRecord, dict]]) -> list[dict]
     rows: list[dict] = []
     for condition, channel, rate in sorted(by_combo, key=_combo_sort_key):
         combos = by_combo[(condition, channel, rate)]
+        # A (length, channel, rate) counts as linking if ANY session got a lock
+        # there; only an all-no-link history marks it not linked (scored 0). The
+        # metric means below already ignore no-link sessions (null metrics).
         row: dict = {
             "condition": condition,
             "cable_length_mm": length_by_condition[condition],
             "channel": channel,
             "rate_gbps": rate,
             "n_sessions": len(combos),
+            "linked": any(c.get("linked", True) for c in combos),
+            "n_no_link_sessions": sum(1 for c in combos if not c.get("linked", True)),
         }
         for metric in [
             "eye_area_ratio",

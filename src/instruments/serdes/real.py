@@ -164,6 +164,22 @@ class RealSerdesDriver(SerdesDriver):
             "des": decode(R.DES_ADDR),
         }
 
+    def link_locks(self, lane: SerdesLane) -> bool:
+        """Switch to the lane's rate and report whether the link locks.
+
+        Mirrors the relock sequence used at the top of ``sweep_margin`` so a
+        transient post-reset NAK is tolerated; a genuine failure to acquire lock
+        returns False (the no-link signal) rather than raising.
+        """
+        self._ensure_clean_state()
+        if lane.channel is SerdesChannel.FORWARD:
+            self._set_forward_rate(lane.rate)
+            self._ensure_clean_state()
+        try:
+            return self._is_locked(R.DES_ADDR)
+        except OSError:
+            return False
+
     def close(self) -> None:
         for dev in (R.SER_ADDR, R.DES_ADDR):
             try:

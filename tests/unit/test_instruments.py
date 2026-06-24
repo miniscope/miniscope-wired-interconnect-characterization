@@ -101,6 +101,30 @@ class TestSimulatedSerdesDriver:
         # Live-preview partials attached
         assert all(e.partial is not None for e in events)
 
+    def test_link_locks_models_per_rate_failure(self):
+        """Short cables lock at both rates; a long cable fails to lock at 6 Gbps."""
+        short = SimulatedSerdesDriver(cable_length_mm=1000.0)
+        assert short.link_locks(FORWARD_3G) is True
+        assert short.link_locks(FORWARD_6G) is True
+
+        long = SimulatedSerdesDriver(cable_length_mm=2500.0)
+        assert long.link_locks(FORWARD_3G) is True  # 3G stays robust
+        assert long.link_locks(REVERSE_187M) is True  # reverse control channel robust
+        assert long.link_locks(FORWARD_6G) is False  # 6G too lossy to acquire
+
+    def test_run_full_sequence_records_no_link_lane(self):
+        """A lane that won't lock is recorded as no-link, with no eye/margin."""
+        driver = SimulatedSerdesDriver(cable_length_mm=2500.0)
+        events: list[ProgressEvent] = []
+        result = driver.run_full_sequence(config=SerdesConfig(eye_bins=16), progress=events.append)
+
+        assert result.no_link_lanes == [FORWARD_6G]
+        assert {e.lane for e in result.eyes} == {FORWARD_3G, REVERSE_187M}
+        assert all(m.lane is not FORWARD_6G for m in result.margins)
+        # Progress still advances cleanly to 1.0, and the skipped lane is announced.
+        assert events[-1].fraction == pytest.approx(1.0)
+        assert any(e.stage == "nolink:fwd_6g" for e in events)
+
     def test_margin_iterations_repeat_only_the_sweep(self, driver):
         """N margin iterations -> 1 eye + N margins per lane; progress stays sane."""
         events: list[ProgressEvent] = []

@@ -1,11 +1,11 @@
 """
 SerDes driver interface.
 
-Concrete drivers (simulated or real) only implement the four primitives:
-connect, link_status, capture_eye, sweep_margin. The per-lane orchestration,
-progress reporting, and result assembly live once in `run_full_sequence` on
-the ABC, so the acquisition app behaves identically against the simulator and
-the hardware.
+Concrete drivers (simulated or real) only implement the primitives:
+connect, link_status, link_locks, capture_eye, sweep_margin. The per-lane
+orchestration, progress reporting, and result assembly live once in
+`run_full_sequence` on the ABC, so the acquisition app behaves identically
+against the simulator and the hardware.
 """
 
 from __future__ import annotations
@@ -76,6 +76,18 @@ class SerdesDriver(ABC):
         ...
 
     @abstractmethod
+    def link_locks(self, lane: SerdesLane) -> bool:
+        """Whether the link establishes (locks) for this lane.
+
+        For forward lanes the implementation must switch the link to the lane's
+        rate first (a cable may lock at 3 Gbps but not 6 Gbps). Used to detect
+        cables that do not link at a given rate so they are recorded as no-link
+        and scored 0, rather than capturing a garbage eye/margin. Must NOT raise
+        on a failure to lock -- that is the expected signal; return False.
+        """
+        ...
+
+    @abstractmethod
     def close(self) -> None: ...
 
     def run_full_sequence(
@@ -114,6 +126,20 @@ class SerdesDriver(ABC):
                 )
 
         for lane in config.lanes:
+            if not self.link_locks(lane):
+                # Cable doesn't establish a link at this lane's rate: record it
+                # as no-link (scored 0 downstream) and skip its eye + margin,
+                # advancing past this lane's would-be steps so the bar stays sane.
+                result.no_link_lanes.append(lane)
+                step += 1 + iterations
+                emit(
+                    f"No link: {lane.channel.value} @ {lane.rate.label} "
+                    "-- recorded, not measured",
+                    f"nolink:{lane.lane_id}",
+                    None,
+                )
+                continue
+
             eye = self.capture_eye(lane, config)
             result.eyes.append(eye)
             step += 1

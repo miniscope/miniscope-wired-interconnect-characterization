@@ -113,6 +113,35 @@ class TestCrossAnalysis:
         pivot = df.pivot_table(index="cable_length_mm", columns="rate_gbps", values="quality_score")
         assert (pivot[6.0] <= pivot[3.0]).all()
 
+    def test_no_link_lane_scores_zero(self, analyzed_repo: Path):
+        """A cable that never establishes a link at a rate is scored 0."""
+        from datetime import date
+
+        from src.core.session_writer import SessionMeta, write_serdes_session
+        from src.instruments.types import FORWARD_6G, SerdesResult
+        from src.pipeline import process_session
+
+        # Record a no-link session at a new length: the 6 Gbps forward link never
+        # locks. Process it, then re-consolidate and re-run the cross analysis.
+        ref = write_serdes_session(
+            analyzed_repo,
+            "test_cable",
+            2000.0,
+            SerdesResult(no_link_lanes=[FORWARD_6G]),
+            SessionMeta(
+                operator="t", date=date.today(), notes="", type_fields={"serdes_device": "x"}
+            ),
+        )
+        assert process_session(ref.path, analyzed_repo).error is None
+        consolidate_profiles(analyzed_repo)
+        outputs = run_cross_analysis(analyzed_repo)
+
+        df = pd.read_csv(outputs["quality_scores"])
+        no_link = df[(df["cable_length_mm"] == 2000.0) & (df["rate_gbps"] == 6.0)]
+        assert len(no_link) == 1
+        assert no_link.iloc[0]["quality_score"] == 0.0
+        assert no_link.iloc[0]["zone"] == "not_recommended"
+
     def test_commutator_impact(self, analyzed_repo: Path):
         outputs = run_cross_analysis(analyzed_repo)
         assert "commutator_impact" in outputs

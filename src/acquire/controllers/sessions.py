@@ -31,6 +31,7 @@ from src.instruments.types import ProgressEvent, SerdesResult, VnaSweepResult
 from src.instruments.vna.driver import VnaConfig
 
 __all__ = [
+    "check_serdes_links",
     "delete_session",
     "read_serdes_link_status",
     "record_resistance_session",
@@ -137,6 +138,44 @@ def read_serdes_link_status(
         return driver.link_status()
     finally:
         driver.close()
+
+
+def check_serdes_links(
+    cable_length_mm: float,
+    simulate: bool | None = None,
+    port: str | None = None,
+) -> dict:
+    """Read link status and probe each forward rate's lock in one driver session.
+
+    Returns ``{"status": <link_status dict | None>, "locks": {lane_id: bool}}``.
+    ``status`` is None when the link cannot establish at all (e.g. a dead cable);
+    we still probe each forward rate so the 'Check link' flow can offer to log
+    the no-link result (scored 0 downstream). Unlike ``read_serdes_link_status``
+    this tolerates a link that never locks -- that is exactly what is being
+    probed -- so a failure to lock yields ``False`` rather than raising.
+    """
+    from src.instruments.types import FORWARD_3G, FORWARD_6G
+
+    kwargs: dict = {"cable_length_mm": cable_length_mm}
+    if port:
+        kwargs["port"] = port
+    driver = get_serdes_driver(simulate=simulate, **kwargs)
+    out: dict = {"status": None, "locks": {}}
+    try:
+        try:
+            driver.connect()
+            out["status"] = driver.link_status()
+        except Exception:
+            # The link may not establish at all; still probe per-rate below.
+            out["status"] = None
+        for lane in (FORWARD_3G, FORWARD_6G):
+            try:
+                out["locks"][lane.lane_id] = bool(driver.link_locks(lane))
+            except Exception:
+                out["locks"][lane.lane_id] = False
+    finally:
+        driver.close()
+    return out
 
 
 def run_serdes_capture(

@@ -20,6 +20,7 @@ from src.acquire.controllers.profiles import (
 )
 from src.acquire.controllers.protocols import load_protocol_markdown
 from src.acquire.controllers.sessions import (
+    check_serdes_links,
     read_serdes_link_status,
     record_resistance_session,
     run_serdes_capture,
@@ -310,6 +311,17 @@ class TestSessionControllers:
         assert status["connected"] is True
         assert status["simulated"] is True
         assert "ser" not in status
+
+    def test_check_serdes_links_reports_per_rate_lock(self):
+        """check_serdes_links returns link status + per-forward-rate lock; a long
+        cable shows 6 Gbps not locking (the no-link signal)."""
+        short = check_serdes_links(1000.0, simulate=True)
+        assert short["status"] is not None
+        assert short["locks"] == {"fwd_3g": True, "fwd_6g": True}
+
+        long = check_serdes_links(2500.0, simulate=True)
+        assert long["locks"]["fwd_3g"] is True
+        assert long["locks"]["fwd_6g"] is False
 
     def test_serdes_capture_honors_resolution_config(self):
         """A custom SerdesConfig (resolution preset) flows through to the capture."""

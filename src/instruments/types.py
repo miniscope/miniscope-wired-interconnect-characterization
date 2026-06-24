@@ -142,10 +142,17 @@ class MarginSweep:
 class SerdesResult:
     """Complete SerDes characterization: one eye per lane + one margin sweep
     per (lane, iteration). A repeated margin sweep appends several sweeps for
-    the same lane to ``margins`` (see ``group_margins_by_lane``)."""
+    the same lane to ``margins`` (see ``group_margins_by_lane``).
+
+    ``no_link_lanes`` lists lanes the link could not establish at all (no lock),
+    so they carry no eye or margin. Recording them keeps a non-linking cable
+    visible -- it is scored 0 (not_recommended) downstream rather than silently
+    missing from the results.
+    """
 
     eyes: list[EyeDiagram] = field(default_factory=list)
     margins: list[MarginSweep] = field(default_factory=list)
+    no_link_lanes: list[SerdesLane] = field(default_factory=list)
 
 
 def group_margins_by_lane(
