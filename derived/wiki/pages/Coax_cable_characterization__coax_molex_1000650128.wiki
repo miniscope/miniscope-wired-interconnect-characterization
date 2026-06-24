@@ -285,6 +285,8 @@ Measured round-trip resistivity: '''4.4952 ohm/m''' (single_length_ratio, n=1 le
 | 1
 |}
 
+'''Why a length may show "Links? = False":''' the link did not establish reliably at that rate on the bench, so it is scored 0 (not recommended) for that rate -- this is a measured outcome, not a missing measurement. A no-link at a ''short'' length does not mean the cable is damaged: a GMSL2 receiver adapts its equalizer to the cable's loss, and a very short, near-lossless cable can fall below the link's minimum insertion-loss requirement (the channel is "too clean" for the receiver to lock). In that regime a cable can be too short to link even though its attenuation looks excellent -- the VNA attenuation for that length is still valid and is reported below.
+
 === Eye diagrams ===
 
 [[File:CoaxCableChar_sessions_coax_molex_1000650128_1025mm_serdes_20260624_01_eye_fwd_3g.png|420px|thumb|none|eye_fwd_3g (coax_molex_1000650128/1025mm/serdes/20260624_01)]]

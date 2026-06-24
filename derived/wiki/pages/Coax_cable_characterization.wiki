@@ -100,9 +100,9 @@ Each Miniscope runs its link at one rate, so these curves show cable quality at 
 | coax_molex_1000650128
 | 170
 | 1.5
-| 0.96967
-| works
-| projected_from_vna
+| 0
+| not_recommended
+| no_link
 |-
 | miniscope_v4
 | coax_molex_1000650128
@@ -141,6 +141,8 @@ Each Miniscope runs its link at one rate, so these curves show cable quality at 
 
 Thin coax drops voltage, so each cable and length has an allowable supply window: the minimum keeps the Miniscope above its regulator dropout at full load; the maximum stays under the regulator's input limit. The dotted line marks the USB 5 V rail for reference -- DAQs can also be powered from an adjustable supply anywhere in the window.
 
+When the minimum exceeds the maximum the window is empty (''Feasible? = No''): no single supply can hold the Miniscope above dropout at full load and under its input limit at idle at the same time, so the cable is too long/resistive for that model's current range -- it is not a swapped reading.
+
 [[File:CoaxCableChar_cross_supply_voltage_miniscope_v4.png|640px|thumb|none|Allowable supply voltage (miniscope_v4)]]
 {| class="wikitable"
 |-
@@ -149,6 +151,7 @@ Thin coax drops voltage, so each cable and length has an allowable supply window
 ! Length (mm)
 ! Min supply (V)
 ! Max supply (V)
+! Feasible?
 ! OK at 5 V (USB)?
 |-
 | miniscope_v4
@@ -157,12 +160,14 @@ Thin coax drops voltage, so each cable and length has an allowable supply window
 | 3.529
 | 5.515
 | True
+| True
 |-
 | miniscope_v4
 | coax_molex_1000650128
 | 500
 | 3.974
 | 5.545
+| True
 | True
 |-
 | miniscope_v4
@@ -171,12 +176,14 @@ Thin coax drops voltage, so each cable and length has an allowable supply window
 | 4.682
 | 5.592
 | True
+| True
 |-
 | miniscope_v4
 | coax_molex_1000650128
 | 1500
 | 5.323
 | 5.635
+| True
 | False
 |-
 | miniscope_v4
@@ -184,6 +191,7 @@ Thin coax drops voltage, so each cable and length has an allowable supply window
 | 2400
 | 6.537
 | 5.716
+| False
 | False
 |}
 
