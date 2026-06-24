@@ -103,6 +103,21 @@ class SerdesDriver(ABC):
     @abstractmethod
     def close(self) -> None: ...
 
+    @staticmethod
+    def _margin_progress(lane: SerdesLane, i: int, iterations: int) -> tuple[str, str]:
+        """(message, stage) for a just-completed margin sweep, numbering repeats.
+
+        Shared by ``run_full_sequence`` and ``sweep_margins_only`` so a repeated
+        sweep gets the same per-run stage tag (``margin:<lane>#<n>``) and label
+        regardless of which entry point ran it.
+        """
+        run_label = f" (run {i + 1}/{iterations})" if iterations > 1 else ""
+        stage = f"margin:{lane.lane_id}" + (f"#{i + 1}" if iterations > 1 else "")
+        message = (
+            f"Completed link-margin sweep{run_label}: " f"{lane.channel.value} @ {lane.rate.label}"
+        )
+        return message, stage
+
     def run_full_sequence(
         self,
         config: SerdesConfig | None = None,
@@ -170,13 +185,67 @@ class SerdesDriver(ABC):
                 margin = self.sweep_margin(lane, config)
                 result.margins.append(margin)
                 step += 1
-                run_label = f" (run {i + 1}/{iterations})" if iterations > 1 else ""
-                stage = f"margin:{lane.lane_id}" + (f"#{i + 1}" if iterations > 1 else "")
-                emit(
-                    f"Completed link-margin sweep{run_label}: "
-                    f"{lane.channel.value} @ {lane.rate.label}",
-                    stage,
-                    margin,
-                )
+                emit(*self._margin_progress(lane, i, iterations), margin)
 
         return result
+
+    def sweep_margins_only(
+        self,
+        config: SerdesConfig | None = None,
+        progress: ProgressCallback | None = None,
+    ) -> list[MarginSweep]:
+        """
+        Run ``config.margin_iterations`` margin sweeps per lane, skipping the eye.
+
+        Used to deepen the link-margin statistics of a capture whose eye has
+        already been taken: the eye grid dominates wall-clock, so re-running just
+        the margin lets the operator add more sweeps without paying for the eye
+        again. Returns the new sweeps lane-major (like ``run_full_sequence``); the
+        caller appends them to the existing ``SerdesResult.margins`` and the
+        acquisition layer re-derives the per-lane average across all of them.
+
+        Emits the same per-step ProgressEvents as the margin portion of
+        ``run_full_sequence``, so the GUI previews repeats identically. Lanes that
+        no longer establish a link are skipped (same stability-dwell gate as the
+        full capture), so a no-link lane simply contributes no new sweeps.
+        """
+        if config is None:
+            config = SerdesConfig()
+
+        iterations = max(1, config.margin_iterations)
+        margins: list[MarginSweep] = []
+        total_steps = len(config.lanes) * iterations
+        step = 0
+
+        for lane in config.lanes:
+            if not self.link_locks(lane, settle_s=config.link_lock_settle_s):
+                # No link at this lane's rate -> add nothing for it (the caller's
+                # existing no-link record stands), consistent with run_full_sequence.
+                step += iterations
+                if progress is not None:
+                    progress(
+                        ProgressEvent(
+                            fraction=step / total_steps if total_steps else 1.0,
+                            message=f"No link: {lane.channel.value} @ {lane.rate.label} -- skipped",
+                            stage=f"nolink:{lane.lane_id}",
+                            partial=None,
+                        )
+                    )
+                continue
+
+            for i in range(iterations):
+                margin = self.sweep_margin(lane, config)
+                margins.append(margin)
+                step += 1
+                if progress is not None:
+                    message, stage = self._margin_progress(lane, i, iterations)
+                    progress(
+                        ProgressEvent(
+                            fraction=step / total_steps if total_steps else 1.0,
+                            message=message,
+                            stage=stage,
+                            partial=margin,
+                        )
+                    )
+
+        return margins

@@ -12,6 +12,7 @@ from src.instruments import (
     REVERSE_3G,
     REVERSE_6G,
     REVERSE_187M,
+    MarginSweep,
     ProgressEvent,
     SerdesRate,
 )
@@ -188,6 +189,39 @@ class TestSimulatedSerdesDriver:
         margin_stages = [e.stage for e in events if e.stage.startswith("margin:")]
         assert f"margin:{FORWARD_6G.lane_id}#1" in margin_stages
         assert f"margin:{FORWARD_6G.lane_id}#3" in margin_stages
+
+    def test_sweep_margins_only_skips_the_eye(self, driver):
+        """Margins-only: N sweeps per lane, no eye, progress ends at 1.0."""
+        events: list[ProgressEvent] = []
+        margins = driver.sweep_margins_only(
+            config=SerdesConfig(margin_iterations=2), progress=events.append
+        )
+
+        # 2 sweeps per lane, lane-major; only MarginSweeps come back.
+        assert len(margins) == len(DEFAULT_LANES) * 2
+        for lane in DEFAULT_LANES:
+            assert sum(m.lane == lane for m in margins) == 2
+
+        # One event per sweep (no eye steps), monotone, ending at 1.0.
+        assert len(events) == len(DEFAULT_LANES) * 2
+        fractions = [e.fraction for e in events]
+        assert fractions == sorted(fractions)
+        assert fractions[-1] == pytest.approx(1.0)
+        assert all(e.stage.startswith("margin:") for e in events)
+        assert all(isinstance(e.partial, MarginSweep) for e in events)
+
+    def test_repeat_margins_extend_a_prior_result(self, driver):
+        """Appending margins-only sweeps to a capture keeps its single eye."""
+        result = driver.run_full_sequence(config=SerdesConfig(eye_bins=16))
+        assert len(result.eyes) == len(DEFAULT_LANES)
+        assert len(result.margins) == len(DEFAULT_LANES)
+
+        result.margins.extend(driver.sweep_margins_only(config=SerdesConfig(margin_iterations=2)))
+
+        # Eye count unchanged; each lane now has 1 + 2 = 3 margin sweeps.
+        assert len(result.eyes) == len(DEFAULT_LANES)
+        for lane in DEFAULT_LANES:
+            assert sum(m.lane == lane for m in result.margins) == 3
 
 
 class TestSerdesDisplayLabels:

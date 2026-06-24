@@ -27,7 +27,7 @@ from src.instruments.balance.driver import validate_reading as validate_mass_rea
 from src.instruments.lcr.driver import ResistanceReading, validate_reading
 from src.instruments.registry import get_serdes_driver, get_vna_driver
 from src.instruments.serdes.driver import SerdesConfig
-from src.instruments.types import ProgressEvent, SerdesResult, VnaSweepResult
+from src.instruments.types import MarginSweep, ProgressEvent, SerdesResult, VnaSweepResult
 from src.instruments.vna.driver import VnaConfig
 
 __all__ = [
@@ -37,6 +37,7 @@ __all__ = [
     "record_resistance_session",
     "record_mass_session",
     "run_serdes_capture",
+    "run_serdes_margins",
     "run_vna_capture",
     "save_serdes_session",
     "save_vna_session",
@@ -226,6 +227,31 @@ def run_serdes_capture(
     try:
         driver.connect()
         return driver.run_full_sequence(config=config, progress=progress)
+    finally:
+        driver.close()
+
+
+def run_serdes_margins(
+    cable_length_mm: float,
+    progress: Callable[[ProgressEvent], None] | None = None,
+    simulate: bool | None = None,
+    port: str | None = None,
+    config: SerdesConfig | None = None,
+) -> list[MarginSweep]:
+    """Run only the link-margin sweeps -- no eye capture (blocking).
+
+    Used to add more margin runs to an existing capture whose eye is kept:
+    returns ``config.margin_iterations`` sweeps per lane, which the caller
+    appends to the prior result's margins. `port`/`config` behave exactly as
+    in `run_serdes_capture`.
+    """
+    kwargs: dict = {"cable_length_mm": cable_length_mm}
+    if port:
+        kwargs["port"] = port
+    driver = get_serdes_driver(simulate=simulate, **kwargs)
+    try:
+        driver.connect()
+        return driver.sweep_margins_only(config=config, progress=progress)
     finally:
         driver.close()
 
