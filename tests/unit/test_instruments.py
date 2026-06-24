@@ -134,6 +134,38 @@ class TestSimulatedSerdesDriver:
         assert any(e.stage == "nolink:fwd_6g" for e in events)
         assert any(e.stage == "nolink:rev_187m_fwd6g" for e in events)
 
+    def test_capture_gate_applies_stability_dwell(self):
+        """A lane that only locks momentarily is recorded no-link, not measured.
+
+        Regression for the 2 m cable: 6 Gbps passed an instant lock check, so the
+        capture ran its eye/margin (and the reverse-under-6G) on a link that did
+        not actually hold. The capture gate must use the stability dwell.
+        """
+
+        class MomentaryLock6G(SimulatedSerdesDriver):
+            """6 Gbps 'locks' only on an instant check (settle_s == 0); any dwell
+            reveals it does not hold."""
+
+            def link_locks(self, lane, settle_s=0.0):
+                if lane.rate is SerdesRate.GBPS_6 or lane.forward_rate is SerdesRate.GBPS_6:
+                    return settle_s == 0.0
+                return True
+
+        driver = MomentaryLock6G(cable_length_mm=1000.0)
+        driver.connect()
+
+        # With the dwell, the unstable 6 Gbps lanes are caught and skipped.
+        result = driver.run_full_sequence(config=SerdesConfig(eye_bins=16, link_lock_settle_s=5.0))
+        assert set(result.no_link_lanes) == {FORWARD_6G, REVERSE_6G}
+        assert all(e.lane not in (FORWARD_6G, REVERSE_6G) for e in result.eyes)
+        assert all(m.lane not in (FORWARD_6G, REVERSE_6G) for m in result.margins)
+
+        # Without a dwell the momentary lock slips through -- the original bug.
+        transient = driver.run_full_sequence(
+            config=SerdesConfig(eye_bins=16, link_lock_settle_s=0.0)
+        )
+        assert FORWARD_6G not in transient.no_link_lanes
+
     def test_margin_iterations_repeat_only_the_sweep(self, driver):
         """N margin iterations -> 1 eye + N margins per lane; progress stays sane."""
         events: list[ProgressEvent] = []

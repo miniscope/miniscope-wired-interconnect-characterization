@@ -47,6 +47,13 @@ class SerdesConfig:
     margin_iterations: int = 1
     margin_continue_on_error: bool = False  # keep sweeping past first error
 
+    # Per-lane link-lock stability dwell (s) for the capture gate: before
+    # measuring a lane, the link must HOLD lock for this long, else the lane is
+    # recorded as no-link and skipped. Mirrors the 'Check link' probe -- without
+    # it, a marginal high rate (e.g. 6 Gbps on a long cable) that locks
+    # momentarily then drops would slip through and get a garbage eye/margin.
+    link_lock_settle_s: float = 5.0
+
 
 class SerdesDriver(ABC):
     """Abstract GMSL2 SerDes characterization driver."""
@@ -132,7 +139,11 @@ class SerdesDriver(ABC):
                 )
 
         for lane in config.lanes:
-            if not self.link_locks(lane):
+            # Gate with a stability dwell (same as 'Check link'): a lane that
+            # only locks momentarily must NOT be measured -- it's recorded as
+            # no-link instead. settle_s=0 (the default) sees a transient lock and
+            # would wrongly proceed, which is the bug this avoids.
+            if not self.link_locks(lane, settle_s=config.link_lock_settle_s):
                 # Cable doesn't establish a link at this lane's rate: record it
                 # as no-link (scored 0 downstream) and skip its eye + margin,
                 # advancing past this lane's would-be steps so the bar stays sane.
