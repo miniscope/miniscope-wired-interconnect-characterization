@@ -167,6 +167,32 @@ class TestSimulatedSerdesDriver:
         )
         assert FORWARD_6G not in transient.no_link_lanes
 
+    def test_capture_trusts_skip_lanes_over_reprobe(self):
+        """With skip_lanes from a link check, the capture records exactly those
+        as no-link and measures the rest -- without re-probing per lane.
+
+        Uses a SHORT cable (where link_locks would say every lane links) but
+        passes the 6 Gbps lanes as skip_lanes: they must still be skipped,
+        proving the capture trusts the check instead of re-probing.
+        """
+        driver = SimulatedSerdesDriver(cable_length_mm=1000.0)  # short: all would link
+        driver.connect()
+        result = driver.run_full_sequence(
+            config=SerdesConfig(eye_bins=16, skip_lanes=(FORWARD_6G, REVERSE_6G))
+        )
+        assert set(result.no_link_lanes) == {FORWARD_6G, REVERSE_6G}
+        assert {e.lane for e in result.eyes} == {FORWARD_3G, REVERSE_3G}
+
+    def test_empty_skip_lanes_measures_all_without_reprobe(self):
+        """skip_lanes=() means 'the check found everything links' -- measure all
+        lanes, with NO link_locks re-probe (even on a long cable where the live
+        probe would skip 6 Gbps)."""
+        driver = SimulatedSerdesDriver(cable_length_mm=2500.0)  # long: probe would skip 6G
+        driver.connect()
+        result = driver.run_full_sequence(config=SerdesConfig(eye_bins=16, skip_lanes=()))
+        assert result.no_link_lanes == []
+        assert len(result.eyes) == 4
+
     def test_margin_iterations_repeat_only_the_sweep(self, driver):
         """N margin iterations -> 1 eye + N margins per lane; progress stays sane."""
         events: list[ProgressEvent] = []
@@ -665,6 +691,43 @@ class TestRealSerdesDemo:
         driver.connect()
         assert driver.link_locks(FORWARD_3G) is True  # genuinely at 3 Gbps
         assert driver.link_locks(FORWARD_6G) is False  # locked, but at 3 Gbps not 6 Gbps
+        driver.close()
+
+    def test_link_locks_rejects_locked_but_erroring_link(self):
+        """Locked at the rate is NOT enough -- a link that accrues decode errors
+        during the reliability dwell is unusable and must be rejected.
+
+        Regression for the 2 m cable: 6 Gbps locked, but the margin sweep errored
+        right at the top (410 mV). The dwell now checks the decode-error counter,
+        not just the lock.
+        """
+        from src.instruments.serdes import registers as R
+        from src.instruments.serdes.demo_bridge import DemoBridge
+        from src.instruments.serdes.real import RealSerdesDriver
+
+        class ErroringLink:
+            """DemoBridge whose deserializer reports nonzero decode errors."""
+
+            def __init__(self) -> None:
+                self._inner = DemoBridge()
+
+            def read(self, dev: int, reg: int, length: int = 1) -> bytes:
+                if reg == R.REG_CNT0 and dev == R.DES_ADDR:
+                    return bytes([42])  # locked, but erroring -> not usable
+                return self._inner.read(dev, reg, length)
+
+            def write(self, dev: int, reg: int, data: bytes) -> None:
+                self._inner.write(dev, reg, data)
+
+            def close(self) -> None:
+                self._inner.close()
+
+        driver = RealSerdesDriver(transport=ErroringLink(), demo=True)
+        driver.connect()
+        # Locked at 6 Gbps, but decode errors during the dwell -> rejected.
+        assert driver.link_locks(FORWARD_6G, settle_s=5.0) is False
+        # With no reliability dwell (settle_s=0), only the lock is checked.
+        assert driver.link_locks(FORWARD_6G, settle_s=0.0) is True
         driver.close()
 
     def test_full_sequence_recovers_from_post_reset_nak(self):

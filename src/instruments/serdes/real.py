@@ -171,16 +171,19 @@ class RealSerdesDriver(SerdesDriver):
         transient post-reset NAK is tolerated; a genuine failure to acquire lock
         returns False (the no-link signal) rather than raising.
 
-        ``settle_s`` adds a stability dwell: after the link locks, hold the rate
-        for that long and require it to STILL be locked and error-free. A
-        marginal high-rate link can acquire lock momentarily and then drop or
-        start erroring, so the 6 Gbps probe uses this to avoid calling a flaky
-        link good.
+        ``settle_s`` runs a RELIABILITY dwell -- the real test of whether a rate
+        is usable, not just whether it momentarily locks. After the link locks,
+        the decode-error counter is cleared, the rate is held for ``settle_s``,
+        and the rate is accepted only if it accrued ZERO decode errors AND is
+        still locked at the requested rate. This is what catches a marginal
+        6 Gbps link that LOCKS but dies under traffic (the bench symptom: a margin
+        sweep that errors right at the top, e.g. 410 mV). A bare lock check, or
+        even a lock-held check, would wrongly pass it.
 
-        Crucially this confirms the link is locked AT THE REQUESTED RATE, not
-        merely "locked": when a high rate fails, the recovery path can bring the
-        link back up by reverting to the strap default (3 Gbps), and a bare lock
-        check would then wrongly pass a 6 Gbps request.
+        Confirming the lock is AT THE REQUESTED RATE also matters: when a high
+        rate fails, the recovery path can bring the link back up by reverting to
+        the strap default (3 Gbps), and a rate-blind lock check would then wrongly
+        pass a 6 Gbps request.
         """
         self._ensure_clean_state()
         # Forward lanes select their own rate; a reverse lane rides on its
@@ -193,8 +196,13 @@ class RealSerdesDriver(SerdesDriver):
             if not self._locked_at(forward_rate):
                 return False
             if settle_s > 0:
+                # Reliability dwell: locked != usable. Clear the decode-error
+                # counter, hold the rate, then demand it stayed error-free AND
+                # locked at the rate.
+                self._bus.read(R.DES_ADDR, R.REG_CNT0)  # read clears the counter
                 self._sleep(settle_s)
-                return self._locked_at(forward_rate)
+                errors = self._bus.read(R.DES_ADDR, R.REG_CNT0)
+                return errors == 0 and self._locked_at(forward_rate)
             return True
         except OSError:
             return False

@@ -30,8 +30,8 @@ ProgressCallback = Callable[[ProgressEvent], None]
 class SerdesConfig:
     """Capture parameters for a full SerDes characterization sequence."""
 
-    # Which lanes to characterize (channel + rate pairs). Defaults to the three
-    # real lanes: forward @ 3G, forward @ 6G, reverse @ 187.5M.
+    # Which lanes to characterize. Defaults to the four real lanes: forward
+    # @ 3G, forward @ 6G, and the 187.5M reverse channel under each forward rate.
     lanes: tuple[SerdesLane, ...] = field(default_factory=lambda: DEFAULT_LANES)
 
     # Eye monitor (EOM) grid.
@@ -47,12 +47,20 @@ class SerdesConfig:
     margin_iterations: int = 1
     margin_continue_on_error: bool = False  # keep sweeping past first error
 
-    # Per-lane link-lock stability dwell (s) for the capture gate: before
-    # measuring a lane, the link must HOLD lock for this long, else the lane is
-    # recorded as no-link and skipped. Mirrors the 'Check link' probe -- without
-    # it, a marginal high rate (e.g. 6 Gbps on a long cable) that locks
-    # momentarily then drops would slip through and get a garbage eye/margin.
+    # Per-lane link-lock stability dwell (s), used ONLY when skip_lanes is None
+    # (no prior link check): before measuring a lane the link must HOLD lock this
+    # long, else the lane is recorded no-link and skipped.
     link_lock_settle_s: float = 5.0
+
+    # Lanes the caller has already determined do NOT link (e.g. from the "Check
+    # link" probe, which tests each forward rate with the stability dwell). When
+    # provided, run_full_sequence / sweep_margins_only TRUST it: they record
+    # these lanes as no-link and measure the rest WITHOUT re-probing per lane.
+    # A capture's per-lane re-probe is unreliable on a marginal high rate (it can
+    # momentarily lock), so honoring the up-front check is deterministic. None
+    # (the default) falls back to gating each lane via link_locks -- used by
+    # tests/scripts that run a capture with no prior check.
+    skip_lanes: tuple[SerdesLane, ...] | None = None
 
 
 class SerdesDriver(ABC):
@@ -84,19 +92,19 @@ class SerdesDriver(ABC):
 
     @abstractmethod
     def link_locks(self, lane: SerdesLane, settle_s: float = 0.0) -> bool:
-        """Whether the link establishes (locks) for this lane.
+        """Whether the link is USABLE at this lane's rate (not merely locked).
 
         For forward lanes the implementation must switch the link to the lane's
         rate first (a cable may lock at 3 Gbps but not 6 Gbps). Used to detect
-        cables that do not link at a given rate so they are recorded as no-link
-        and scored 0, rather than capturing a garbage eye/margin. Must NOT raise
-        on a failure to lock -- that is the expected signal; return False.
+        rates a cable can't carry so they are recorded as no-link and scored 0,
+        rather than capturing a garbage eye/margin. Must NOT raise on a failure
+        -- that is the expected signal; return False.
 
-        ``settle_s`` adds a stability dwell: after the link locks, hold the rate
-        for that long and require it to still be locked and error-free. A
-        marginal high-rate link can acquire lock momentarily, then drop or start
-        erroring, so a non-zero dwell avoids calling a flaky link good. 0 checks
-        immediately (the default, used by the capture path).
+        ``settle_s`` runs a reliability dwell: after the link locks, hold the
+        rate that long and accept it only if it stayed locked at the rate AND
+        accrued zero decode errors. "Locked" alone is not enough -- a marginal
+        high rate can lock yet error immediately under traffic. 0 checks the lock
+        immediately with no reliability dwell.
         """
         ...
 
@@ -117,6 +125,19 @@ class SerdesDriver(ABC):
             f"Completed link-margin sweep{run_label}: " f"{lane.channel.value} @ {lane.rate.label}"
         )
         return message, stage
+
+    def _lane_is_no_link(self, lane: SerdesLane, config: SerdesConfig) -> bool:
+        """Whether to record a lane as no-link instead of measuring it.
+
+        Trusts ``config.skip_lanes`` when the caller supplied a link-check result
+        (deterministic -- the up-front check tested each forward rate with the
+        stability dwell). Otherwise gates the lane live via ``link_locks``; that
+        per-lane re-probe is unreliable on a marginal high rate, so it is the
+        fallback for callers (tests/scripts) that ran no prior check.
+        """
+        if config.skip_lanes is not None:
+            return lane in config.skip_lanes
+        return not self.link_locks(lane, settle_s=config.link_lock_settle_s)
 
     def run_full_sequence(
         self,
@@ -154,11 +175,7 @@ class SerdesDriver(ABC):
                 )
 
         for lane in config.lanes:
-            # Gate with a stability dwell (same as 'Check link'): a lane that
-            # only locks momentarily must NOT be measured -- it's recorded as
-            # no-link instead. settle_s=0 (the default) sees a transient lock and
-            # would wrongly proceed, which is the bug this avoids.
-            if not self.link_locks(lane, settle_s=config.link_lock_settle_s):
+            if self._lane_is_no_link(lane, config):
                 # Cable doesn't establish a link at this lane's rate: record it
                 # as no-link (scored 0 downstream) and skip its eye + margin,
                 # advancing past this lane's would-be steps so the bar stays sane.
@@ -218,7 +235,7 @@ class SerdesDriver(ABC):
         step = 0
 
         for lane in config.lanes:
-            if not self.link_locks(lane, settle_s=config.link_lock_settle_s):
+            if self._lane_is_no_link(lane, config):
                 # No link at this lane's rate -> add nothing for it (the caller's
                 # existing no-link record stands), consistent with run_full_sequence.
                 step += iterations
