@@ -87,6 +87,19 @@ class DemoBridge:
     def _write_one(self, addr: int, reg: int, val: int) -> None:
         self._regs[(addr, reg)] = val
 
+        # A reset (CTRL0 RESET_ALL [7] / RESET_ONESHOT [5]) re-trains the link,
+        # which re-runs amplitude adaptation -- model that as restoring the high,
+        # clean auto amplitude, dropping any manual margin override. Without this
+        # a margin sweep's leftover low amplitude would make a later reliability
+        # probe see errors on a link that is actually fine.
+        if reg == R.REG_CTRL0 and (val & 0x80 or val & 0x20):
+            self._ser_tx_mv = 500.0
+            self._des_tx_mv = 500.0
+            # RESET_ALL [7] / RESET_ONESHOT [5] are self-clearing on real silicon;
+            # clear them so a later set_bits actually re-issues the reset (else the
+            # bit reads as still set and the masked write is skipped).
+            self._regs[(addr, reg)] = val & ~0xA0
+
         # Manual TX amplitude codes -> modeled millivolts.
         if reg == R.REG_SER_RLMS95 and addr == SER7:  # Algorithm #1 (3G forward)
             self._ser_tx_mv = (val & 0x3F) * 10.0

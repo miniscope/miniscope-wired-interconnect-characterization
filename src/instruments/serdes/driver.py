@@ -92,19 +92,19 @@ class SerdesDriver(ABC):
 
     @abstractmethod
     def link_locks(self, lane: SerdesLane, settle_s: float = 0.0) -> bool:
-        """Whether the link establishes (locks) for this lane.
+        """Whether the link is USABLE at this lane's rate (not merely locked).
 
         For forward lanes the implementation must switch the link to the lane's
         rate first (a cable may lock at 3 Gbps but not 6 Gbps). Used to detect
-        cables that do not link at a given rate so they are recorded as no-link
-        and scored 0, rather than capturing a garbage eye/margin. Must NOT raise
-        on a failure to lock -- that is the expected signal; return False.
+        rates a cable can't carry so they are recorded as no-link and scored 0,
+        rather than capturing a garbage eye/margin. Must NOT raise on a failure
+        -- that is the expected signal; return False.
 
-        ``settle_s`` adds a stability dwell: after the link locks, hold the rate
-        for that long and require it to still be locked and error-free. A
-        marginal high-rate link can acquire lock momentarily, then drop or start
-        erroring, so a non-zero dwell avoids calling a flaky link good. 0 checks
-        immediately (the default, used by the capture path).
+        ``settle_s`` runs a reliability dwell: after the link locks, hold the
+        rate that long and accept it only if it stayed locked at the rate AND
+        accrued zero decode errors. "Locked" alone is not enough -- a marginal
+        high rate can lock yet error immediately under traffic. 0 checks the lock
+        immediately with no reliability dwell.
         """
         ...
 

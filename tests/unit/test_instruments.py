@@ -693,6 +693,43 @@ class TestRealSerdesDemo:
         assert driver.link_locks(FORWARD_6G) is False  # locked, but at 3 Gbps not 6 Gbps
         driver.close()
 
+    def test_link_locks_rejects_locked_but_erroring_link(self):
+        """Locked at the rate is NOT enough -- a link that accrues decode errors
+        during the reliability dwell is unusable and must be rejected.
+
+        Regression for the 2 m cable: 6 Gbps locked, but the margin sweep errored
+        right at the top (410 mV). The dwell now checks the decode-error counter,
+        not just the lock.
+        """
+        from src.instruments.serdes import registers as R
+        from src.instruments.serdes.demo_bridge import DemoBridge
+        from src.instruments.serdes.real import RealSerdesDriver
+
+        class ErroringLink:
+            """DemoBridge whose deserializer reports nonzero decode errors."""
+
+            def __init__(self) -> None:
+                self._inner = DemoBridge()
+
+            def read(self, dev: int, reg: int, length: int = 1) -> bytes:
+                if reg == R.REG_CNT0 and dev == R.DES_ADDR:
+                    return bytes([42])  # locked, but erroring -> not usable
+                return self._inner.read(dev, reg, length)
+
+            def write(self, dev: int, reg: int, data: bytes) -> None:
+                self._inner.write(dev, reg, data)
+
+            def close(self) -> None:
+                self._inner.close()
+
+        driver = RealSerdesDriver(transport=ErroringLink(), demo=True)
+        driver.connect()
+        # Locked at 6 Gbps, but decode errors during the dwell -> rejected.
+        assert driver.link_locks(FORWARD_6G, settle_s=5.0) is False
+        # With no reliability dwell (settle_s=0), only the lock is checked.
+        assert driver.link_locks(FORWARD_6G, settle_s=0.0) is True
+        driver.close()
+
     def test_full_sequence_recovers_from_post_reset_nak(self):
         """capture_eye() leaves both chips mid-RESET_ALL, so the margin phase's
         first register access can NAK while they re-lock. The sequence must
