@@ -6,7 +6,7 @@ manufacturer: Alpha Wire
 part_number: 9436 WH033
 mouser_part_number: 602-9436328-01
 digikey_part_number: ''
-characteristic_impedance_ohm: 59.0
+characteristic_impedance_ohm: 50.0
 wire_gauge_awg: 36.0
 shield_type: Braided
 connector_type_a: SMA
