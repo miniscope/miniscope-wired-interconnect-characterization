@@ -1,0 +1,16 @@
+schema_version: '1.0'
+profile_type: cable
+profile_id: alphawire_36awg
+name: Alpha Wire 36 AWG Coax
+manufacturer: Alpha Wire
+part_number: 9436 WH033
+mouser_part_number: 602-9436328-01
+digikey_part_number: ''
+characteristic_impedance_ohm: 59.0
+wire_gauge_awg: 36.0
+shield_type: Braided
+connector_type_a: SMA
+connector_type_b: SMA
+cable_type: Coaxial
+notes: ''
+tags: []
