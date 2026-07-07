@@ -1,0 +1,14 @@
+schema_version: '1.0'
+session_id: '20260707_01'
+profile_id: alphawire_36awg
+condition: 1010mm
+measurement_type: vna
+measurement_type_version: 1
+date: 2026-07-07
+operator: Federico
+notes: ''
+type_fields:
+  vna_instrument: PicoVNA 106
+  calibration_type: SOLT
+  port_impedance_ohm: 50.0
+cable_length_mm: 1010.0

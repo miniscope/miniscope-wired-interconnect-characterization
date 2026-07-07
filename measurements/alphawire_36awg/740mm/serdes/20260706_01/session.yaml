@@ -1,0 +1,12 @@
+schema_version: '1.0'
+session_id: '20260706_01'
+profile_id: alphawire_36awg
+condition: 740mm
+measurement_type: serdes
+measurement_type_version: 1
+date: 2026-07-06
+operator: Federico
+notes: ''
+type_fields:
+  serdes_device: GMSL2
+cable_length_mm: 740.0
