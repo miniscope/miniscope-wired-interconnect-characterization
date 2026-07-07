@@ -1,0 +1,2 @@
+condition,cable_length_mm,n_sessions,total_measurements,mean_cable_mass_g,std_cable_mass_g,mean_cable_mass_g_per_cm,std_cable_mass_g_per_cm
+1010mm,1010.0,1,1,0.79,,0.007822,

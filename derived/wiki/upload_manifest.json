@@ -5,6 +5,10 @@
       "file": "pages/Coax_cable_characterization.wiki"
     },
     {
+      "title": "Coax_cable_characterization/alphawire_36awg",
+      "file": "pages/Coax_cable_characterization__alphawire_36awg.wiki"
+    },
+    {
       "title": "Coax_cable_characterization/coax_molex_1000650128",
       "file": "pages/Coax_cable_characterization__coax_molex_1000650128.wiki"
     }
@@ -25,6 +29,54 @@
     {
       "local_path": "derived/cross/supply_voltage_miniscope_v4.png",
       "wiki_name": "CoaxCableChar_cross_supply_voltage_miniscope_v4.png"
+    },
+    {
+      "local_path": "derived/sessions/alphawire_36awg/1010mm/serdes/20260706_01/eye_fwd_3g.png",
+      "wiki_name": "CoaxCableChar_sessions_alphawire_36awg_1010mm_serdes_20260706_01_eye_fwd_3g.png"
+    },
+    {
+      "local_path": "derived/sessions/alphawire_36awg/1010mm/serdes/20260706_01/eye_fwd_6g.png",
+      "wiki_name": "CoaxCableChar_sessions_alphawire_36awg_1010mm_serdes_20260706_01_eye_fwd_6g.png"
+    },
+    {
+      "local_path": "derived/sessions/alphawire_36awg/1010mm/serdes/20260706_01/eye_rev_187m_fwd3g.png",
+      "wiki_name": "CoaxCableChar_sessions_alphawire_36awg_1010mm_serdes_20260706_01_eye_rev_187m_fwd3g.png"
+    },
+    {
+      "local_path": "derived/sessions/alphawire_36awg/1010mm/serdes/20260706_01/eye_rev_187m_fwd6g.png",
+      "wiki_name": "CoaxCableChar_sessions_alphawire_36awg_1010mm_serdes_20260706_01_eye_rev_187m_fwd6g.png"
+    },
+    {
+      "local_path": "derived/sessions/alphawire_36awg/740mm/serdes/20260706_01/eye_fwd_3g.png",
+      "wiki_name": "CoaxCableChar_sessions_alphawire_36awg_740mm_serdes_20260706_01_eye_fwd_3g.png"
+    },
+    {
+      "local_path": "derived/sessions/alphawire_36awg/740mm/serdes/20260706_01/eye_fwd_6g.png",
+      "wiki_name": "CoaxCableChar_sessions_alphawire_36awg_740mm_serdes_20260706_01_eye_fwd_6g.png"
+    },
+    {
+      "local_path": "derived/sessions/alphawire_36awg/740mm/serdes/20260706_01/eye_rev_187m_fwd3g.png",
+      "wiki_name": "CoaxCableChar_sessions_alphawire_36awg_740mm_serdes_20260706_01_eye_rev_187m_fwd3g.png"
+    },
+    {
+      "local_path": "derived/sessions/alphawire_36awg/740mm/serdes/20260706_01/eye_rev_187m_fwd6g.png",
+      "wiki_name": "CoaxCableChar_sessions_alphawire_36awg_740mm_serdes_20260706_01_eye_rev_187m_fwd6g.png"
+    },
+    {
+      "local_path": "derived/aggregated/serdes/serdes_eye_vs_length.png",
+      "wiki_name": "CoaxCableChar_aggregated_serdes_serdes_eye_vs_length.png"
+    },
+    {
+      "local_path": "derived/aggregated/serdes/serdes_margin_vs_length.png",
+      "wiki_name": "CoaxCableChar_aggregated_serdes_serdes_margin_vs_length.png"
+    },
+    {
+      "local_path": "derived/aggregated/vna/vna_comparison.png",
+      "wiki_name": "CoaxCableChar_aggregated_vna_vna_comparison.png"
+    },
+    {
+      "local_path": "derived/aggregated/vna/vna_impedance.png",
+      "wiki_name": "CoaxCableChar_aggregated_vna_vna_impedance.png"
     },
     {
       "local_path": "derived/sessions/coax_molex_1000650128/1025mm/serdes/20260624_01/eye_fwd_3g.png",

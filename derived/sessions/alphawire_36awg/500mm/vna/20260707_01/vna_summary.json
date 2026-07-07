@@ -1,0 +1,28 @@
+{
+  "session_id": "20260707_01",
+  "profile_id": "alphawire_36awg",
+  "cable_length_mm": 500.0,
+  "condition": "500mm",
+  "measurement_type": "vna",
+  "date": "2026-07-07",
+  "operator": "Federico",
+  "num_files": 1,
+  "mean_max_insertion_loss_db": -15.583,
+  "worst_max_insertion_loss_db": -15.583,
+  "mean_min_return_loss_db": -1.588,
+  "worst_min_return_loss_db": -1.588,
+  "mean_characteristic_impedance_ohm": 47.46,
+  "attenuation_db_by_hz": {
+    "1000000": 0.1098,
+    "10000000": 0.138,
+    "100000000": 0.4648,
+    "500000000": 1.0445,
+    "750000000": 1.5706,
+    "1000000000": 3.6123,
+    "1500000000": 4.47,
+    "3000000000": 5.2791
+  },
+  "vna_instrument": "PicoVNA 106",
+  "calibration_type": "SOLT",
+  "port_impedance_ohm": 50.0
+}

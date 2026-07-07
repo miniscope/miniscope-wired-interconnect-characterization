@@ -1,0 +1,61 @@
+{
+  "session_id": "20260707_01",
+  "profile_id": "alphawire_36awg",
+  "cable_length_mm": 1200.0,
+  "condition": "1200mm",
+  "measurement_type": "serdes",
+  "date": "2026-07-07",
+  "operator": "Federico",
+  "num_lanes": 4,
+  "combos": [
+    {
+      "lane_id": "fwd_3g",
+      "channel": "forward",
+      "rate_gbps": 3.0,
+      "linked": false,
+      "eye_area_ratio": null,
+      "zero_error_fraction": null,
+      "eye_height_mv": null,
+      "eye_width_ui": null,
+      "link_margin_mv": null,
+      "error_onset_mv": null
+    },
+    {
+      "lane_id": "fwd_6g",
+      "channel": "forward",
+      "rate_gbps": 6.0,
+      "linked": false,
+      "eye_area_ratio": null,
+      "zero_error_fraction": null,
+      "eye_height_mv": null,
+      "eye_width_ui": null,
+      "link_margin_mv": null,
+      "error_onset_mv": null
+    },
+    {
+      "lane_id": "rev_187m_fwd3g",
+      "channel": "reverse",
+      "rate_gbps": 0.1875,
+      "linked": true,
+      "eye_area_ratio": null,
+      "zero_error_fraction": null,
+      "eye_height_mv": null,
+      "eye_width_ui": null,
+      "link_margin_mv": null,
+      "error_onset_mv": null
+    },
+    {
+      "lane_id": "rev_187m_fwd6g",
+      "channel": "reverse",
+      "rate_gbps": 0.1875,
+      "linked": true,
+      "eye_area_ratio": null,
+      "zero_error_fraction": null,
+      "eye_height_mv": null,
+      "eye_width_ui": null,
+      "link_margin_mv": null,
+      "error_onset_mv": null
+    }
+  ],
+  "serdes_device": "GMSL2"
+}

@@ -1,4 +1,9 @@
 miniscope_model,profile_id,cable_length_mm,roundtrip_resistivity_ohm_per_m,r_chain_ohm,v_supply_min,v_supply_max,feasible,reference_supply_v,reference_supply_ok
+miniscope_v4,alphawire_36awg,500.0,1.9214,0.9607,3.588,5.519,True,5.0,True
+miniscope_v4,alphawire_36awg,740.0,1.9214,1.4218,3.727,5.528,True,5.0,True
+miniscope_v4,alphawire_36awg,1010.0,1.9214,1.9406,3.882,5.539,True,5.0,True
+miniscope_v4,alphawire_36awg,1200.0,1.9214,2.3057,3.992,5.546,True,5.0,True
+miniscope_v4,alphawire_36awg,1500.0,1.9214,2.8821,4.165,5.558,True,5.0,True
 miniscope_v4,coax_molex_1000650128,170.0,4.4952,0.7642,3.529,5.515,True,5.0,True
 miniscope_v4,coax_molex_1000650128,500.0,4.4952,2.2476,3.974,5.545,True,5.0,True
 miniscope_v4,coax_molex_1000650128,1025.0,4.4952,4.6076,4.682,5.592,True,5.0,True

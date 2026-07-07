@@ -1,4 +1,14 @@
 profile_id,cable_length_mm,rate_gbps,worst_eye_area_ratio,worst_link_margin_mv,attenuation_db,quality_score,zone
+alphawire_36awg,500.0,3.0,,,,0.0,not_recommended
+alphawire_36awg,500.0,6.0,,,,0.0,not_recommended
+alphawire_36awg,740.0,3.0,0.196289,50.0,3.3408,0.831874,works
+alphawire_36awg,740.0,6.0,0.109863,310.0,6.0852,0.41249,not_recommended
+alphawire_36awg,1010.0,3.0,0.219238,50.0,3.9292,0.862708,works
+alphawire_36awg,1010.0,6.0,0.107666,280.0,8.4832,0.414263,not_recommended
+alphawire_36awg,1200.0,3.0,,,,0.0,not_recommended
+alphawire_36awg,1200.0,6.0,,,,0.0,not_recommended
+alphawire_36awg,1500.0,3.0,,,,0.0,not_recommended
+alphawire_36awg,1500.0,6.0,,,,0.0,not_recommended
 coax_molex_1000650128,170.0,3.0,,,,0.0,not_recommended
 coax_molex_1000650128,170.0,6.0,,,,0.0,not_recommended
 coax_molex_1000650128,500.0,3.0,0.186523,50.0,2.9144,0.820512,works

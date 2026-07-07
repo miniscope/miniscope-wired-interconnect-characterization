@@ -20,6 +20,66 @@ Each curve is one cable type. The score combines eye opening, link margin, and a
 ! Score
 ! Recommendation
 |-
+| alphawire_36awg
+| 500
+| 3
+| 0
+| not_recommended
+|-
+| alphawire_36awg
+| 500
+| 6
+| 0
+| not_recommended
+|-
+| alphawire_36awg
+| 740
+| 3
+| 0.831874
+| works
+|-
+| alphawire_36awg
+| 740
+| 6
+| 0.41249
+| not_recommended
+|-
+| alphawire_36awg
+| 1010
+| 3
+| 0.862708
+| works
+|-
+| alphawire_36awg
+| 1010
+| 6
+| 0.414263
+| not_recommended
+|-
+| alphawire_36awg
+| 1200
+| 3
+| 0
+| not_recommended
+|-
+| alphawire_36awg
+| 1200
+| 6
+| 0
+| not_recommended
+|-
+| alphawire_36awg
+| 1500
+| 3
+| 0
+| not_recommended
+|-
+| alphawire_36awg
+| 1500
+| 6
+| 0
+| not_recommended
+|-
 | coax_molex_1000650128
 | 170
 | 3
@@ -97,6 +157,38 @@ Each Miniscope runs its link at one rate, so these curves show cable quality at 
 ! Source
 |-
 | miniscope_v4
+| alphawire_36awg
+| 500
+| 1.5
+| 0
+| not_recommended
+| no_link
+|-
+| miniscope_v4
+| alphawire_36awg
+| 740
+| 1.5
+| 0.91315
+| works
+| projected_from_vna
+|-
+| miniscope_v4
+| alphawire_36awg
+| 1010
+| 1.5
+| 0.87661
+| works
+| projected_from_vna
+|-
+| miniscope_v4
+| alphawire_36awg
+| 1200
+| 1.5
+| 0
+| not_recommended
+| no_link
+|-
+| miniscope_v4
 | coax_molex_1000650128
 | 170
 | 1.5
@@ -155,6 +247,46 @@ When the minimum exceeds the maximum the window is empty (''Feasible? = No''): n
 ! OK at 5 V (USB)?
 |-
 | miniscope_v4
+| alphawire_36awg
+| 500
+| 3.588
+| 5.519
+| True
+| True
+|-
+| miniscope_v4
+| alphawire_36awg
+| 740
+| 3.727
+| 5.528
+| True
+| True
+|-
+| miniscope_v4
+| alphawire_36awg
+| 1010
+| 3.882
+| 5.539
+| True
+| True
+|-
+| miniscope_v4
+| alphawire_36awg
+| 1200
+| 3.992
+| 5.546
+| True
+| True
+|-
+| miniscope_v4
+| alphawire_36awg
+| 1500
+| 4.165
+| 5.558
+| True
+| True
+|-
+| miniscope_v4
 | coax_molex_1000650128
 | 170
 | 3.529
@@ -205,6 +337,11 @@ When the minimum exceeds the maximum the window is empty (''Feasible? = No''): n
 ! Max length (mm)
 |-
 | miniscope_v4
+| alphawire_36awg
+| 5
+| 2949.3
+|-
+| miniscope_v4
 | coax_molex_1000650128
 | 5
 | 1260.6
@@ -212,4 +349,5 @@ When the minimum exceeds the maximum the window is empty (''Feasible? = No''): n
 
 == Per-DUT details ==
 
+* [[Coax_cable_characterization/alphawire_36awg|alphawire_36awg]]
 * [[Coax_cable_characterization/coax_molex_1000650128|coax_molex_1000650128]]

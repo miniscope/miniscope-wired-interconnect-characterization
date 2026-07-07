@@ -1,4 +1,8 @@
 miniscope_model,profile_id,cable_length_mm,rate_gbps,quality_score,zone,source,attenuation_db
+miniscope_v4,alphawire_36awg,500.0,1.5,0.0,not_recommended,no_link,
+miniscope_v4,alphawire_36awg,740.0,1.5,0.91315,works,projected_from_vna,1.737
+miniscope_v4,alphawire_36awg,1010.0,1.5,0.87661,works,projected_from_vna,2.4678
+miniscope_v4,alphawire_36awg,1200.0,1.5,0.0,not_recommended,no_link,
 miniscope_v4,coax_molex_1000650128,170.0,1.5,0.0,not_recommended,no_link,
 miniscope_v4,coax_molex_1000650128,500.0,1.5,0.815535,works,projected_from_vna,3.6893
 miniscope_v4,coax_molex_1000650128,1025.0,1.5,0.789135,works,projected_from_vna,4.2173

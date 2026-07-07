@@ -1,4 +1,8 @@
 profile_id,condition,cable_length_mm,session_id,date,operator,vna_instrument,calibration_type,num_files,mean_max_insertion_loss_db,worst_max_insertion_loss_db,mean_min_return_loss_db
+alphawire_36awg,1010mm,1010.0,20260707_01,2026-07-07,Federico,PicoVNA 106,SOLT,1,-18.54,-18.54,-2.0558
+alphawire_36awg,1200mm,1200.0,20260707_01,2026-07-07,Federico,PicoVNA 106,SOLT,1,-19.5758,-19.5758,-2.7366
+alphawire_36awg,500mm,500.0,20260707_01,2026-07-07,Federico,PicoVNA 106,SOLT,1,-15.583,-15.583,-1.588
+alphawire_36awg,740mm,740.0,20260707_01,2026-07-07,Federico,PicoVNA 106,SOLT,1,-20.3463,-20.3463,-1.5207
 coax_molex_1000650128,1025mm,1025.0,20260618_01,2026-06-18,Federico,PicoVNA 106,SOLT,1,-20.2075,-20.2075,-1.9475
 coax_molex_1000650128,1500mm,1500.0,20260618_01,2026-06-18,Federico,PicoVNA 106,SOLT,1,-23.584,-23.584,-2.9657
 coax_molex_1000650128,170mm,170.0,20260618_01,2026-06-18,Federico,PicoVNA 106,SOLT,1,-10.1116,-10.1116,-1.7694
