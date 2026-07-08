@@ -1,0 +1,13 @@
+schema_version: '1.0'
+session_id: '20260707_01'
+profile_id: cooner_wire_cw8251
+condition: 1120mm
+measurement_type: mass
+measurement_type_version: 1
+date: 2026-07-07
+operator: Federico
+notes: ''
+type_fields:
+  measurement_instrument: Mettler Toledo
+  measurement_method: digital_balance
+cable_length_mm: 1120.0
