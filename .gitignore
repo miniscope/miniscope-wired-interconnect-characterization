@@ -49,3 +49,6 @@ ENV/
 CLAUDE.md
 
 .claude/
+
+# Local Poetry config (e.g. in-project virtualenv preference)
+poetry.toml
