@@ -1,0 +1,12 @@
+schema_version: '1.0'
+session_id: '20260708_01'
+profile_id: cooner_wire_cw8251
+condition: 1500mm
+measurement_type: serdes
+measurement_type_version: 1
+date: 2026-07-08
+operator: Federico
+notes: ''
+type_fields:
+  serdes_device: GMSL2
+cable_length_mm: 1500.0
