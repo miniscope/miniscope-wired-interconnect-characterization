@@ -1,0 +1,63 @@
+{
+  "session_id": "20260707_01",
+  "profile_id": "cooner_wire_cw8251",
+  "cable_length_mm": 1120.0,
+  "condition": "1120mm",
+  "measurement_type": "serdes",
+  "date": "2026-07-07",
+  "operator": "Federico",
+  "num_lanes": 4,
+  "combos": [
+    {
+      "lane_id": "fwd_3g",
+      "channel": "forward",
+      "rate_gbps": 3.0,
+      "linked": true,
+      "eye_area_ratio": 0.258545,
+      "zero_error_fraction": 0.239746,
+      "eye_height_mv": 216.562,
+      "eye_width_ui": 0.875,
+      "link_margin_mv": 50.0,
+      "error_onset_mv": null
+    },
+    {
+      "lane_id": "fwd_6g",
+      "channel": "forward",
+      "rate_gbps": 6.0,
+      "linked": true,
+      "eye_area_ratio": 0.132324,
+      "zero_error_fraction": 0.109131,
+      "eye_height_mv": 157.5,
+      "eye_width_ui": 0.78125,
+      "link_margin_mv": 190.0,
+      "error_onset_mv": 180.0
+    },
+    {
+      "lane_id": "rev_187m_fwd3g",
+      "channel": "reverse",
+      "rate_gbps": 0.1875,
+      "linked": true,
+      "eye_area_ratio": 0.240967,
+      "zero_error_fraction": 0.19873,
+      "eye_height_mv": 157.5,
+      "eye_width_ui": 2.0,
+      "link_margin_mv": 100.0,
+      "error_onset_mv": 90.0
+    },
+    {
+      "lane_id": "rev_187m_fwd6g",
+      "channel": "reverse",
+      "rate_gbps": 0.1875,
+      "linked": true,
+      "eye_area_ratio": 0.15625,
+      "zero_error_fraction": 0.126465,
+      "eye_height_mv": 98.438,
+      "eye_width_ui": 2.0,
+      "link_margin_mv": 80.0,
+      "error_onset_mv": 70.0
+    }
+  ],
+  "worst_eye_area_ratio": 0.132324,
+  "worst_link_margin_mv": 190.0,
+  "serdes_device": "GMSL2"
+}

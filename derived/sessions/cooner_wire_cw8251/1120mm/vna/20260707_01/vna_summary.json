@@ -1,0 +1,28 @@
+{
+  "session_id": "20260707_01",
+  "profile_id": "cooner_wire_cw8251",
+  "cable_length_mm": 1120.0,
+  "condition": "1120mm",
+  "measurement_type": "vna",
+  "date": "2026-07-07",
+  "operator": "Federico",
+  "num_files": 1,
+  "mean_max_insertion_loss_db": -22.5947,
+  "worst_max_insertion_loss_db": -22.5947,
+  "mean_min_return_loss_db": -3.8999,
+  "worst_min_return_loss_db": -3.8999,
+  "mean_characteristic_impedance_ohm": 51.64,
+  "attenuation_db_by_hz": {
+    "1000000": 0.2377,
+    "10000000": 0.3025,
+    "100000000": 1.0955,
+    "500000000": 2.666,
+    "750000000": 3.2994,
+    "1000000000": 4.0494,
+    "1500000000": 5.1441,
+    "3000000000": 8.9235
+  },
+  "vna_instrument": "PicoVNA 106",
+  "calibration_type": "SOLT",
+  "port_impedance_ohm": 50.0
+}

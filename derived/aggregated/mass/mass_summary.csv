@@ -1,3 +1,4 @@
 profile_id,condition,cable_length_mm,session_id,date,operator,measurement_method,measurement_instrument,num_measurements,mean_cable_mass_g,std_cable_mass_g,min_cable_mass_g,max_cable_mass_g,median_cable_mass_g,mean_cable_mass_g_per_cm,std_cable_mass_g_per_cm
 alphawire_36awg,1010mm,1010.0,20260707_01,2026-07-07,Federico,digital_balance,Mettler Toledo,1,0.79,,0.79,0.79,0.79,0.007822,
 coax_molex_1000650128,500mm,500.0,20260618_01,2026-06-18,Federico,digital_balance,Mettler Toledo,1,0.466,,0.466,0.466,0.466,0.00932,
+cooner_wire_cw8251,1120mm,1120.0,20260707_01,2026-07-07,Federico,digital_balance,Mettler Toledo,1,3.443,,3.443,3.443,3.443,0.030741,

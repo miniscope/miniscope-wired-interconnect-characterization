@@ -1,0 +1,5 @@
+lane_id,channel,rate_gbps,linked,eye_csv,eye_area_ratio,zero_error_fraction,eye_height_mv,eye_width_ui,eye_png,margin_csv,link_margin_mv,error_onset_mv,num_margin_points,num_margin_runs
+fwd_3g,forward,3.0,True,eye_fwd_3g.csv,0.242432,0.227295,196.875,0.875,eye_fwd_3g.png,margin_fwd_3g.csv,50.0,,37,3
+fwd_6g,forward,6.0,True,eye_fwd_6g.csv,0.145508,0.119873,167.344,0.75,eye_fwd_6g.png,margin_fwd_6g.csv,190.0,180.0,29,3
+rev_187m_fwd3g,reverse,0.1875,True,eye_rev_187m_fwd3g.csv,0.25,0.223633,157.5,2.0,eye_rev_187m_fwd3g.png,margin_rev_187m_fwd3g.csv,90.0,80.0,18,3
+rev_187m_fwd6g,reverse,0.1875,True,eye_rev_187m_fwd6g.csv,0.171875,0.14624,108.281,2.0,eye_rev_187m_fwd6g.png,margin_rev_187m_fwd6g.csv,70.0,60.0,21,3

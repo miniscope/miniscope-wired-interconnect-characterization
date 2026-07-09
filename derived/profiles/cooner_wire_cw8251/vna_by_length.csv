@@ -1,0 +1,5 @@
+condition,cable_length_mm,n_sessions,mean_max_insertion_loss_db,std_max_insertion_loss_db,worst_max_insertion_loss_db
+500mm,500.0,1,-15.5929,,-15.5929
+1120mm,1120.0,1,-22.5947,,-22.5947
+1500mm,1500.0,1,-22.6296,,-22.6296
+2000mm,2000.0,1,-36.4239,,-36.4239

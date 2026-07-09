@@ -11,6 +11,10 @@
     {
       "title": "Coax_cable_characterization/coax_molex_1000650128",
       "file": "pages/Coax_cable_characterization__coax_molex_1000650128.wiki"
+    },
+    {
+      "title": "Coax_cable_characterization/cooner_wire_cw8251",
+      "file": "pages/Coax_cable_characterization__cooner_wire_cw8251.wiki"
     }
   ],
   "images": [
@@ -141,6 +145,86 @@
     {
       "local_path": "derived/sessions/coax_molex_1000650128/500mm/serdes/20260624_01/eye_rev_187m_fwd6g.png",
       "wiki_name": "CoaxCableChar_sessions_coax_molex_1000650128_500mm_serdes_20260624_01_eye_rev_187m_fwd6g.png"
+    },
+    {
+      "local_path": "derived/aggregated/serdes/serdes_eye_vs_length.png",
+      "wiki_name": "CoaxCableChar_aggregated_serdes_serdes_eye_vs_length.png"
+    },
+    {
+      "local_path": "derived/aggregated/serdes/serdes_margin_vs_length.png",
+      "wiki_name": "CoaxCableChar_aggregated_serdes_serdes_margin_vs_length.png"
+    },
+    {
+      "local_path": "derived/aggregated/vna/vna_comparison.png",
+      "wiki_name": "CoaxCableChar_aggregated_vna_vna_comparison.png"
+    },
+    {
+      "local_path": "derived/aggregated/vna/vna_impedance.png",
+      "wiki_name": "CoaxCableChar_aggregated_vna_vna_impedance.png"
+    },
+    {
+      "local_path": "derived/sessions/cooner_wire_cw8251/1120mm/serdes/20260707_01/eye_fwd_3g.png",
+      "wiki_name": "CoaxCableChar_sessions_cooner_wire_cw8251_1120mm_serdes_20260707_01_eye_fwd_3g.png"
+    },
+    {
+      "local_path": "derived/sessions/cooner_wire_cw8251/1120mm/serdes/20260707_01/eye_fwd_6g.png",
+      "wiki_name": "CoaxCableChar_sessions_cooner_wire_cw8251_1120mm_serdes_20260707_01_eye_fwd_6g.png"
+    },
+    {
+      "local_path": "derived/sessions/cooner_wire_cw8251/1120mm/serdes/20260707_01/eye_rev_187m_fwd3g.png",
+      "wiki_name": "CoaxCableChar_sessions_cooner_wire_cw8251_1120mm_serdes_20260707_01_eye_rev_187m_fwd3g.png"
+    },
+    {
+      "local_path": "derived/sessions/cooner_wire_cw8251/1120mm/serdes/20260707_01/eye_rev_187m_fwd6g.png",
+      "wiki_name": "CoaxCableChar_sessions_cooner_wire_cw8251_1120mm_serdes_20260707_01_eye_rev_187m_fwd6g.png"
+    },
+    {
+      "local_path": "derived/sessions/cooner_wire_cw8251/1500mm/serdes/20260708_01/eye_fwd_3g.png",
+      "wiki_name": "CoaxCableChar_sessions_cooner_wire_cw8251_1500mm_serdes_20260708_01_eye_fwd_3g.png"
+    },
+    {
+      "local_path": "derived/sessions/cooner_wire_cw8251/1500mm/serdes/20260708_01/eye_fwd_6g.png",
+      "wiki_name": "CoaxCableChar_sessions_cooner_wire_cw8251_1500mm_serdes_20260708_01_eye_fwd_6g.png"
+    },
+    {
+      "local_path": "derived/sessions/cooner_wire_cw8251/1500mm/serdes/20260708_01/eye_rev_187m_fwd3g.png",
+      "wiki_name": "CoaxCableChar_sessions_cooner_wire_cw8251_1500mm_serdes_20260708_01_eye_rev_187m_fwd3g.png"
+    },
+    {
+      "local_path": "derived/sessions/cooner_wire_cw8251/1500mm/serdes/20260708_01/eye_rev_187m_fwd6g.png",
+      "wiki_name": "CoaxCableChar_sessions_cooner_wire_cw8251_1500mm_serdes_20260708_01_eye_rev_187m_fwd6g.png"
+    },
+    {
+      "local_path": "derived/sessions/cooner_wire_cw8251/2000mm/serdes/20260707_01/eye_fwd_3g.png",
+      "wiki_name": "CoaxCableChar_sessions_cooner_wire_cw8251_2000mm_serdes_20260707_01_eye_fwd_3g.png"
+    },
+    {
+      "local_path": "derived/sessions/cooner_wire_cw8251/2000mm/serdes/20260707_01/eye_fwd_6g.png",
+      "wiki_name": "CoaxCableChar_sessions_cooner_wire_cw8251_2000mm_serdes_20260707_01_eye_fwd_6g.png"
+    },
+    {
+      "local_path": "derived/sessions/cooner_wire_cw8251/2000mm/serdes/20260707_01/eye_rev_187m_fwd3g.png",
+      "wiki_name": "CoaxCableChar_sessions_cooner_wire_cw8251_2000mm_serdes_20260707_01_eye_rev_187m_fwd3g.png"
+    },
+    {
+      "local_path": "derived/sessions/cooner_wire_cw8251/2000mm/serdes/20260707_01/eye_rev_187m_fwd6g.png",
+      "wiki_name": "CoaxCableChar_sessions_cooner_wire_cw8251_2000mm_serdes_20260707_01_eye_rev_187m_fwd6g.png"
+    },
+    {
+      "local_path": "derived/sessions/cooner_wire_cw8251/500mm/serdes/20260708_01/eye_fwd_3g.png",
+      "wiki_name": "CoaxCableChar_sessions_cooner_wire_cw8251_500mm_serdes_20260708_01_eye_fwd_3g.png"
+    },
+    {
+      "local_path": "derived/sessions/cooner_wire_cw8251/500mm/serdes/20260708_01/eye_fwd_6g.png",
+      "wiki_name": "CoaxCableChar_sessions_cooner_wire_cw8251_500mm_serdes_20260708_01_eye_fwd_6g.png"
+    },
+    {
+      "local_path": "derived/sessions/cooner_wire_cw8251/500mm/serdes/20260708_01/eye_rev_187m_fwd3g.png",
+      "wiki_name": "CoaxCableChar_sessions_cooner_wire_cw8251_500mm_serdes_20260708_01_eye_rev_187m_fwd3g.png"
+    },
+    {
+      "local_path": "derived/sessions/cooner_wire_cw8251/500mm/serdes/20260708_01/eye_rev_187m_fwd6g.png",
+      "wiki_name": "CoaxCableChar_sessions_cooner_wire_cw8251_500mm_serdes_20260708_01_eye_rev_187m_fwd6g.png"
     },
     {
       "local_path": "derived/aggregated/serdes/serdes_eye_vs_length.png",

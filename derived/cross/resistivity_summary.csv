@@ -1,3 +1,4 @@
 profile_id,roundtrip_resistivity_ohm_per_m,intercept_ohm,r_squared,n_lengths,method
 alphawire_36awg,1.921386,,,1,single_length_ratio
 coax_molex_1000650128,4.4952,,,1,single_length_ratio
+cooner_wire_cw8251,1.449256,,,1,single_length_ratio

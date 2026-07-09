@@ -9,3 +9,7 @@ miniscope_v4,coax_molex_1000650128,500.0,4.4952,2.2476,3.974,5.545,True,5.0,True
 miniscope_v4,coax_molex_1000650128,1025.0,4.4952,4.6076,4.682,5.592,True,5.0,True
 miniscope_v4,coax_molex_1000650128,1500.0,4.4952,6.7428,5.323,5.635,True,5.0,False
 miniscope_v4,coax_molex_1000650128,2400.0,4.4952,10.7885,6.537,5.716,False,5.0,False
+miniscope_v4,cooner_wire_cw8251,500.0,1.4493,0.7246,3.517,5.514,True,5.0,True
+miniscope_v4,cooner_wire_cw8251,1120.0,1.4493,1.6232,3.787,5.532,True,5.0,True
+miniscope_v4,cooner_wire_cw8251,1500.0,1.4493,2.1739,3.952,5.543,True,5.0,True
+miniscope_v4,cooner_wire_cw8251,2000.0,1.4493,2.8985,4.17,5.558,True,5.0,True

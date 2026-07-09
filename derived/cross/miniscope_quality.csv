@@ -8,3 +8,7 @@ miniscope_v4,coax_molex_1000650128,500.0,1.5,0.815535,works,projected_from_vna,3
 miniscope_v4,coax_molex_1000650128,1025.0,1.5,0.789135,works,projected_from_vna,4.2173
 miniscope_v4,coax_molex_1000650128,1500.0,1.5,0.73509,marginal,projected_from_vna,5.2982
 miniscope_v4,coax_molex_1000650128,2400.0,1.5,0.592595,marginal,projected_from_vna,8.1481
+miniscope_v4,cooner_wire_cw8251,500.0,1.5,0.94474,works,projected_from_vna,1.1052
+miniscope_v4,cooner_wire_cw8251,1120.0,1.5,0.83503,works,projected_from_vna,3.2994
+miniscope_v4,cooner_wire_cw8251,1500.0,1.5,0.809865,works,projected_from_vna,3.8027
+miniscope_v4,cooner_wire_cw8251,2000.0,1.5,0.669745,marginal,projected_from_vna,6.6051

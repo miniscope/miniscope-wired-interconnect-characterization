@@ -1,3 +1,4 @@
 profile_id,condition,cable_length_mm,session_id,date,operator,measurement_method,measurement_instrument,temperature_c,num_measurements,mean_resistance_ohm,std_resistance_ohm,min_resistance_ohm,max_resistance_ohm,median_resistance_ohm,mean_roundtrip_resistance_ohm_per_m,std_roundtrip_resistance_ohm_per_m
 alphawire_36awg,1010mm,1010.0,20260707_01,2026-07-07,Federico,lcr_shorted_loop,LCR,25.0,3,1.9406,0.007053,1.9331,1.9471,1.9416,1.921386,0.006984
 coax_molex_1000650128,500mm,500.0,20260618_01,2026-06-18,Federico,lcr_shorted_loop,LCR Probe,25.0,3,2.2476,0.001375,2.2464,2.2491,2.2473,4.4952,0.00275
+cooner_wire_cw8251,1120mm,1120.0,20260707_01,2026-07-07,Federico,lcr_shorted_loop,LCR meter,25.0,3,1.623167,0.001504,1.6216,1.6246,1.6233,1.449256,0.001343

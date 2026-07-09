@@ -1,3 +1,4 @@
 miniscope_model,profile_id,roundtrip_resistivity_ohm_per_m,reference_supply_v,voltage_limited_max_length_mm
 miniscope_v4,alphawire_36awg,1.9214,5.0,2949.3
 miniscope_v4,coax_molex_1000650128,4.4952,5.0,1260.6
+miniscope_v4,cooner_wire_cw8251,1.4493,5.0,3910.1
