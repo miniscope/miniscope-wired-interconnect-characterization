@@ -13,3 +13,5 @@ miniscope_v4,cooner_wire_cw8251,500.0,1.4493,0.7246,3.517,5.514,True,5.0,True
 miniscope_v4,cooner_wire_cw8251,1120.0,1.4493,1.6232,3.787,5.532,True,5.0,True
 miniscope_v4,cooner_wire_cw8251,1500.0,1.4493,2.1739,3.952,5.543,True,5.0,True
 miniscope_v4,cooner_wire_cw8251,2000.0,1.4493,2.8985,4.17,5.558,True,5.0,True
+miniscope_v4,cooner_wire_cw8251,2500.0,1.4493,3.6231,4.387,5.572,True,5.0,True
+miniscope_v4,cooner_wire_cw8251,3000.0,1.4493,4.3478,4.604,5.587,True,5.0,True

@@ -12,3 +12,5 @@ miniscope_v4,cooner_wire_cw8251,500.0,1.5,0.94474,works,projected_from_vna,1.105
 miniscope_v4,cooner_wire_cw8251,1120.0,1.5,0.83503,works,projected_from_vna,3.2994
 miniscope_v4,cooner_wire_cw8251,1500.0,1.5,0.809865,works,projected_from_vna,3.8027
 miniscope_v4,cooner_wire_cw8251,2000.0,1.5,0.669745,marginal,projected_from_vna,6.6051
+miniscope_v4,cooner_wire_cw8251,2500.0,1.5,0.66643,marginal,projected_from_vna,6.6714
+miniscope_v4,cooner_wire_cw8251,3000.0,1.5,0.614715,marginal,projected_from_vna,7.7057

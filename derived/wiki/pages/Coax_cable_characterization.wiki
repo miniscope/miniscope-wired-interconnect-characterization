@@ -187,6 +187,30 @@ Each curve is one cable type. The score combines eye opening, link margin, and a
 | 6
 | 0.239451
 | not_recommended
+|-
+| cooner_wire_cw8251
+| 2500
+| 3
+| 0.826279
+| works
+|-
+| cooner_wire_cw8251
+| 2500
+| 6
+| 0.341837
+| not_recommended
+|-
+| cooner_wire_cw8251
+| 3000
+| 3
+| 0.780736
+| works
+|-
+| cooner_wire_cw8251
+| 3000
+| 6
+| 0.212401
+| not_recommended
 |}
 
 == Which cable works with my Miniscope? ==
@@ -305,6 +329,22 @@ Each Miniscope runs its link at one rate, so these curves show cable quality at 
 | 2000
 | 1.5
 | 0.669745
+| marginal
+| projected_from_vna
+|-
+| miniscope_v4
+| cooner_wire_cw8251
+| 2500
+| 1.5
+| 0.66643
+| marginal
+| projected_from_vna
+|-
+| miniscope_v4
+| cooner_wire_cw8251
+| 3000
+| 1.5
+| 0.614715
 | marginal
 | projected_from_vna
 |}
@@ -435,6 +475,22 @@ When the minimum exceeds the maximum the window is empty (''Feasible? = No''): n
 | 2000
 | 4.17
 | 5.558
+| True
+| True
+|-
+| miniscope_v4
+| cooner_wire_cw8251
+| 2500
+| 4.387
+| 5.572
+| True
+| True
+|-
+| miniscope_v4
+| cooner_wire_cw8251
+| 3000
+| 4.604
+| 5.587
 | True
 | True
 |}
